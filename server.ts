@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import { requireAuth, AuthedRequest } from './server/auth';
+import { generateContentWithFallback } from './server/gemini';
+import { ingestRouter } from './server/ingest';
 
 dotenv.config();
 
@@ -16,83 +17,26 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Lazy GoogleGenAI client
-let aiClient: GoogleGenAI | null = null;
-function getAI(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured in the environment.');
-    }
-    aiClient = new GoogleGenAI({ apiKey });
+// Directive 6 (Defensive Payload Ingestion): a malformed body must produce a
+// clean 400 in our JSON shape, not an unhandled parser exception and Express's
+// default HTML error page.
+app.use((err: any, _req: Request, res: Response, next: any) => {
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ error: 'Malformed JSON body.' });
   }
-  return aiClient;
-}
-
-// Resilient Model Fallback Ladder
-const MODEL_FALLBACK_LADDER = [
-  'gemini-3.6-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-flash-latest',
-  'gemini-3.7-flash',
-];
-
-interface FallbackOptions {
-  systemInstruction?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-}
-
-/**
- * Standard Helper Implementation:
- * Sequentially executes generateContent using the fallback ladder when encountering
- * recoverable status codes or transient failures.
- */
-async function generateContentWithFallback(
-  contents: any,
-  options?: FallbackOptions
-): Promise<{ text: string; modelUsed: string }> {
-  const ai = getAI();
-  let lastError: any = null;
-
-  for (const modelName of MODEL_FALLBACK_LADDER) {
-    try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents,
-        config: {
-          systemInstruction: options?.systemInstruction,
-          temperature: options?.temperature ?? 0.7,
-          maxOutputTokens: options?.maxOutputTokens ?? 2048,
-        },
-      });
-
-      const text = response.text || '';
-      if (text) {
-        return { text, modelUsed: modelName };
-      }
-    } catch (err: any) {
-      lastError = err;
-      const status = err?.status || err?.statusCode || (err?.message?.includes('429') ? 429 : 500);
-      const isRecoverable = [503, 429, 404, 500, 502, 504].includes(Number(status)) ||
-        err?.message?.includes('overloaded') ||
-        err?.message?.includes('RESOURCE_EXHAUSTED') ||
-        err?.message?.includes('UNAVAILABLE');
-
-      console.warn(`[Gemini Fallback] Model ${modelName} failed (status: ${status}). Recoverable: ${isRecoverable}. Error: ${err?.message}`);
-
-      if (!isRecoverable && MODEL_FALLBACK_LADDER.indexOf(modelName) === MODEL_FALLBACK_LADDER.length - 1) {
-        throw err;
-      }
-    }
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body too large.' });
   }
-
-  throw lastError || new Error('All Gemini fallback models exhausted.');
-}
+  return next(err);
+});
 
 // -------------------------------------------------------------
 // API Endpoints
 // -------------------------------------------------------------
+
+// Untrusted external content ingestion (Amendment A). Mounted after the body
+// parsers above, per Directive 6 ordering guarantee.
+app.use('/api/ingest', ingestRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

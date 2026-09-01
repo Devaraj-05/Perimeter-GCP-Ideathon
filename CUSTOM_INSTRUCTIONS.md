@@ -1,9 +1,12 @@
 # Production Directives
 
 > These are the Custom Instructions configured in Google AI Studio before any
-> application code was generated (Ideathon Phase 1). They are reproduced here
-> verbatim. `CLAUDE.md` adopts this document as the operating context for all
-> subsequent generation, and appends amendments as new integrations are added.
+> application code was generated (Ideathon Phase 1), reproduced verbatim.
+>
+> They are binding on every line of code in this repository. As new integrations
+> are added, this document is extended with a numbered Amendment **before** the
+> feature it governs is written — see the amendments below, and the git history
+> for the ordering.
 
 ## 1. Agentic Threat Modeling
 * **Objective**: Force the model to perform a structured, scenario-driven threat analysis prior to outputting code or system architecture.
