@@ -1,17 +1,16 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { requireAuth, AuthedRequest } from './server/auth';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = 3000;
+// Cloud Run injects PORT (8080) and probes it. Listening on a hardcoded port
+// fails the startup health check.
+const PORT = Number(process.env.PORT) || 3000;
 
 // 1. Top-Level Request Deserialization (Ordering Guarantee)
 app.use(express.json({ limit: '10mb' }));
@@ -105,7 +104,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 });
 
 // Reflect / Converse on Journal Entry
-app.post('/api/gemini/reflect', async (req: Request, res: Response) => {
+app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const data = req.body && typeof req.body === 'object' ? req.body : {};
     const content = typeof data.content === 'string' ? data.content.trim() : '';
@@ -184,7 +183,7 @@ Your goal is to provide a grounded, compassionate, and constructive response.
 });
 
 // Generate Summary & Key Takeaways for Journal Entry
-app.post('/api/gemini/summarize', async (req: Request, res: Response) => {
+app.post('/api/gemini/summarize', requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const data = req.body && typeof req.body === 'object' ? req.body : {};
     const content = typeof data.content === 'string' ? data.content.trim() : '';

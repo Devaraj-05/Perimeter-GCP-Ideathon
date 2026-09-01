@@ -1,26 +1,27 @@
 rules_version = '2';
+
+// Perimeter — owner-bound isolation.
+// Directive 3: zero insecure defaults, owner-bound path checking, no
+// `allow read, write: if true`. Default deny sits at the bottom of this file
+// and is the fallback for every path not explicitly matched above it.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User profile and personal subcollections
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
 
-      // Journal entries & reflections subcollection
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Journal entries & reflections — first-party content the user authors.
       match /entries/{entryId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-      
-      // Multi-turn chat sessions subcollection
-      match /sessions/{sessionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-        
-        match /messages/{messageId} {
-          allow read, write: if request.auth != null && request.auth.uid == userId;
-        }
+        allow read, write: if isOwner(userId);
       }
     }
 
-    // Default deny all other paths
+    // Default deny — every path not matched above
     match /{document=**} {
       allow read, write: if false;
     }
