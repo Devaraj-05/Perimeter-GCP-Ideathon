@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles } from 'lucide-react';
+import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -8,6 +8,7 @@ interface NavbarProps {
   onNewEntry: () => void;
   onOpenInsights: () => void;
   onOpenSecurity: () => void;
+  onOpenSources: () => void;
   onSignOut: () => void;
 }
 
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNewEntry,
   onOpenInsights,
   onOpenSecurity,
+  onOpenSources,
   onSignOut,
 }) => {
   return (
@@ -61,6 +63,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <BarChart3 className="h-4 w-4 text-[#5a5a40]" />
               <span className="hidden md:inline">Insights</span>
+            </button>
+
+            <button
+              id="sources-btn"
+              onClick={onOpenSources}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs sm:text-sm font-medium text-[#434338] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+              title="Connect external context, screened before Gemini reads it"
+            >
+              <Github className="h-4 w-4 text-[#5a5a40]" />
+              <span className="hidden md:inline">Sources</span>
             </button>
 
             <button

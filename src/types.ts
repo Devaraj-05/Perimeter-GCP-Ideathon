@@ -35,3 +35,50 @@ export interface UserProfile {
   displayName: string | null;
   photoURL: string | null;
 }
+
+// --- Perimeter: untrusted external content (Amendment A) ---
+
+export type Verdict = 'clean' | 'suspicious' | 'hostile';
+export type RunStatus = 'never' | 'ok' | 'error';
+
+export interface Source {
+  id: string;
+  kind: 'github_repo';
+  /** "owner/name" */
+  ref: string;
+  enabled: boolean;
+  createdAt: string;
+  lastRunAt: string | null;
+  lastRunStatus: RunStatus;
+  lastRunError: string | null;
+  artifactCount: number;
+}
+
+export interface Artifact {
+  id: string;
+  sourceId: string;
+  sourceRef: string;
+  externalId: string;
+  title: string;
+  body: string;
+  author: string;
+  url: string;
+  /** Immutable. No code path promotes an artifact to trusted. */
+  trust: 'untrusted';
+  threatScore: number;
+  l1Score: number;
+  l2Score: number | null;
+  signals: string[];
+  categories: string[];
+  verdict: Verdict;
+  classifierError: string | null;
+  fetchedAt: string;
+  externalUpdatedAt: string;
+}
+
+export interface IngestRunResult {
+  ok: boolean;
+  fetched: number;
+  written: number;
+  verdicts: Record<string, number>;
+}

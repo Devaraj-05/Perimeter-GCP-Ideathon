@@ -17,6 +17,7 @@ import { JournalEditor } from './components/JournalEditor';
 import { HistorySidebar } from './components/HistorySidebar';
 import { InsightsModal } from './components/InsightsModal';
 import { SecurityModal } from './components/SecurityModal';
+import { SourcesPanel } from './components/SourcesPanel';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,6 +38,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [isSourcesOpen, setIsSourcesOpen] = useState(false);
 
   // Create a clean template for a new journal reflection
   const createNewEntryTemplate = useCallback((uid: string): JournalEntry => {
@@ -211,6 +213,7 @@ export default function App() {
           onNewEntry={() => {}}
           onOpenInsights={() => {}}
           onOpenSecurity={() => setIsSecurityOpen(true)}
+          onOpenSources={() => {}}
           onSignOut={() => {}}
         />
         <LandingPage
@@ -235,6 +238,7 @@ export default function App() {
         onNewEntry={handleNewEntry}
         onOpenInsights={() => setIsInsightsOpen(true)}
         onOpenSecurity={() => setIsSecurityOpen(true)}
+        onOpenSources={() => setIsSourcesOpen(true)}
         onSignOut={handleSignOut}
       />
 
@@ -287,6 +291,10 @@ export default function App() {
       <SecurityModal
         isOpen={isSecurityOpen}
         onClose={() => setIsSecurityOpen(false)}
+      />
+      <SourcesPanel
+        isOpen={isSourcesOpen}
+        onClose={() => setIsSourcesOpen(false)}
       />
     </div>
   );
