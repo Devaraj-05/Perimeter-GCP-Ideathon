@@ -1,0 +1,31 @@
+{
+  "entities": {
+    "users": {
+      "path": "users/{userId}",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of user creation" },
+        "lastLoginAt": { "type": "string", "description": "ISO timestamp of last login" }
+      }
+    },
+    "entries": {
+      "path": "users/{userId}/entries/{entryId}",
+      "fields": {
+        "id": { "type": "string", "description": "Entry unique identifier" },
+        "userId": { "type": "string", "description": "Owner Firebase UID" },
+        "title": { "type": "string", "description": "Entry title or auto-generated reflection topic" },
+        "content": { "type": "string", "description": "Main user journal prompt or initial reflection" },
+        "category": { "type": "string", "description": "Category such as Personal, Career, Gratitude, Brainstorming, Wellness" },
+        "mood": { "type": "string", "description": "User emotional state indicator" },
+        "summary": { "type": "string", "description": "Gemini generated synthesis of the journal entry" },
+        "insights": { "type": "array", "description": "List of key actionable takeaways or brainstormed ideas" },
+        "turns": { "type": "array", "description": "Multi-turn dialogue exchange between user and Gemini" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
+      }
+    }
+  }
+}

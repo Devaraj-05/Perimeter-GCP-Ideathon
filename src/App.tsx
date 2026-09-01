@@ -1,0 +1,293 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { User } from 'firebase/auth';
+import {
+  auth,
+  subscribeToAuth,
+  signInWithGoogle,
+  logOut,
+  syncUserProfile,
+  fetchUserEntries,
+  saveUserEntry,
+  deleteUserEntry,
+} from './lib/firebase';
+import { JournalEntry } from './types';
+import { Navbar } from './components/Navbar';
+import { LandingPage } from './components/LandingPage';
+import { JournalEditor } from './components/JournalEditor';
+import { HistorySidebar } from './components/HistorySidebar';
+import { InsightsModal } from './components/InsightsModal';
+import { SecurityModal } from './components/SecurityModal';
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Journal entries & active editor state
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [activeEntry, setActiveEntry] = useState<JournalEntry | null>(null);
+  const [entriesLoading, setEntriesLoading] = useState(false);
+
+  // Persistence status
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+
+  // Layout & Modals
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+
+  // Create a clean template for a new journal reflection
+  const createNewEntryTemplate = useCallback((uid: string): JournalEntry => {
+    return {
+      id: `entry-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      userId: uid,
+      title: '',
+      content: '',
+      category: 'Personal',
+      mood: 'Reflective',
+      mode: 'companion',
+      turns: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }, []);
+
+  // Load entries for user
+  const loadUserEntries = useCallback(async (currentUser: User) => {
+    setEntriesLoading(true);
+    setSaveError(null);
+    try {
+      const userEntries = await fetchUserEntries(currentUser.uid);
+      setEntries(userEntries);
+
+      if (userEntries.length > 0) {
+        setActiveEntry(userEntries[0]);
+      } else {
+        const fresh = createNewEntryTemplate(currentUser.uid);
+        setActiveEntry(fresh);
+      }
+    } catch (err: any) {
+      console.error('Failed to load user entries from Firestore:', err);
+      setSaveError(err?.message || 'Could not load your journal entries.');
+      // Create a fallback local entry so user can still type
+      setActiveEntry(createNewEntryTemplate(currentUser.uid));
+    } finally {
+      setEntriesLoading(false);
+    }
+  }, [createNewEntryTemplate]);
+
+  // Listen to Auth State
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth(async (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+      if (currentUser) {
+        await syncUserProfile(currentUser);
+        await loadUserEntries(currentUser);
+      } else {
+        setEntries([]);
+        setActiveEntry(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [loadUserEntries]);
+
+  // Sign In Handler
+  const handleSignIn = async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const signedInUser = await signInWithGoogle();
+      setUser(signedInUser);
+      await syncUserProfile(signedInUser);
+      await loadUserEntries(signedInUser);
+    } catch (err: any) {
+      console.error('Google Sign-In failed:', err);
+      setAuthError(err?.message || 'Failed to sign in with Google. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Sign Out Handler
+  const handleSignOut = async () => {
+    try {
+      await logOut();
+      setUser(null);
+      setEntries([]);
+      setActiveEntry(null);
+    } catch (err: any) {
+      console.error('Sign Out failed:', err);
+    }
+  };
+
+  // Create New Reflection
+  const handleNewEntry = () => {
+    if (!user) return;
+    const fresh = createNewEntryTemplate(user.uid);
+    setActiveEntry(fresh);
+  };
+
+  // Select existing entry
+  const handleSelectEntry = (entry: JournalEntry) => {
+    setActiveEntry(entry);
+  };
+
+  // Save Entry to Firestore
+  const handleSaveEntry = async (updatedEntry: JournalEntry) => {
+    if (!user) return;
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await saveUserEntry(user.uid, updatedEntry);
+      setActiveEntry(updatedEntry);
+
+      // Update in entries list
+      setEntries((prev) => {
+        const index = prev.findIndex((e) => e.id === updatedEntry.id);
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = updatedEntry;
+          return next;
+        } else {
+          return [updatedEntry, ...prev];
+        }
+      });
+
+      setLastSavedAt(new Date().toLocaleTimeString());
+    } catch (err: any) {
+      console.error('Failed to save to Firestore:', err);
+      setSaveError(err?.message || 'Failed to save reflection to Firestore.');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete Entry
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!user) return;
+    try {
+      await deleteUserEntry(user.uid, entryId);
+      const remaining = entries.filter((e) => e.id !== entryId);
+      setEntries(remaining);
+
+      if (activeEntry?.id === entryId) {
+        if (remaining.length > 0) {
+          setActiveEntry(remaining[0]);
+        } else {
+          handleNewEntry();
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to delete entry:', err);
+      setSaveError(err?.message || 'Failed to delete reflection from Firestore.');
+    }
+  };
+
+  // Loading screen during initial auth verification
+  if (authLoading && !user) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#fcfaf7]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#5a5a40] border-t-transparent" />
+          <p className="font-serif text-sm text-[#434338]">Connecting to ReflectAI Vault...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Unauthenticated Landing Page
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#fcfaf7] flex flex-col font-sans">
+        <Navbar
+          user={null}
+          entryCount={0}
+          onNewEntry={() => {}}
+          onOpenInsights={() => {}}
+          onOpenSecurity={() => setIsSecurityOpen(true)}
+          onSignOut={() => {}}
+        />
+        <LandingPage
+          onSignIn={handleSignIn}
+          isLoading={authLoading}
+          error={authError}
+        />
+        <SecurityModal
+          isOpen={isSecurityOpen}
+          onClose={() => setIsSecurityOpen(false)}
+        />
+      </div>
+    );
+  }
+
+  // Authenticated Workspace
+  return (
+    <div className="h-screen flex flex-col bg-[#fcfaf7] overflow-hidden font-sans">
+      <Navbar
+        user={user}
+        entryCount={entries.length}
+        onNewEntry={handleNewEntry}
+        onOpenInsights={() => setIsInsightsOpen(true)}
+        onOpenSecurity={() => setIsSecurityOpen(true)}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* History Sidebar */}
+        <HistorySidebar
+          entries={entries}
+          activeEntryId={activeEntry?.id || null}
+          onSelectEntry={handleSelectEntry}
+          onNewEntry={handleNewEntry}
+          onDeleteEntry={handleDeleteEntry}
+          isOpen={isSidebarOpen}
+          onToggle={() => setIsSidebarOpen((prev) => !prev)}
+        />
+
+        {/* Main Journal Editor */}
+        <main className="flex-1 h-full overflow-hidden flex flex-col">
+          {activeEntry ? (
+            <JournalEditor
+              key={activeEntry.id}
+              entry={activeEntry}
+              onSave={handleSaveEntry}
+              onDelete={handleDeleteEntry}
+              isSaving={isSaving}
+              saveError={saveError}
+              lastSavedAt={lastSavedAt}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-6 text-[#8a8a75]">
+              <div className="text-center space-y-2">
+                <p className="font-serif text-lg text-[#2c2c24]">No active reflection</p>
+                <button
+                  onClick={handleNewEntry}
+                  className="rounded-lg bg-[#5a5a40] px-4 py-2 text-xs font-medium text-white hover:bg-[#484833] cursor-pointer"
+                >
+                  Start New Reflection
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Modals */}
+      <InsightsModal
+        isOpen={isInsightsOpen}
+        onClose={() => setIsInsightsOpen(false)}
+        entries={entries}
+      />
+      <SecurityModal
+        isOpen={isSecurityOpen}
+        onClose={() => setIsSecurityOpen(false)}
+      />
+    </div>
+  );
+}
