@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { requireAuth, AuthedRequest } from './server/auth';
 import { generateContentWithFallback } from './server/gemini';
 import { ingestRouter } from './server/ingest';
+import { agentRouter } from './server/agent';
 
 dotenv.config();
 
@@ -37,6 +38,10 @@ app.use((err: any, _req: Request, res: Response, next: any) => {
 // Untrusted external content ingestion (Amendment A). Mounted after the body
 // parsers above, per Directive 6 ordering guarantee.
 app.use('/api/ingest', ingestRouter);
+
+// Tool execution boundary (Amendment B). The model proposes here; the Policy
+// Engine decides; only then does the executor act.
+app.use('/api/agent', agentRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

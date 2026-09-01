@@ -6,10 +6,10 @@ rules_version = '2';
 // `allow read, write: if true`. Default deny sits at the bottom and is the
 // fallback for every path not explicitly matched above it.
 //
-// Amendment A.6: artifacts are written by the Admin SDK only. The Admin SDK
-// bypasses these rules entirely, so denying client writes here costs the
-// server nothing and removes the client's ability to forge provenance or
-// launder a hostile verdict into a clean one.
+// Amendments A.6 and B.5: the Admin SDK bypasses these rules entirely, so
+// denying client writes here costs the server nothing while removing the
+// client's ability to forge provenance, launder a hostile verdict, or edit
+// the record of what it was refused.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -25,20 +25,40 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
-      // Tracked repositories. The user chooses what to track, so they may
-      // create and delete these; run-status fields are server-maintained but
-      // are not security-relevant if the owner edits them.
+      // Tracked repositories. The user chooses what to track.
       match /sources/{sourceId} {
         allow read, write: if isOwner(userId);
       }
 
       // Ingested third-party content. Read-only to the owner, never writable
-      // by any client: `trust`, `verdict` and `sourceId` are the inputs to the
-      // taint decision, and a client that could edit them could clear its own
-      // hostile content.
+      // by any client: trust, verdict and sourceId are the inputs to the taint
+      // decision, so a client able to edit them could clear its own hostile
+      // content and then have a write approved from a laundered turn.
       match /artifacts/{artifactId} {
         allow read: if isOwner(userId);
         allow write: if false;
+      }
+
+      // Tool call proposals and their decisions. Read-only to the owner:
+      // approval happens through /api/agent/approve, which re-verifies the
+      // token, re-verifies ownership and RE-EVALUATES policy. If a client
+      // could set status directly it would be approving its own writes.
+      match /toolcalls/{callId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Audit log - append-only at the rules level (B.5).
+      //
+      // Create is denied to clients too: every legitimate audit write comes
+      // from the Admin SDK, which bypasses rules. Denying create here means a
+      // client cannot forge history either. Update and delete are denied
+      // outright, so the record cannot be rewritten even by its owner - that
+      // is the property that makes it evidence rather than a log.
+      match /audit/{eventId} {
+        allow read: if isOwner(userId);
+        allow create: if false;
+        allow update, delete: if false;
       }
     }
 

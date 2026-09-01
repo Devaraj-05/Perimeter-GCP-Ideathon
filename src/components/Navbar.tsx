@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github } from 'lucide-react';
+import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -9,6 +9,7 @@ interface NavbarProps {
   onOpenInsights: () => void;
   onOpenSecurity: () => void;
   onOpenSources: () => void;
+  onOpenThreatFeed: () => void;
   onSignOut: () => void;
 }
 
@@ -19,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenInsights,
   onOpenSecurity,
   onOpenSources,
+  onOpenThreatFeed,
   onSignOut,
 }) => {
   return (
@@ -73,6 +75,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Github className="h-4 w-4 text-[#5a5a40]" />
               <span className="hidden md:inline">Sources</span>
+            </button>
+
+            <button
+              id="threat-feed-btn"
+              onClick={onOpenThreatFeed}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs sm:text-sm font-medium text-[#434338] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+              title="Approvals and every policy decision the agent triggered"
+            >
+              <ShieldAlert className="h-4 w-4 text-[#5a5a40]" />
+              <span className="hidden lg:inline">Activity</span>
             </button>
 
             <button
