@@ -1,12 +1,9 @@
 {
-  "projectId": "gen-lang-client-0060098211",
-  "appId": "1:451625600957:web:3f0ac6dca8b8b492e9b4d4",
-  "apiKey": "AIzaSyBf47Jv3aOWQtrRMW3bb_dNv35pFlzAggE",
-  "authDomain": "gen-lang-client-0060098211.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-reflectaijournal-a722863f-e701-42d3-80fa-fbac585f1ba6",
-  "storageBucket": "gen-lang-client-0060098211.firebasestorage.app",
-  "messagingSenderId": "451625600957",
-  "measurementId": "",
-  "oAuthClientId": "451625600957-udn4fvgv79gff2jfo2ffut7u5assm37c.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "perimeter-507310",
+  "appId": "1:914890039877:web:420ddfd4828b9d5613f92c",
+  "apiKey": "AIzaSyBj-ZtoCMStsV6uX-bCsehMvpfbm_Zq4RE",
+  "authDomain": "perimeter-507310.firebaseapp.com",
+  "storageBucket": "perimeter-507310.firebasestorage.app",
+  "messagingSenderId": "914890039877",
+  "firestoreDatabaseId": "(default)"
 }

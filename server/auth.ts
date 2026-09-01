@@ -13,7 +13,19 @@ import appletConfig from '../firebase-applet-config.json';
  * The safe failure is the server refusing to act.
  */
 
-const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || appletConfig.firestoreDatabaseId;
+const RAW_DATABASE_ID = (
+  process.env.FIRESTORE_DATABASE_ID ||
+  appletConfig.firestoreDatabaseId ||
+  ''
+).trim();
+
+/**
+ * A project's first Firestore database is "(default)"; the SDK expects it to be
+ * addressed by omission, not by name. A project provisioned by AI Studio gets a
+ * NAMED database instead, which must be passed explicitly or the SDK silently
+ * reads and writes the wrong database.
+ */
+const IS_DEFAULT_DB = RAW_DATABASE_ID === '' || RAW_DATABASE_ID === '(default)';
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || appletConfig.projectId;
 
 let adminApp: App | null = null;
@@ -38,14 +50,9 @@ function getAdminApp(): App {
   }
 }
 
-/**
- * Firestore handle bound to the NAMED database this project uses.
- * Passing the database id is mandatory here: the project's data does not
- * live in "(default)", and omitting it silently reads and writes the wrong
- * database.
- */
 export function adminDb(): Firestore {
-  return getFirestore(getAdminApp(), DATABASE_ID);
+  const app = getAdminApp();
+  return IS_DEFAULT_DB ? getFirestore(app) : getFirestore(app, RAW_DATABASE_ID);
 }
 
 export interface AuthedRequest extends Request {
