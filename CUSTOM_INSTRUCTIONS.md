@@ -158,3 +158,55 @@ Extends Directive 1 (Input Surfaces, Inter-System Communication) and Directive 2
 ## A.7 Threat table
 Before generating ingestion code, output a Threat Summary Table covering Input Surfaces,
 Planning & Reasoning, Memory & State, and Inter-System Communication.
+
+---
+
+# Amendment B - Tool Execution Boundary
+
+Adopted 2026-09-02. Governs every path where the model may cause a side effect.
+Extends Directive 1 (Tool Execution, Planning & Reasoning) and Directive 2
+(Broken Access Control Mitigation, OWASP A01).
+
+## B.1 Proposal and execution are separate
+* Model output NEVER executes a tool directly. The model emits a proposal; a server-side
+  Policy Engine decides; only the executor acts.
+* The Policy Engine is a pure, deterministic, unit-testable function. It never consults a
+  language model, because the model is precisely the component an attacker controls the
+  input to.
+
+## B.2 Tool registry
+* Every tool is declared in a static manifest with an explicit
+  `sideEffect: "read" | "write"`, required scopes, and a rate limit.
+* No tool is callable unless it is in the manifest AND in the calling user's allowlist.
+  A tool the model invents does not exist.
+* Tools operate only on resources owned by the calling user. Ownership is re-verified
+  inside the executor, not only at the request boundary.
+
+## B.3 Decision rules, evaluated in this order
+1. Not in the user's allowlist -> DENY ("not_in_allowlist")
+2. Write-class AND turn tainted -> DENY ("write_from_tainted_turn")
+3. Write-class -> CONFIRM. Explicit human approval is mandatory. No configuration flag,
+   environment variable, or demo mode may bypass this.
+4. Rate limit exceeded -> DENY ("rate_limited")
+5. Otherwise -> ALLOW
+
+## B.4 Approval queue
+* CONFIRM proposals are queued with a TTL and surfaced showing the tool, the exact
+  arguments, and the originating source.
+* Policy is re-evaluated at execution time, not at enqueue time. A proposal that became
+  unsafe while queued must not execute on a stale decision.
+
+## B.5 Audit
+* Every decision writes to /users/{uid}/audit BEFORE the executor runs: type, tool, args,
+  decision, reason, originSourceIds, timestamp.
+* Append-only at the Firestore rules level: create permitted, update and delete denied.
+  Application-level convention is insufficient - the guarantee must survive the
+  application being wrong.
+
+## B.6 Failure posture
+* On any ambiguity, error, or unavailability in the decision path, DENY.
+* The safe failure is the agent doing nothing.
+
+## B.7 Threat table
+Output a Threat Summary Table covering Tool Execution and Planning & Reasoning before
+generating tool code.
