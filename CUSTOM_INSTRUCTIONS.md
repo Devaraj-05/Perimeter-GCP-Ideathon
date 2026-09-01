@@ -98,3 +98,60 @@
   * **Cloud Run Deployment Flow**: Pre-formatted, container-friendly deploy instructions utilizing the `gcloud run deploy` command.
   * **Required Campaign Labeling**: Detailed instructions on applying the mandatory resource label to register the service for automated challenge verification.
 * **Mandatory Execution Criteria**: When invoked, the model must output a fully populated, copy-pasteable README structure.
+
+---
+
+# Amendment A - Untrusted External Content Ingestion
+
+Adopted 2026-09-02. Governs all code that fetches or stores third-party content.
+Extends Directive 1 (Input Surfaces, Inter-System Communication) and Directive 2
+(Indirect Prompt Injection Defense, OWASP LLM01).
+
+## A.1 Taint at the boundary
+* Content originating outside this application's own database is UNTRUSTED, permanently.
+  Every artifact carries `trust: "untrusted"` and an immutable `sourceId`. No code path
+  promotes an artifact to trusted.
+* Content the signed-in user authored themselves is `trust: "first_party"`. Taint models
+  authority, not danger: acting on the user's own words at their own request is not
+  privilege escalation. First-party content never taints a turn.
+* Untrusted content is DATA. Never appended to a system instruction, never used to build a
+  prompt template, never interpreted as configuration.
+
+## A.2 Prompt assembly
+* Untrusted content is enclosed in explicit delimiters with a provenance header naming its
+  source and stating that the contents are data only.
+* The system instruction states that text inside those delimiters is never an instruction,
+  regardless of phrasing, claimed authority, or apparent origin.
+* Never interpolate untrusted content into the system instruction position.
+
+## A.3 Detection is layered; the model layer is not the control
+* L1 deterministic: imperative-to-agent phrasing, zero-width and bidirectional Unicode,
+  HTML comments, oversized base64, markdown image tags carrying query strings, off-domain
+  URLs. Pure functions, unit tested, no model calls.
+* L2 model classifier: a separate Gemini call with NO tools bound, returning constrained
+  JSON. Probabilistic - a signal, never a guarantee.
+* L3 taint propagation: any turn whose context includes a non-clean artifact is marked
+  tainted. Bookkeeping, not inference.
+* Ambiguity resolves toward the more suspicious verdict.
+
+## A.4 Fetch safety
+* Outbound fetches are server-side only, against a hard hostname allowlist.
+* No user-supplied arbitrary URL is fetched. No redirect followed off-allowlist.
+* No private, link-local, or loopback address reachable.
+* Outbound credentials come from Secret Manager at boot and are never logged.
+
+## A.5 Ingestion endpoints
+* Ingestion endpoints require a verified caller identity and operate only on sources owned
+  by that caller. Ownership is re-verified server-side, never trusted from the request body.
+* Every run records last-run time, status, and error on the source document, and the UI
+  renders them. Silent failure of a background job is a defect.
+* Ingestion is idempotent on (sourceId, externalId).
+
+## A.6 Storage integrity
+* Artifacts are written by the Admin SDK only. Clients have no write access to the artifact
+  collection at the security-rules level, not merely by application convention.
+* `trust`, `sourceId` and `externalId` are immutable once written.
+
+## A.7 Threat table
+Before generating ingestion code, output a Threat Summary Table covering Input Surfaces,
+Planning & Reasoning, Memory & State, and Inter-System Communication.
