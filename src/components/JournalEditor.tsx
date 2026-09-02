@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
 import {
   Sparkles,
   Send,
@@ -32,6 +31,7 @@ import {
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
 import { ThreatEvent } from '../lib/agentApi';
+import { UntrustedText } from './UntrustedText';
 
 interface JournalEditorProps {
   entry: JournalEntry;
@@ -903,9 +903,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                       {isUser ? (
                         <p className="whitespace-pre-wrap font-sans">{turn.text}</p>
                       ) : (
-                        <div className="prose prose-stone prose-sm max-w-none text-[#2c2c24]">
-                          <ReactMarkdown>{turn.text}</ReactMarkdown>
-                        </div>
+                        // INV-9: assistant output is DERIVED from untrusted content.
+                        // Rendered escaped, never as markdown - a markdown image
+                        // tag would exfiltrate on paint, with no tool call needed.
+                        <UntrustedText text={turn.text} />
                       )}
 
                       {/* Copy button */}
