@@ -590,6 +590,27 @@ flowchart LR
     C -->|"TTL expires"| I["expired"]
 ```
 
+### 5.4b How the journal and the boundary connect
+
+The two halves are one product, not two features sharing a database:
+
+- **No sources connected** — reflections use `/api/gemini/reflect`. No tools are bound and no
+  external content exists. There is nothing to defend against, so none of the machinery runs.
+- **Sources connected** — reflections automatically route through `/api/agent/chat`. The
+  assistant can ground its answer in real project context, and every safeguard engages.
+
+The user is never asked to choose between a "safe mode" and a "useful mode", because that is
+not a choice anyone should have to make. Grounding is visible in the editor, and anything the
+boundary refuses is reported inline in the journal itself rather than only in the Activity
+panel.
+
+This is also why the feature and its defence are inseparable. Letting an assistant read your
+issue tracker is genuinely useful — it grounds reflection in what actually happened instead of
+what you remember. It also creates precisely the exposure Perimeter exists to close: anyone who
+can comment on a public repository can write text your assistant will read, while your
+assistant holds your credentials and has tools. The defence is required by the feature, not
+decoration on top of it.
+
 ### 5.5 Complete narrative
 
 **Arrival.** A stranger opens the Cloud Run URL and sees a landing page with a single action:
@@ -706,9 +727,10 @@ still records the attempt. Published detection rates — including misses — ar
 deliverable.
 
 **The end-to-end injection demo is not yet verified.** Every component is unit-tested and the
-canonical payload lands as `hostile` in tests, but Gemini actually emitting a `create_note`
-proposal from a live poisoned issue and receiving `write_from_tainted_turn` has not yet been
-observed against the deployed service. Until it has been, it is a claim, not a result.
+canonical payload lands as `hostile` in tests, and the UI path now exists end to end — but
+Gemini actually emitting a `create_note` proposal from a live poisoned issue and receiving
+`write_from_tainted_turn` has not yet been observed against the deployed service. Until it has
+been, it is a claim, not a result.
 
 **Rate limiting is per-instance.** It is in-memory, so with several Cloud Run instances the
 effective limit is `limit × instances`. A Firestore round trip per model call would cost more

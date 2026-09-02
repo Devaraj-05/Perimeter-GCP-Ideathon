@@ -19,6 +19,7 @@ import { InsightsModal } from './components/InsightsModal';
 import { SecurityModal } from './components/SecurityModal';
 import { SourcesPanel } from './components/SourcesPanel';
 import { ThreatFeed } from './components/ThreatFeed';
+import { listArtifacts } from './lib/perimeterApi';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -41,6 +42,9 @@ export default function App() {
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isSourcesOpen, setIsSourcesOpen] = useState(false);
   const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
+  // Artifact ids available to ground reflections. Empty until the user
+  // connects a source, which is what keeps the plain journal path in play.
+  const [groundingArtifactIds, setGroundingArtifactIds] = useState<string[]>([]);
 
   // Create a clean template for a new journal reflection
   const createNewEntryTemplate = useCallback((uid: string): JournalEntry => {
@@ -82,6 +86,22 @@ export default function App() {
     }
   }, [createNewEntryTemplate]);
 
+  /**
+   * Loads the ids of ingested artifacts so reflections can be grounded in real
+   * project context. A failure here is non-fatal by design: the journal must
+   * keep working without external context, so this degrades to the ungrounded
+   * path rather than blocking the user.
+   */
+  const loadGroundingArtifacts = useCallback(async () => {
+    try {
+      const artifacts = await listArtifacts();
+      setGroundingArtifactIds(artifacts.map((a) => a.id));
+    } catch (err) {
+      console.warn('Could not load connected sources; reflections will be ungrounded.', err);
+      setGroundingArtifactIds([]);
+    }
+  }, []);
+
   // Listen to Auth State
   useEffect(() => {
     const unsubscribe = subscribeToAuth(async (currentUser) => {
@@ -90,14 +110,16 @@ export default function App() {
       if (currentUser) {
         await syncUserProfile(currentUser);
         await loadUserEntries(currentUser);
+        await loadGroundingArtifacts();
       } else {
         setEntries([]);
         setActiveEntry(null);
+        setGroundingArtifactIds([]);
       }
     });
 
     return () => unsubscribe();
-  }, [loadUserEntries]);
+  }, [loadUserEntries, loadGroundingArtifacts]);
 
   // Sign In Handler
   const handleSignIn = async () => {
@@ -108,6 +130,7 @@ export default function App() {
       setUser(signedInUser);
       await syncUserProfile(signedInUser);
       await loadUserEntries(signedInUser);
+      await loadGroundingArtifacts();
     } catch (err: any) {
       console.error('Google Sign-In failed:', err);
       setAuthError(err?.message || 'Failed to sign in with Google. Please try again.');
@@ -262,6 +285,7 @@ export default function App() {
         <main className="flex-1 h-full overflow-hidden flex flex-col">
           {activeEntry ? (
             <JournalEditor
+              groundingArtifactIds={groundingArtifactIds}
               key={activeEntry.id}
               entry={activeEntry}
               onSave={handleSaveEntry}
@@ -299,6 +323,9 @@ export default function App() {
       <SourcesPanel
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
+        onArtifactsChanged={(artifacts) =>
+          setGroundingArtifactIds(artifacts.map((a) => a.id))
+        }
       />
       <ThreatFeed
         isOpen={isThreatFeedOpen}

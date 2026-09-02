@@ -19,6 +19,8 @@ import {
   RefreshCw,
   Tag,
   Smile,
+  Github,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -27,11 +29,15 @@ import {
   CategoryType,
   ReflectionMode,
 } from '../types';
-import { requestReflection, requestSummary } from '../lib/geminiApi';
+import { requestSummary } from '../lib/geminiApi';
+import { reflectGrounded } from '../lib/reflect';
+import { ThreatEvent } from '../lib/agentApi';
 
 interface JournalEditorProps {
   entry: JournalEntry;
   onSave: (updatedEntry: JournalEntry) => Promise<void>;
+  /** Artifact ids available to ground reflections. Empty = no sources connected. */
+  groundingArtifactIds: string[];
   onDelete?: (entryId: string) => void;
   isSaving: boolean;
   saveError: string | null;
@@ -99,6 +105,7 @@ const MODES: {
 export const JournalEditor: React.FC<JournalEditorProps> = ({
   entry,
   onSave,
+  groundingArtifactIds,
   onDelete,
   isSaving,
   saveError,
@@ -124,6 +131,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastTurnEvents, setLastTurnEvents] = useState<ThreatEvent[]>([]);
+  const [lastTurnTainted, setLastTurnTainted] = useState(false);
 
   const turnsEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -142,6 +151,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setSentiment(entry.sentiment);
     setHasUnsavedChanges(false);
     setErrorMsg(null);
+    setLastTurnEvents([]);
+    setLastTurnTainted(false);
   }, [entry.id]);
 
   // Scroll to bottom of conversation turns
@@ -260,13 +271,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setTurns(updatedTurns);
       setHasUnsavedChanges(true);
 
-      const response = await requestReflection({
+      const response = await reflectGrounded({
         content: userPrompt,
         mode,
         mood,
         category,
         turns: updatedTurns,
+        groundingArtifactIds,
       });
+      setLastTurnEvents(response.threatEvents);
+      setLastTurnTainted(response.turnTaint);
 
       const modelTurn: TurnMessage = {
         id: `msg-${Date.now()}-m`,
@@ -317,13 +331,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setTurns(updatedTurns);
       setHasUnsavedChanges(true);
 
-      const response = await requestReflection({
+      const response = await reflectGrounded({
         content: content.trim(),
         mode,
         mood,
         category,
         turns: updatedTurns,
+        groundingArtifactIds,
       });
+      setLastTurnEvents(response.threatEvents);
+      setLastTurnTainted(response.turnTaint);
 
       const modelTurn: TurnMessage = {
         id: `msg-${Date.now()}-m`,
@@ -586,6 +603,57 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           >
             Retry Save
           </button>
+        </div>
+      )}
+
+      {/* Grounding notice — shown only when connected sources are in play, so
+          the user knows external content reached the conversation. */}
+      {groundingArtifactIds.length > 0 && (
+        <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 rounded-xl border border-[#e5e0d3] bg-[#f3efe6] px-3.5 py-2.5 text-xs text-[#434338]">
+          <Github className="h-4 w-4 shrink-0 text-[#5a5a40]" />
+          <span>
+            Grounded in <strong>{groundingArtifactIds.length}</strong> item
+            {groundingArtifactIds.length === 1 ? '' : 's'} from your connected sources.
+            {lastTurnTainted && (
+              <span className="ml-1 font-medium text-rose-700">
+                Untrusted content was screened before the assistant read it.
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* What the boundary refused on the last turn. This is the moment the
+          product's whole thesis becomes visible, so it renders inline in the
+          journal rather than only in the Activity panel. */}
+      {lastTurnEvents.filter((e) => e.decision !== 'ALLOW').length > 0 && (
+        <div className="mx-4 sm:mx-6 mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-rose-800">
+            <ShieldAlert className="h-4 w-4 shrink-0" />
+            Blocked while answering
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {lastTurnEvents
+              .filter((e) => e.decision !== 'ALLOW')
+              .map((e) => (
+                <li key={e.callId} className="text-rose-900">
+                  <span className="font-mono">{e.tool}</span>
+                  {e.decision === 'DENY' ? ' was refused' : ' needs your approval'}
+                  {e.reason === 'write_from_tainted_turn' && (
+                    <span>
+                      {' '}
+                      — it was proposed while untrusted content was in context.
+                      {e.originSourceIds.length > 0 && (
+                        <> Originating source: <strong>{e.originSourceIds.join(', ')}</strong>.</>
+                      )}
+                    </span>
+                  )}
+                  {e.decision === 'CONFIRM' && (
+                    <span> — open Activity to review the exact arguments.</span>
+                  )}
+                </li>
+              ))}
+          </ul>
         </div>
       )}
 
