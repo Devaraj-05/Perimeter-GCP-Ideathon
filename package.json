@@ -13,16 +13,18 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --dir server",
+    "test:rules": "firebase emulators:exec --only firestore --project perimeter-rules-test \"vitest run --config vitest.rules.config.ts\"",
+    "test:all": "npm run test && npm run test:rules"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
-    "firebase-admin": "^13.6.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.18.0",
+    "firebase-admin": "^13.6.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -31,14 +33,16 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "firebase-tools": "^13.35.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "vitest": "^3.2.4",
-    "@types/express": "^4.17.21"
+    "vitest": "^3.2.4"
   }
 }

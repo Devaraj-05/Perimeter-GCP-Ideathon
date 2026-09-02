@@ -18,5 +18,11 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    // Rules tests need the Firestore emulator and live in tests/. Restricting
+    // the default run to server/ means a bare `vitest run` cannot appear to
+    // pass without one. Run those with `npm run test:rules`.
+    test: {
+      include: ['server/**/*.test.ts'],
+    },
   };
 });

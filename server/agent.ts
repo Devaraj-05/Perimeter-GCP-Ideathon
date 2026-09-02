@@ -7,6 +7,7 @@ import { decide, computeTurnTaint, UserPolicy, PolicyDecision } from './policy';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
 import { writeAudit } from './audit';
+import { checkRateLimit } from './ratelimit';
 
 /**
  * Agent Runtime - Amendment B.1.
@@ -171,6 +172,18 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
 
     if (!message) {
       return res.status(400).json({ error: 'A message is required.' });
+    }
+
+    // Per-user quota on model calls. An authenticated user looping this route
+    // can drain the project's Gemini quota for everyone else.
+    const limit = checkRateLimit(uid, Number(process.env.CHAT_RATE_LIMIT_PER_HOUR) || 60);
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      const minutes = Math.ceil(limit.retryAfterSeconds / 60);
+      return res.status(429).json({
+        error: `You have reached the hourly limit for assistant messages. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+        retryAfterSeconds: limit.retryAfterSeconds,
+      });
     }
 
     const context = await loadContext(uid, artifactIds);
