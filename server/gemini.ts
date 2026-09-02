@@ -30,6 +30,37 @@ export const MODEL_FALLBACK_LADDER = [
   'gemini-3.7-flash',
 ];
 
+
+/**
+ * Extracts an HTTP status from a Gemini SDK error.
+ *
+ * The SDK surfaces the code inconsistently: sometimes as `status`, sometimes
+ * only inside a JSON body on `message`. Defaulting to 500 when it cannot be
+ * read would classify an unknown failure as retryable, so this returns null
+ * instead and lets the caller decide.
+ */
+export function statusOf(err: any): number | null {
+  const direct = Number(err?.status ?? err?.statusCode);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  const match = /"code"\s*:\s*(\d{3})/.exec(String(err?.message ?? ''));
+  return match ? Number(match[1]) : null;
+}
+
+/** Directive 6 Error Recovery Matrix, as a pure testable predicate. */
+export function isRecoverable(err: any): boolean {
+  const status = statusOf(err);
+  if (status !== null) {
+    return [429, 500, 502, 503, 504].includes(status) || status === 404;
+  }
+
+  // No readable status. Fall back to the transient markers the API uses, and
+  // treat anything else as permanent - retrying an unknown failure four times
+  // is worse than surfacing it once.
+  const message = String(err?.message ?? '');
+  return /overloaded|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED/.test(message);
+}
+
 export interface FallbackOptions {
   systemInstruction?: string;
   temperature?: number;
@@ -66,17 +97,20 @@ export async function generateContentWithFallback(
       }
     } catch (err: any) {
       lastError = err;
-      const status = err?.status || err?.statusCode || (err?.message?.includes('429') ? 429 : 500);
-      const isRecoverable = [503, 429, 404, 500, 502, 504].includes(Number(status)) ||
-        err?.message?.includes('overloaded') ||
-        err?.message?.includes('RESOURCE_EXHAUSTED') ||
-        err?.message?.includes('UNAVAILABLE');
+      const status = statusOf(err);
+      const recoverable = isRecoverable(err);
 
-      console.warn(`[Gemini Fallback] Model ${modelName} failed (status: ${status}). Recoverable: ${isRecoverable}. Error: ${err?.message}`);
+      console.warn(
+        `[Gemini Fallback] Model ${modelName} failed (status: ${status}). ` +
+          `Recoverable: ${recoverable}. Error: ${err?.message}`,
+      );
 
-      if (!isRecoverable && MODEL_FALLBACK_LADDER.indexOf(modelName) === MODEL_FALLBACK_LADDER.length - 1) {
-        throw err;
-      }
+      // Directive 6 lists the recoverable codes: 503, 429, 404, 500. Anything
+      // else is a condition the next model shares - a bad API key, a malformed
+      // request, a disabled service - so walking the rest of the ladder burns
+      // three more round trips to arrive at the identical failure, and buries
+      // the real cause under repetition in the logs.
+      if (!recoverable) throw err;
     }
   }
 
