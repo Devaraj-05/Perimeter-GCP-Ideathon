@@ -209,7 +209,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     ];
 
     const { response, modelUsed } = await generateWithTools(
-      getAI(),
+      await getAI(),
       contents,
       assembled.systemInstruction,
     );

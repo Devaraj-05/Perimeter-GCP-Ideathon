@@ -66,7 +66,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   }, [entries, searchQuery, selectedCategory, selectedMood]);
 
   // Group entries by date
-  const groupedEntries = useMemo(() => {
+  const groupedEntries = useMemo<Record<string, JournalEntry[]>>(() => {
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
 
@@ -187,7 +187,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 <p>Start writing a new entry or adjust your filter query.</p>
               </div>
             ) : (
-              Object.entries(groupedEntries).map(([groupTitle, groupItems]) => {
+              Object.entries(groupedEntries).map(([groupTitle, groupItems]: [string, JournalEntry[]]) => {
                 if (groupItems.length === 0) return null;
                 return (
                   <div key={groupTitle} className="space-y-1.5">

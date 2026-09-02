@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { getGeminiKey } from './secrets';
 
 /**
  * Directive 6: Resilient Model Fallback Ladder + Error Recovery Matrix.
@@ -10,13 +11,14 @@ import { GoogleGenAI } from '@google/genai';
 
 let aiClient: GoogleGenAI | null = null;
 
-export function getAI(): GoogleGenAI {
+/**
+ * INV-8. The key is fetched from Secret Manager on first use and cached in
+ * module memory. Async because the fetch is a network call; the cache means
+ * that cost is paid once per instance, at cold start.
+ */
+export async function getAI(): Promise<GoogleGenAI> {
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured in the environment.');
-    }
-    aiClient = new GoogleGenAI({ apiKey });
+    aiClient = new GoogleGenAI({ apiKey: await getGeminiKey() });
   }
   return aiClient;
 }
@@ -43,7 +45,7 @@ export async function generateContentWithFallback(
   contents: any,
   options?: FallbackOptions
 ): Promise<{ text: string; modelUsed: string }> {
-  const ai = getAI();
+  const ai = await getAI();
   let lastError: any = null;
 
   for (const modelName of MODEL_FALLBACK_LADDER) {
