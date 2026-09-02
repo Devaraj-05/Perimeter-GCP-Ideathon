@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Github, Plus, RefreshCw, Trash2, ShieldAlert, ShieldCheck, ShieldQuestion, Link2,
   AlertCircle, X, ExternalLink, Loader2,
@@ -59,6 +59,23 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkResult, setLinkResult] = useState<string | null>(null);
 
+  /**
+   * Held in a ref rather than closed over.
+   *
+   * A parent passing an inline arrow gives this prop a new identity on every
+   * render. With the callback in load()'s dependency array that made load()
+   * unstable, which re-fired the mount effect, which set state, which
+   * re-rendered - an infinite loop that presented as a spinner that never
+   * stopped and quietly hammered the API behind it.
+   *
+   * A ref keeps the newest callback available without making load() depend on
+   * it, so the panel is correct regardless of how the parent passes the prop.
+   */
+  const onArtifactsChangedRef = useRef(onArtifactsChanged);
+  useEffect(() => {
+    onArtifactsChangedRef.current = onArtifactsChanged;
+  }, [onArtifactsChanged]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -66,13 +83,13 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
       const [s, a] = await Promise.all([listSources(), listArtifacts()]);
       setSources(s);
       setArtifacts(a);
-      onArtifactsChanged?.(a);
+      onArtifactsChangedRef.current?.(a);
     } catch (err: any) {
       setError(err?.message || 'Could not load your sources.');
     } finally {
       setLoading(false);
     }
-  }, [onArtifactsChanged]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) void load();

@@ -96,6 +96,12 @@ export default function App() {
    * keep working without external context, so this degrades to the ungrounded
    * path rather than blocking the user.
    */
+  // Stable identity. An inline arrow here would give the prop a new identity
+  // every render, which is what caused the SourcesPanel render loop.
+  const handleArtifactsChanged = useCallback((artifacts: { id: string }[]) => {
+    setGroundingArtifactIds(artifacts.map((a) => a.id));
+  }, []);
+
   const loadGroundingArtifacts = useCallback(async () => {
     try {
       const artifacts = await listArtifacts();
@@ -331,9 +337,7 @@ export default function App() {
       <SourcesPanel
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
-        onArtifactsChanged={(artifacts) =>
-          setGroundingArtifactIds(artifacts.map((a) => a.id))
-        }
+        onArtifactsChanged={handleArtifactsChanged}
       />
       <ThreatFeed
         isOpen={isThreatFeedOpen}
