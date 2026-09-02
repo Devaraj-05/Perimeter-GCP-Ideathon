@@ -94,11 +94,19 @@ describe('INV-8 — no secret is committed to the repository', () => {
   });
 
   it('no service account private key is tracked', () => {
+    // Built from parts so the literal markers never appear in this file.
+    // Otherwise the guard flags itself the moment it is committed - which is
+    // exactly what happened on the first run, and the reason self-exclusion
+    // would have been the wrong fix: a guard that skips its own file cannot
+    // catch a secret pasted into it.
+    const SA_MARKER = '"type": "' + 'service_account"';
+    const PEM_MARKER = 'BEGIN' + ' PRIVATE KEY';
+
     const offenders = tracked.filter((f) => {
       if (!existsSync(f)) return false;
       try {
         const body = readFileSync(f, 'utf8');
-        return body.includes('"type": "service_account"') || body.includes('BEGIN PRIVATE KEY');
+        return body.includes(SA_MARKER) || body.includes(PEM_MARKER);
       } catch {
         return false;
       }

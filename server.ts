@@ -7,6 +7,7 @@ import { generateContentWithFallback } from './server/gemini';
 import { ingestRouter } from './server/ingest';
 import { agentRouter } from './server/agent';
 import { internalRouter } from './server/internal';
+import { secretStatus } from './server/secrets';
 
 dotenv.config();
 
@@ -49,10 +50,20 @@ app.use('/internal', internalRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
+  // Constitution section 8: the health check touches no downstream service.
+  // So this reports whether a key SOURCE is configured, never fetching one.
+  //
+  // aiConfigured previously tested process.env.GEMINI_API_KEY directly, which
+  // became a lie the moment the key moved to Secret Manager - it reported
+  // false on a perfectly healthy deployment. keySource stays null until the
+  // first Gemini call resolves it, then names the path actually taken.
+  const secret = secretStatus();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    aiConfigured: !!process.env.GEMINI_API_KEY,
+    aiConfigured: !!(process.env.GEMINI_KEY_SECRET || process.env.GEMINI_API_KEY),
+    keySource: secret.via,
+    keyResolved: secret.configured,
   });
 });
 
