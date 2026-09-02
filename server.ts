@@ -8,6 +8,7 @@ import { ingestRouter } from './server/ingest';
 import { agentRouter } from './server/agent';
 import { internalRouter } from './server/internal';
 import { secretStatus } from './server/secrets';
+import { buildConversationContents, buildSystemInstruction } from './server/conversation';
 
 dotenv.config();
 
@@ -81,52 +82,11 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
       return res.status(400).json({ error: 'Journal content or message is required.' });
     }
 
-    let systemInstruction = `You are a thoughtful, empathetic, and intellectually astute personal reflection partner and journal companion.
-The user is writing in their private journal. 
-Your goal is to provide a grounded, compassionate, and constructive response.
-- Acknowledge emotions without being overly clinical or dismissive.
-- Provide crisp, structured observations, highlighting hidden themes, cognitive shifts, or gentle reframing.
-- Offer 2-3 engaging, open-ended reflection questions or actionable brainstorming ideas.
-- Use clean Markdown formatting with clear headings, bullet points, and emphasis where helpful.`;
-
-    if (mode === 'brainstorm') {
-      systemInstruction += `\nMode: Brainstorming & Actionable Solutions. Focus on creative, structured ideas, pragmatic next steps, and divergent options.`;
-    } else if (mode === 'socratic') {
-      systemInstruction += `\nMode: Socratic Inquiry. Ask probing, thoughtful questions that challenge assumptions and invite deeper self-discovery.`;
-    } else if (mode === 'gratitude_wellness') {
-      systemInstruction += `\nMode: Gratitude & Mindfulness. Focus on grounding, celebration of micro-wins, self-compassion, and stress reduction.`;
-    } else if (mode === 'executive_summary') {
-      systemInstruction += `\nMode: Executive Synthesis. Provide a sharp, concise 2-sentence summary and 3 key takeaway bullet points.`;
-    }
-
-    // Build conversation context
-    const contents: any[] = [];
-    
-    // Add context prelude
-    let contextHeader = `[User Context: Mood: ${mood}, Category: ${category}, Mode: ${mode}]\n`;
-    if (content) {
-      contextHeader += `[Initial Journal Entry]:\n${content}\n\n`;
-    }
-
-    // Add multi-turn dialogue
-    if (turns.length > 0) {
-      for (let i = 0; i < turns.length; i++) {
-        const turn = turns[i];
-        if (turn && turn.role && turn.text) {
-          const role = turn.role === 'user' ? 'user' : 'model';
-          const text = (i === 0 && content) ? `${contextHeader}${turn.text}` : turn.text;
-          contents.push({
-            role,
-            parts: [{ text }],
-          });
-        }
-      }
-    } else {
-      contents.push({
-        role: 'user',
-        parts: [{ text: `${contextHeader}${content}` }],
-      });
-    }
+    // Multi-turn assembly lives in server/conversation.ts so it can be tested.
+    // Multi-turn is a graded Phase 2 requirement; leaving it inline meant the
+    // only way to verify it was to click the app.
+    const systemInstruction = buildSystemInstruction(mode);
+    const contents = buildConversationContents({ content, mode, mood, category, turns });
 
     const { text, modelUsed } = await generateContentWithFallback(contents, {
       systemInstruction,
