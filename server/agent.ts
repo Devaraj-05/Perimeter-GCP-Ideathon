@@ -1,8 +1,11 @@
 import { Router, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { requireAuth, AuthedRequest, adminDb } from './auth';
-import { getAI, MODEL_FALLBACK_LADDER } from './gemini';
-import { assembleContext, ContextArtifact } from './assemble';
+import { getAI, MODEL_FALLBACK_LADDER, isRecoverable } from './gemini';
+import { ContextArtifact } from './assemble';
+import { read as readerRead, ReaderOutput } from './reader';
+import { buildPlannerRequest, computePlannerTaint, extractProposals } from './planner';
+import { Segment, PerimeterViolation } from './segments';
 import { decide, computeTurnTaint, UserPolicy, PolicyDecision } from './policy';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
@@ -130,31 +133,32 @@ async function persistProposal(
   return doc.id;
 }
 
-/** Calls Gemini with tools bound, walking the mandated fallback ladder. */
-async function generateWithTools(ai: GoogleGenAI, contents: any[], systemInstruction: string) {
+/**
+ * Calls the Planner, walking the mandated fallback ladder.
+ *
+ * The request is rebuilt per attempt rather than constructed once, so
+ * assertNoUntrusted (INV-1) runs before every dispatch. A guard that runs once
+ * cannot protect the second and third attempts.
+ */
+async function generateWithPlanner(
+  ai: GoogleGenAI,
+  context: Parameters<typeof buildPlannerRequest>[1],
+) {
   let lastError: any = null;
 
   for (const model of MODEL_FALLBACK_LADDER) {
+    const request = buildPlannerRequest(model, context);
     try {
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.6,
-          maxOutputTokens: 2048,
-          tools: [{ functionDeclarations: toFunctionDeclarations() }],
-        },
-      });
+      const response = await ai.models.generateContent(request);
       return { response, modelUsed: model };
     } catch (err: any) {
+      // A perimeter violation is never retried or swallowed: it means
+      // something is architecturally wrong and we want to be told.
+      if (err instanceof PerimeterViolation) throw err;
+
       lastError = err;
-      const status = err?.status || err?.statusCode || 500;
-      const recoverable =
-        [503, 429, 404, 500, 502, 504].includes(Number(status)) ||
-        /overloaded|RESOURCE_EXHAUSTED|UNAVAILABLE/.test(err?.message || '');
-      console.warn(`[agent] ${model} failed (${status}), recoverable=${recoverable}`);
-      if (!recoverable && model === MODEL_FALLBACK_LADDER[MODEL_FALLBACK_LADDER.length - 1]) throw err;
+      console.warn('[planner] ' + model + ' failed: ' + err?.message);
+      if (!isRecoverable(err)) throw err;
     }
   }
 
@@ -187,35 +191,64 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     }
 
     const context = await loadContext(uid, artifactIds);
-    const assembled = assembleContext(context, BASE_SYSTEM_INSTRUCTION);
 
-    // A.3 / B.3: taint is bookkeeping over the assembled context, computed
-    // before the model is called and never revised by what the model says.
-    const turnTaint = computeTurnTaint(
-      context.map((c) => ({ trust: c.trust, verdict: c.verdict })),
-    );
+    // ---- THE AIRLOCK (INV-1, INV-2) ----
+    //
+    // Untrusted content goes to the Reader, which has no tools. Only its typed
+    // output continues. The Planner below holds the tool declarations and never
+    // sees the raw text, so an injection reaches a context with nothing to call.
+    //
+    // This replaced a single call that fenced untrusted text and bound tools to
+    // the same request - AUDIT.md finding F1.
 
-    const contents = [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: assembled.contextBlock
-              ? `${assembled.contextBlock}\n\n--- USER REQUEST ---\n${message}`
-              : message,
-          },
-        ],
-      },
-    ];
+    const firstParty = context.filter((c) => c.trust === 'first_party');
+    const untrusted = context.filter((c) => c.trust !== 'first_party');
 
-    const { response, modelUsed } = await generateWithTools(
-      await getAI(),
-      contents,
-      assembled.systemInstruction,
-    );
+    const observations: { segmentId: string; sourceRef: string | null; output: ReaderOutput }[] = [];
+    let readerFailures = 0;
 
-    // Capture proposals. Nothing here executes inline.
-    const calls = (response.functionCalls || []) as Array<{ name?: string; args?: any }>;
+    for (const artifact of untrusted) {
+      try {
+        const output = await readerRead(artifact.title + '\n\n' + artifact.body);
+        observations.push({
+          segmentId: artifact.id,
+          sourceRef: artifact.sourceRef ?? null,
+          output,
+        });
+      } catch (err: any) {
+        // Constitution section 8: a Reader failure degrades, it never falls
+        // back to passing raw untrusted text to the Planner. The document is
+        // absent from this turn and the user is told.
+        readerFailures++;
+        console.warn('[airlock] reader failed for ' + artifact.id + ': ' + err?.message);
+      }
+    }
+
+    // First-party entries become the Planner history. Nothing untrusted here.
+    const history: Segment[] = firstParty.map((c) => ({
+      id: c.id,
+      zone: 'USER' as const,
+      text: c.title + '\n\n' + c.body,
+      taint: false,
+      sourceType: 'typed' as const,
+      sourceRef: null,
+      derivedFrom: null,
+      createdAt: new Date().toISOString(),
+    }));
+
+    const plannerContext = { history, userMessage: message, observations };
+
+    // Which external documents contributed to this turn. Recorded on every
+    // decision so a refusal can name the source that triggered it.
+    const originSourceIds = Array.from(
+      new Set(observations.map((o) => o.sourceRef ?? o.segmentId).filter(Boolean)),
+    ) as string[];
+    const contextIds = [...history.map((h) => h.id), ...observations.map((o) => o.segmentId)];
+    const turnTaint = computePlannerTaint(plannerContext);
+
+    const { response, modelUsed } = await generateWithPlanner(await getAI(), plannerContext);
+
+    const calls = extractProposals(response as any).map((p) => ({ name: p.tool, args: p.args }));
     const policy = await loadPolicy(uid);
     const threatEvents: any[] = [];
 
@@ -236,7 +269,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
         reason: verdict.reason,
         sideEffect: verdict.sideEffect,
         turnTaint,
-        originSourceIds: assembled.originSourceIds,
+        originSourceIds: originSourceIds,
       });
 
       const effective: PolicyDecision = audited
@@ -248,7 +281,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
         proposal,
         effective,
         turnTaint,
-        assembled.originSourceIds,
+        originSourceIds,
       );
 
       let executed: unknown = null;
@@ -260,7 +293,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
           tool: proposal.tool,
           decision: 'ALLOW',
           reason: result.ok ? 'executed' : 'execution_failed',
-          originSourceIds: assembled.originSourceIds,
+          originSourceIds: originSourceIds,
         });
       }
 
@@ -272,7 +305,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
         decision: effective.decision,
         reason: effective.reason,
         turnTaint,
-        originSourceIds: assembled.originSourceIds,
+        originSourceIds: originSourceIds,
         result: executed,
       });
     }
@@ -282,7 +315,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       modelUsed,
       turnTaint,
       threatEvents,
-      contextIds: assembled.includedIds,
+      contextIds: contextIds,
     });
   } catch (err: any) {
     console.error('[agent] chat failed:', err?.message);
