@@ -15,7 +15,8 @@
     "lint": "tsc --noEmit",
     "test": "vitest run --dir server",
     "test:rules": "firebase emulators:exec --only firestore --project perimeter-rules-test \"vitest run --config vitest.rules.config.ts\"",
-    "test:all": "npm run test && npm run test:rules"
+    "test:all": "npm run test && npm run test:rules",
+    "replay": "tsx scripts/replay-corpus.ts"
   },
   "dependencies": {
     "@google-cloud/secret-manager": "^7.0.0",
