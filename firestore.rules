@@ -1,68 +1,125 @@
 rules_version = '2';
 
-// Perimeter - owner-bound isolation with server-only write paths.
+// Perimeter — owner-bound isolation with server-only write paths.
 //
-// Directive 3: zero insecure defaults, owner-bound path checking, no
-// `allow read, write: if true`. Default deny sits at the bottom and is the
-// fallback for every path not explicitly matched above it.
+// Constitution §4 (data isolation) and INV-3, INV-4, INV-7.
 //
-// Amendments A.6 and B.5: the Admin SDK bypasses these rules entirely, so
-// denying client writes here costs the server nothing while removing the
-// client's ability to forge provenance, launder a hostile verdict, or edit
-// the record of what it was refused.
+// Two facts that decide the shape of this file:
+//
+//  1. The Firebase Admin SDK bypasses these rules entirely. Rules govern the
+//     client SDK only. So `allow write: if false` blocks the browser
+//     completely while the Cloud Run server writes freely. That is the
+//     intended design, not a contradiction.
+//  2. Rules are still mandatory even though this client barely touches
+//     Firestore directly. They are the backstop for the day someone adds a
+//     client-side query. Default-deny at the root, then open the minimum.
+//
+// The rule to remember when debugging: never widen a rule to fix a bug — fix
+// the query.
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return signedIn() && request.auth.uid == userId;
     }
 
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
 
-      // Journal entries - first-party content the user authors and owns.
+      // ---- User-authored content: the client may write its own ----
+
+      // Journal entries. First-party content the user authors and owns.
       match /entries/{entryId} {
         allow read, write: if isOwner(userId);
       }
 
-      // Tracked repositories. The user chooses what to track.
+      // Tracked sources. The user chooses what to connect.
       match /sources/{sourceId} {
         allow read, write: if isOwner(userId);
       }
 
-      // Ingested third-party content. Read-only to the owner, never writable
-      // by any client: trust, verdict and sourceId are the inputs to the taint
-      // decision, so a client able to edit them could clear its own hostile
-      // content and then have a write approved from a laundered turn.
+      // ---- Security-relevant state: server writes only ----
+      //
+      // Everything below is an INPUT to an authorisation decision. A client
+      // able to edit any of it could authorise itself, so all of it is
+      // Admin-SDK-only and the client is denied writes outright.
+
+      // Provenance-tagged text (INV-1). `zone` decides whether a segment may
+      // reach a tool-enabled model at all; a client that could set it to USER
+      // could launder attacker-controlled text into the Planner's context.
+      match /segments/{segmentId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Ingested third-party content. `trust` and `verdict` feed the taint
+      // decision — editable verdicts mean self-clearing hostile content.
       match /artifacts/{artifactId} {
         allow read: if isOwner(userId);
         allow write: if false;
       }
 
-      // Tool call proposals and their decisions. Read-only to the owner:
-      // approval happens through /api/agent/approve, which re-verifies the
-      // token, re-verifies ownership and RE-EVALUATES policy. If a client
-      // could set status directly it would be approving its own writes.
+      // Capability grants (INV-4). Minting is a server decision made only in
+      // response to an explicit UI action. If the client could create these,
+      // "default deny" would mean nothing — a compromised page, or an
+      // injected instruction that reached client code, could grant itself the
+      // permission it was about to use.
+      match /capabilities/{capId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Egress destinations. The model names an opaque id; the server resolves
+      // it here. Client writes would let an attacker register their own
+      // endpoint and make "send to attacker" expressible again.
+      match /destinations/{destId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Tool call proposals and decisions. Approval runs through
+      // /api/agent/approve, which re-verifies the token, re-verifies ownership
+      // and RE-EVALUATES policy. A client able to set `status` directly would
+      // be approving its own writes.
       match /toolcalls/{callId} {
         allow read: if isOwner(userId);
         allow write: if false;
       }
 
-      // Audit log - append-only at the rules level (B.5).
+      // Red team runs. Server-recorded results of adversarial tests. Writable
+      // results would make the corpus table meaningless as evidence.
+      match /redteam_runs/{runId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Perimeter log — append-only at the rules level (INV-7).
       //
-      // Create is denied to clients too: every legitimate audit write comes
-      // from the Admin SDK, which bypasses rules. Denying create here means a
-      // client cannot forge history either. Update and delete are denied
-      // outright, so the record cannot be rewritten even by its owner - that
-      // is the property that makes it evidence rather than a log.
+      // `create` is denied to clients as well as update and delete. Every
+      // legitimate write comes from the Admin SDK, which bypasses rules, so
+      // denying create costs the server nothing and means a client cannot
+      // fabricate history either. Update and delete are denied outright, so
+      // the record cannot be rewritten even by its owner. That combination is
+      // what makes it evidence rather than a log.
       match /audit/{eventId} {
+        allow read: if isOwner(userId);
+        allow create: if false;
+        allow update, delete: if false;
+      }
+
+      match /perimeter_events/{eventId} {
         allow read: if isOwner(userId);
         allow create: if false;
         allow update, delete: if false;
       }
     }
 
-    // Default deny - every path not matched above.
+    // Default deny — every path not matched above.
     match /{document=**} {
       allow read, write: if false;
     }
