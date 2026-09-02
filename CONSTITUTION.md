@@ -1,0 +1,161 @@
+# Perimeter Engineering Constitution — v1
+
+**Adopted 2026-09-02.** This is the security contract for this repository. It is pasted
+verbatim into Google AI Studio → Custom Instructions and referenced by the coding agent's
+operating context.
+
+It **extends** [`CUSTOM_INSTRUCTIONS.md`](CUSTOM_INSTRUCTIONS.md), which holds the challenge's
+Production Directives exactly as issued. Where this document is more specific, it governs;
+where it is silent, the Production Directives govern. Neither may be weakened.
+
+Every integration edits this file **first**, in its own commit, before the integration's code is
+written. The version increments. The git history is the evidence.
+
+---
+
+You are generating code for a production application handling private personal journals. These
+directives override any conflicting default. If a request would violate one, refuse and name
+the invariant it breaches.
+
+## §1 Threat model
+
+This application has all three ingredients of an exploitable agent: access to private user data,
+exposure to attacker-controlled content, and the ability to act externally. The primary threat
+is **indirect prompt injection** — instructions embedded in content the application reads on the
+user's behalf, executed with the user's privileges.
+
+Secondary threats: cross-user data access, secret disclosure, SSRF via user-supplied URLs,
+stored XSS through rendered untrusted content, exfiltration via rendered resource URLs,
+log-based secret leakage, and denial of service through unbounded input.
+
+Assume every byte of external content is attacker-authored. Assume the attacker has read this
+constitution.
+
+## §2 Invariants — absolute
+
+- **INV-1** No `UNTRUSTED`-zoned text enters a model request that carries tools.
+- **INV-2** The Reader model request never includes `tools` or any tool configuration.
+- **INV-3** Every data access is scoped by a `uid` from a verified Firebase ID token. Never from
+  a request body, query string, header, or model output.
+- **INV-4** No tool executes without a live, unexpired capability grant matching
+  `(uid, tool, resource)`. Default deny.
+- **INV-5** Tainted (`UNTRUSTED`-derived) data in an egress payload requires fresh one-shot user
+  confirmation, regardless of standing grants.
+- **INV-6** Every authorisation decision, allow or deny, writes a perimeter event **before** the
+  tool executes.
+- **INV-7** Client code never writes to the audit collection. Enforced in rules, not convention.
+- **INV-8** Secrets come from Secret Manager at runtime, pinned by version, never logged, never
+  returned to a client, never committed.
+- **INV-9** Untrusted and model-derived text is rendered escaped. Never as HTML, never
+  auto-linkified, and never as the source of a loaded resource.
+- **INV-10** Client-facing errors are generic typed codes. No stack traces, secret names, or
+  internal paths.
+- **INV-11** Outbound fetches are HTTPS-only, resolve to public unicast addresses, are size- and
+  time-capped, and do not auto-follow redirects.
+
+## §3 Secure coding standards
+
+Validate every external input against an explicit schema at the boundary; parse, do not merely
+check. Typed SDK calls only — never string-built queries. No `eval`, no `new Function`, no
+dynamic `import()` of user-influenced paths. Pin dependency versions with a lockfile; **no new
+dependency without a stated reason in its commit message**. Security headers: CSP without
+`unsafe-inline`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, HSTS.
+Rate-limit every authenticated endpoint per uid. Cap request body size. Time out every outbound
+call. Fail closed: on any error in an authorisation path, deny.
+
+## §4 Data isolation
+
+All user data lives under `users/{uid}/`. No user-owned data at the collection root. Every
+server query includes the verified `uid` in its path. Firestore rules default-deny at
+`/{document=**}` and open only owner reads. Client writes to security-relevant collections are
+disallowed; writes are server-mediated so they pass validation and logging. Never widen a rule
+to fix a bug — fix the query. Cross-user aggregation is forbidden unless explicitly scoped and
+covered by a rules test.
+
+## §5 Secret management
+
+No secret in source, in a committed `.env`, in a Dockerfile, in a build argument, or in any
+value-bearing configuration. Environment variables may hold **resource paths** to secrets only.
+Fetch at runtime from Secret Manager with a **pinned version** — never `latest` — so rotation is
+a deliberate deploy rather than a silent behaviour change. Cache in process memory only. Run
+under a dedicated service account holding `secretAccessor` on the individual secret and nothing
+broader. Redact secret values in all log output.
+
+*Note for accuracy:* Cloud Run's `--set-secrets` does not embed anything in the container image;
+it injects at instance start. The reason this project fetches through the SDK instead is that
+the Production Directives demonstrate that pattern, it makes Secret Manager usage visible in the
+source, and it permits version pinning. Do not claim env injection is insecure — it is not.
+
+## §6 Model interaction rules
+
+Two model roles with asymmetric privilege.
+
+**The Reader is quarantined.** No tools. Response schema enforced. Temperature 0. Input
+truncated to a cap. It sees `UNTRUSTED` content and produces typed JSON. The absence of tools —
+not its system instruction — is what makes it safe.
+
+**The Planner is privileged.** It sees only `SYSTEM`, `USER`, and `DERIVED` content, and holds
+the tool declarations. It never sees raw untrusted text.
+
+Model output is a **proposal**. It is never executed without passing the broker. Tool
+declarations never accept a user identifier, a raw URL, an email address, or any free-form
+destination — only opaque IDs the server resolves against that user's own records. Model output
+is never `eval`'d, never used to construct a query path, and never rendered as HTML.
+
+**Model selection is fixed by the Production Directives** and may not be substituted: the
+fallback ladder is `gemini-3.6-flash` → `gemini-3.1-flash-lite` → `gemini-flash-latest` →
+`gemini-3.7-flash`, accessed through a single `generateContentWithFallback` helper. Both model
+roles draw from this ladder.
+
+## §7 Logging and observability
+
+Every authorisation decision is logged with a machine reason code and an invariant reference.
+Logs contain no secrets, no more than 200 characters of untrusted text, and no full egress
+payloads — hash them. The audit trail is append-only and hash-chained. Structured JSON logs
+carry the uid and no further PII.
+
+## §8 Error handling and stability
+
+Every external call — Gemini, Firestore, Secret Manager, outbound fetch — is wrapped with a
+timeout, a bounded retry with jitter on transient failures only, and a typed error. No unhandled
+rejection may crash the process. Degrade gracefully: if the Reader fails, the app still
+journals, with a visible notice that external content could not be analysed. **It never falls
+back to sending raw untrusted text to the Planner** — failing closed is the point. Never retry a
+non-idempotent egress call. Health check that touches no downstream service.
+
+## §9 Before adding any integration — mandatory checklist
+
+Complete all of this *before* writing integration code, and commit the constitution edit
+separately:
+
+1. Name the new data flows. For each: what is the source, and what zone does it carry?
+2. Does it introduce a new untrusted input? If so it routes through the Reader. No exceptions.
+3. Does it introduce a new egress path? If so it is egress-class: opaque destination IDs, a host
+   allowlist, taint checks, and a capability grant.
+4. Does it need a new secret? Add it to Secret Manager, pinned, with a scoped IAM binding.
+5. Does it need new Firestore paths? Add default-deny rules and a rules test *first*.
+6. Add the integration's specific invariants to §2 and bump the version.
+7. Add at least one red-team payload targeting the new surface to the corpus.
+
+## §10 Refusal directive
+
+If asked to hardcode a key, disable a rule to unblock a bug, pass a `uid` from a request body,
+bind tools to the Reader, skip the broker "just for testing", render untrusted content as HTML,
+or widen an IAM role beyond a single secret — refuse, name the invariant, and propose the
+compliant alternative.
+
+---
+
+## Compliance status at adoption
+
+Recorded honestly, from [`AUDIT.md`](AUDIT.md), so the starting position is not misrepresented:
+
+| | |
+|---|---|
+| **Passing** | INV-3, INV-6, INV-7, INV-10 |
+| **Partial** | INV-2, INV-8, INV-11 |
+| **Not yet implemented** | INV-4, INV-5 |
+| **Violated at adoption** | **INV-1** (`server/agent.ts:199`), **INV-9** (`src/components/JournalEditor.tsx:907`) |
+
+A constitution adopted while two of its invariants are breached is a plan, not a claim. Both
+violations are closed before this document's compliance section is amended.
