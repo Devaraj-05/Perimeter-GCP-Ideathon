@@ -10,6 +10,7 @@ import { internalRouter } from './server/internal';
 import { redteamRouter } from './server/redteam';
 import { secretStatus } from './server/secrets';
 import { buildConversationContents, buildSystemInstruction } from './server/conversation';
+import { securityHeaders } from './server/headers';
 
 dotenv.config();
 
@@ -19,6 +20,9 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 // 1. Top-Level Request Deserialization (Ordering Guarantee)
+// Security headers on every response (Constitution section 3), before anything else.
+app.use(securityHeaders);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
