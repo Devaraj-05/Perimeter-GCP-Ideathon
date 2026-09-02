@@ -78,9 +78,21 @@ const TOOL_INVOCATION =
 const CONCEALMENT =
   /\b(do\s+not|don'?t|never)\b[^.!?\n]{0,30}\b(mention|tell|reveal|disclose|inform|show|report|notify)\b[^.!?\n]{0,30}\b(this|it|the\s+user|anyone|them)\b|\bwithout\s+(telling|informing|alerting)\s+the\s+user\b/i;
 
-/** Text impersonating a system or developer turn. */
+/**
+ * Text impersonating a system or developer turn.
+ *
+ * Two shapes. The first is a role word acting as a turn label: `SYSTEM:`,
+ * `[assistant]:`, `### developer -`. The second is a bracketed pseudo-directive
+ * where the role word is not the last token — `[ADMIN OVERRIDE]`,
+ * `[SYSTEM DIRECTIVE]` — which the label form misses because the word before
+ * the delimiter is "OVERRIDE", not "ADMIN". That gap was found by corpus
+ * payload P03.
+ */
 const FAKE_SYSTEM_ROLE =
   /(^|\n)\s*(\[|<|#{1,3}\s*)?\s*(system|assistant|developer|admin)\s*(\]|>)?\s*[:\-]/i;
+
+const FAKE_SYSTEM_DIRECTIVE =
+  /\[\s*(system|admin|developer|root|override)\b[^\]]*\]|\b(admin|system)\s+(override|directive|mode|command)\b/i;
 
 /** Zero-width and other invisible formatting characters. */
 const HIDDEN_UNICODE = /[​-‍⁠﻿­]/;
@@ -144,7 +156,7 @@ export function detectL1(text: unknown, options: L1Options = {}): L1Result {
   if (IMPERATIVE_TO_AGENT.test(input)) signals.push('imperative_to_agent');
   if (TOOL_INVOCATION.test(input)) signals.push('tool_invocation_request');
   if (CONCEALMENT.test(input)) signals.push('concealment_request');
-  if (FAKE_SYSTEM_ROLE.test(input)) signals.push('fake_system_role');
+  if (FAKE_SYSTEM_ROLE.test(input) || FAKE_SYSTEM_DIRECTIVE.test(input)) signals.push('fake_system_role');
   if (HIDDEN_UNICODE.test(input)) signals.push('hidden_unicode');
   if (BIDI_OVERRIDE.test(input)) signals.push('bidi_override');
   if (HTML_COMMENT.test(input)) signals.push('html_comment');

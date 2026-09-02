@@ -154,3 +154,58 @@ export async function listPerimeterEvents(): Promise<PerimeterEvent[]> {
 export async function verifyPerimeterChain(): Promise<ChainVerification> {
   return apiFetch<ChainVerification>('/api/agent/perimeter/verify');
 }
+
+// --- Red team (Amendment C) ---
+
+export interface CorpusPayload {
+  id: string;
+  class: string;
+  title: string;
+  intent: string;
+  expectedBlock: string;
+  invariant: string;
+  body: string;
+}
+
+export interface StageResult {
+  stage: string;
+  outcome: 'passed' | 'blocked' | 'flagged';
+  detail: string;
+}
+
+export interface RunResult {
+  payloadId: string;
+  class: string;
+  intent: string;
+  expectedBlock: string;
+  invariant: string;
+  outcome: 'blocked' | 'leaked' | 'error';
+  stages: StageResult[];
+  readerFlaggedInstruction: boolean;
+}
+
+export interface CorpusSummary {
+  attempted: number;
+  blocked: number;
+  leaked: number;
+  errors: number;
+}
+
+export async function listPayloads(): Promise<CorpusPayload[]> {
+  const { payloads } = await apiFetch<{ payloads: CorpusPayload[] }>('/api/redteam/payloads');
+  return payloads;
+}
+
+export async function runPayload(payloadId: string): Promise<RunResult> {
+  const { result } = await apiFetch<{ result: RunResult }>('/api/redteam/run', {
+    method: 'POST',
+    body: JSON.stringify({ payloadId }),
+  });
+  return result;
+}
+
+export async function runCorpus(): Promise<{ summary: CorpusSummary; results: RunResult[] }> {
+  return apiFetch<{ summary: CorpusSummary; results: RunResult[] }>('/api/redteam/run-all', {
+    method: 'POST',
+  });
+}

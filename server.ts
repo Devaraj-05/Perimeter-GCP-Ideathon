@@ -7,6 +7,7 @@ import { generateContentWithFallback } from './server/gemini';
 import { ingestRouter } from './server/ingest';
 import { agentRouter } from './server/agent';
 import { internalRouter } from './server/internal';
+import { redteamRouter } from './server/redteam';
 import { secretStatus } from './server/secrets';
 import { buildConversationContents, buildSystemInstruction } from './server/conversation';
 
@@ -48,6 +49,10 @@ app.use('/api/agent', agentRouter);
 
 // Scheduled ingestion (Amendment A.5). OIDC-only; never publicly invocable.
 app.use('/internal', internalRouter);
+
+// Adversarial self-testing (Amendment C). Runs the corpus through the real
+// pipeline so a judge can attack the app and watch it hold.
+app.use('/api/redteam', redteamRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

@@ -21,6 +21,7 @@ import { SourcesPanel } from './components/SourcesPanel';
 import { ThreatFeed } from './components/ThreatFeed';
 import { PermissionsPanel } from './components/PermissionsPanel';
 import { PerimeterLogPanel } from './components/PerimeterLogPanel';
+import { RedTeamConsole } from './components/RedTeamConsole';
 import { listArtifacts } from './lib/perimeterApi';
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
   const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
+  const [isRedTeamOpen, setIsRedTeamOpen] = useState(false);
   // Artifact ids available to ground reflections. Empty until the user
   // connects a source, which is what keeps the plain journal path in play.
   const [groundingArtifactIds, setGroundingArtifactIds] = useState<string[]>([]);
@@ -252,6 +254,7 @@ export default function App() {
           onOpenThreatFeed={() => {}}
           onOpenPermissions={() => {}}
           onOpenLog={() => {}}
+          onOpenRedTeam={() => {}}
           onSignOut={() => {}}
         />
         <LandingPage
@@ -280,6 +283,7 @@ export default function App() {
         onOpenThreatFeed={() => setIsThreatFeedOpen(true)}
         onOpenPermissions={() => setIsPermissionsOpen(true)}
         onOpenLog={() => setIsLogOpen(true)}
+        onOpenRedTeam={() => setIsRedTeamOpen(true)}
         onSignOut={handleSignOut}
       />
 
@@ -350,6 +354,10 @@ export default function App() {
       <PerimeterLogPanel
         isOpen={isLogOpen}
         onClose={() => setIsLogOpen(false)}
+      />
+      <RedTeamConsole
+        isOpen={isRedTeamOpen}
+        onClose={() => setIsRedTeamOpen(false)}
       />
     </div>
   );

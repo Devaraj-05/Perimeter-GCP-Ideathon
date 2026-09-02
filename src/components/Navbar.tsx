@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert, KeyRound, ScrollText } from 'lucide-react';
+import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert, KeyRound, ScrollText, Swords } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -12,6 +12,7 @@ interface NavbarProps {
   onOpenThreatFeed: () => void;
   onOpenPermissions: () => void;
   onOpenLog: () => void;
+  onOpenRedTeam: () => void;
   onSignOut: () => void;
 }
 
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenThreatFeed,
   onOpenPermissions,
   onOpenLog,
+  onOpenRedTeam,
   onSignOut,
 }) => {
   return (
@@ -79,6 +81,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Github className="h-4 w-4 text-[#5a5a40]" />
               <span className="hidden md:inline">Sources</span>
+            </button>
+
+            <button
+              id="redteam-btn"
+              onClick={onOpenRedTeam}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs sm:text-sm font-medium text-rose-800 hover:bg-rose-100 transition-colors cursor-pointer"
+              title="Attack the app and watch it hold"
+            >
+              <Swords className="h-4 w-4" />
+              <span className="hidden md:inline">Red Team</span>
             </button>
 
             <button
