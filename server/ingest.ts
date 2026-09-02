@@ -3,6 +3,10 @@ import { requireAuth, AuthedRequest, adminDb } from './auth';
 import { fetchOpenIssues, isValidRepoRef, IngestError } from './github';
 import { detectL1, fuseVerdict } from './detect';
 import { classifyL2 } from './classify';
+import { safeFetch } from './fetchurl';
+import { createSegment } from './segments';
+import { logEvent } from './perimeterLog';
+import { PerimeterViolation } from './segments';
 
 /**
  * Amendment A.5 - Ingestion endpoints.
@@ -234,5 +238,111 @@ ingestRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response)
     }
     console.error('[ingest] run failed:', err?.message);
     res.status(500).json({ error: 'Ingest failed. Please retry.' });
+  }
+});
+
+
+// ---------------------------------------------------------------
+// Pasted links — the natural way untrusted content enters a journal
+// ---------------------------------------------------------------
+
+/**
+ * Fetches a URL the user pasted and stores it as an UNTRUSTED artifact.
+ *
+ * The user supplies a URL, not a host from an allowlist, so this is the SSRF
+ * surface and safeFetch is what stands on it. Every refusal is a
+ * PerimeterViolation naming INV-11, which the client renders as a sentence.
+ *
+ * The fetched text is NOT summarised here. It becomes an untrusted segment and
+ * only the Reader ever sees it, which is the whole airlock.
+ */
+ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const url = typeof data.url === 'string' ? data.url.trim() : '';
+    if (!url) {
+      return res.status(400).json({ error: 'A URL is required.' });
+    }
+
+    let page;
+    try {
+      page = await safeFetch(url);
+    } catch (err: any) {
+      if (err instanceof PerimeterViolation) {
+        await logEvent(uid, {
+          kind: 'ingest',
+          decision: 'deny',
+          reason: err.message,
+          invariant: 'INV-11',
+          detail: { url },
+        });
+        // The reason is safe to show: it describes our refusal, not the target.
+        return res.status(400).json({ error: `Refused to fetch that link. ${err.message}` });
+      }
+      throw err;
+    }
+
+    // Screening. L1 and L2 are defence in depth here - the boundary is that
+    // this text only ever reaches the Reader, which holds no tools.
+    const combined = page.text;
+    const l1 = detectL1(combined, { allowedHosts: [new URL(page.finalUrl).hostname] });
+    const l2 = await classifyL2(combined);
+    const verdict = fuseVerdict(l1, l2.score);
+
+    const segment = await createSegment(uid, {
+      zone: 'UNTRUSTED',
+      text: combined,
+      sourceType: 'url',
+      sourceRef: page.finalUrl,
+    });
+
+    const artifactId = `link__${segment.id}`;
+    await artifactsRef(uid).doc(artifactId).set(
+      clean({
+        id: artifactId,
+        segmentId: segment.id,
+        sourceId: 'pasted_links',
+        sourceRef: page.finalUrl,
+        externalId: segment.id,
+        title: page.finalUrl,
+        body: combined.slice(0, 20_000),
+        author: 'web',
+        url: page.finalUrl,
+        trust: 'untrusted',
+        threatScore: Math.max(l1.score, l2.score ?? 0),
+        l1Score: l1.score,
+        l2Score: l2.score,
+        signals: l1.signals,
+        categories: l2.categories,
+        verdict,
+        classifierError: l2.error ?? null,
+        fetchedAt: new Date().toISOString(),
+        externalUpdatedAt: new Date().toISOString(),
+        bytes: page.bytes,
+        truncated: page.truncated,
+      }),
+    );
+
+    await logEvent(uid, {
+      kind: 'ingest',
+      zone: 'UNTRUSTED',
+      decision: 'allow',
+      reason: `fetched:${verdict}`,
+      detail: { url: page.finalUrl, bytes: page.bytes, signals: l1.signals, verdict },
+    });
+
+    res.status(201).json({
+      artifactId,
+      segmentId: segment.id,
+      url: page.finalUrl,
+      verdict,
+      signals: l1.signals,
+      bytes: page.bytes,
+      truncated: page.truncated,
+    });
+  } catch (err: any) {
+    console.error('[ingest] link failed:', err?.message);
+    res.status(500).json({ error: 'Could not read that link. Please retry.' });
   }
 });
