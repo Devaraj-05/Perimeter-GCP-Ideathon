@@ -159,3 +159,27 @@ Recorded honestly, from [`AUDIT.md`](AUDIT.md), so the starting position is not 
 
 A constitution adopted while two of its invariants are breached is a plan, not a claim. Both
 violations are closed before this document's compliance section is amended.
+
+---
+
+## Amendment C — Adversarial self-testing
+
+Adopted 2026-09-02. Governs the red-team console and the injection corpus.
+
+- **C.1** Every corpus payload runs through the REAL pipeline — the same ingest, Reader,
+  Planner, broker and log path a genuine attack would take. A payload that is only ever
+  simulated proves nothing, and a demo that stages its own success is worse than no demo.
+- **C.2** A payload must be blocked by an ARCHITECTURAL property — the absence of tools on the
+  Reader, the taint rule, the capability check — not by the Reader's system instruction alone.
+  If a payload is stopped only because the model was asked nicely, that is a finding to record,
+  not a pass to claim.
+- **C.3** Results are recorded honestly, including misses. Detection efficacy is published as
+  attempted / detected / reached-execution. A security claim that cannot be falsified is not a
+  security claim (INV — honest limits).
+- **C.4** The demonstration toggle that disables the defence is a controlled hazard. It affects
+  only the current user's own session, never touches a real egress destination, records every
+  activation in the perimeter log, and any "leak" it shows is written to a sandbox that
+  discards the payload. It exists to make the defence legible by showing the undefended
+  failure, and for no other purpose.
+- **C.5** Every new integration adds at least one corpus payload targeting its surface (this is
+  §9.7 restated as a standing obligation).
