@@ -37,3 +37,26 @@ export async function runIngest(sourceId: string): Promise<IngestRunResult> {
     body: JSON.stringify({ sourceId }),
   });
 }
+
+export interface LinkIngestResult {
+  artifactId: string;
+  segmentId: string;
+  url: string;
+  verdict: 'clean' | 'suspicious' | 'hostile';
+  signals: string[];
+  bytes: number;
+  truncated: boolean;
+}
+
+/**
+ * Fetches a pasted URL server-side and stores it as UNTRUSTED.
+ *
+ * The browser never makes the outbound request: doing it client-side would use
+ * the user's own network as the proxy and skip every SSRF check.
+ */
+export async function ingestLink(url: string): Promise<LinkIngestResult> {
+  return apiFetch<LinkIngestResult>('/api/ingest/link', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}

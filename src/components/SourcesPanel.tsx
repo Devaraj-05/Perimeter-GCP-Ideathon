@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Github, Plus, RefreshCw, Trash2, ShieldAlert, ShieldCheck, ShieldQuestion,
+  Github, Plus, RefreshCw, Trash2, ShieldAlert, ShieldCheck, ShieldQuestion, Link2,
   AlertCircle, X, ExternalLink, Loader2,
 } from 'lucide-react';
 import { Source, Artifact, Verdict } from '../types';
-import { listSources, addSource, removeSource, listArtifacts, runIngest } from '../lib/perimeterApi';
+import { listSources, addSource, removeSource, listArtifacts, runIngest, ingestLink } from '../lib/perimeterApi';
 
 interface SourcesPanelProps {
   isOpen: boolean;
@@ -55,6 +55,9 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
   const [adding, setAdding] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkResult, setLinkResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,6 +94,30 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
       setError(err?.message || 'Could not add that repository.');
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleAddLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = linkUrl.trim();
+    if (!url || linkBusy) return;
+
+    setLinkBusy(true);
+    setError(null);
+    setLinkResult(null);
+    try {
+      const result = await ingestLink(url);
+      setLinkResult(
+        `Saved and screened: ${result.verdict}` +
+          (result.signals.length ? ` (${result.signals.join(', ')})` : ''),
+      );
+      // Only clear the input once the write is confirmed (Directive 6).
+      setLinkUrl('');
+      await load();
+    } catch (err: any) {
+      setError(err?.message || 'Could not read that link.');
+    } finally {
+      setLinkBusy(false);
     }
   };
 
@@ -148,6 +175,41 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Paste a link — the natural way untrusted content enters a journal */}
+        <form onSubmit={handleAddLink} className="border-b border-[#e5e0d3] p-5">
+          <label className="mb-2 block text-xs font-medium text-[#434338]">
+            Save a link to reflect on
+          </label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a8a75]" />
+              <input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com/an-article-you-read"
+                className="w-full rounded-lg border border-[#e5e0d3] bg-white py-2.5 pl-9 pr-3 text-sm text-[#2c2c24] placeholder:text-[#b5b0a0] focus:border-[#5a5a40] focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={linkBusy || !linkUrl.trim()}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#5a5a40] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#484833] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {linkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Save
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] text-[#8a8a75]">
+            Fetched by the server, never your browser, and read only by a model that holds no
+            tools.
+          </p>
+          {linkResult && (
+            <p className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-800">
+              {linkResult}
+            </p>
+          )}
+        </form>
 
         {/* Add form */}
         <form onSubmit={handleAdd} className="flex gap-2 border-b border-[#e5e0d3] p-5">

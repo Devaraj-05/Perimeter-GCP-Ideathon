@@ -83,3 +83,74 @@ export async function rejectCall(callId: string) {
     body: JSON.stringify({ callId }),
   });
 }
+
+// --- Capability grants (INV-4) ---
+
+export interface Capability {
+  id: string;
+  tool: string;
+  resource: string;
+  grantedAt: string;
+  expiresAt: string;
+  oneShot: boolean;
+  usedAt: string | null;
+  revokedAt: string | null;
+}
+
+export async function listCapabilities(): Promise<Capability[]> {
+  const { capabilities } = await apiFetch<{ capabilities: Capability[] }>(
+    '/api/agent/capabilities',
+  );
+  return capabilities;
+}
+
+export async function grantCapability(input: {
+  tool: string;
+  resource: string;
+  hours?: number;
+  oneShot?: boolean;
+}): Promise<Capability> {
+  const { capability } = await apiFetch<{ capability: Capability }>('/api/agent/capabilities', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return capability;
+}
+
+export async function revokeCapability(capId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/api/agent/capabilities/${encodeURIComponent(capId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// --- Perimeter log (INV-6, INV-7) ---
+
+export interface PerimeterEvent {
+  id: string;
+  seq: number;
+  prevHash: string;
+  ts: string;
+  kind: 'ingest' | 'reader' | 'plan' | 'decision' | 'execute' | 'redteam' | 'error';
+  zone: string | null;
+  tool: string | null;
+  decision: 'allow' | 'deny' | 'confirm' | null;
+  reason: string;
+  invariant: string | null;
+  detail: Record<string, unknown>;
+}
+
+export interface ChainVerification {
+  intact: boolean;
+  count: number;
+  brokenAt: number | null;
+  reason: string;
+}
+
+export async function listPerimeterEvents(): Promise<PerimeterEvent[]> {
+  const { events } = await apiFetch<{ events: PerimeterEvent[] }>('/api/agent/perimeter/events');
+  return events;
+}
+
+export async function verifyPerimeterChain(): Promise<ChainVerification> {
+  return apiFetch<ChainVerification>('/api/agent/perimeter/verify');
+}

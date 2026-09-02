@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert } from 'lucide-react';
+import { BookOpen, Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert, KeyRound, ScrollText } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -10,6 +10,8 @@ interface NavbarProps {
   onOpenSecurity: () => void;
   onOpenSources: () => void;
   onOpenThreatFeed: () => void;
+  onOpenPermissions: () => void;
+  onOpenLog: () => void;
   onSignOut: () => void;
 }
 
@@ -21,6 +23,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSecurity,
   onOpenSources,
   onOpenThreatFeed,
+  onOpenPermissions,
+  onOpenLog,
   onSignOut,
 }) => {
   return (
@@ -75,6 +79,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Github className="h-4 w-4 text-[#5a5a40]" />
               <span className="hidden md:inline">Sources</span>
+            </button>
+
+            <button
+              id="permissions-btn"
+              onClick={onOpenPermissions}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs sm:text-sm font-medium text-[#434338] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+              title="What the assistant is allowed to do"
+            >
+              <KeyRound className="h-4 w-4 text-[#5a5a40]" />
+              <span className="hidden lg:inline">Permissions</span>
+            </button>
+
+            <button
+              id="perimeter-log-btn"
+              onClick={onOpenLog}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs sm:text-sm font-medium text-[#434338] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+              title="Every decision, with reasons"
+            >
+              <ScrollText className="h-4 w-4 text-[#5a5a40]" />
+              <span className="hidden xl:inline">Log</span>
             </button>
 
             <button

@@ -19,6 +19,8 @@ import { InsightsModal } from './components/InsightsModal';
 import { SecurityModal } from './components/SecurityModal';
 import { SourcesPanel } from './components/SourcesPanel';
 import { ThreatFeed } from './components/ThreatFeed';
+import { PermissionsPanel } from './components/PermissionsPanel';
+import { PerimeterLogPanel } from './components/PerimeterLogPanel';
 import { listArtifacts } from './lib/perimeterApi';
 
 export default function App() {
@@ -42,6 +44,8 @@ export default function App() {
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
   const [isSourcesOpen, setIsSourcesOpen] = useState(false);
   const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
+  const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
+  const [isLogOpen, setIsLogOpen] = useState(false);
   // Artifact ids available to ground reflections. Empty until the user
   // connects a source, which is what keeps the plain journal path in play.
   const [groundingArtifactIds, setGroundingArtifactIds] = useState<string[]>([]);
@@ -240,6 +244,8 @@ export default function App() {
           onOpenSecurity={() => setIsSecurityOpen(true)}
           onOpenSources={() => {}}
           onOpenThreatFeed={() => {}}
+          onOpenPermissions={() => {}}
+          onOpenLog={() => {}}
           onSignOut={() => {}}
         />
         <LandingPage
@@ -266,6 +272,8 @@ export default function App() {
         onOpenSecurity={() => setIsSecurityOpen(true)}
         onOpenSources={() => setIsSourcesOpen(true)}
         onOpenThreatFeed={() => setIsThreatFeedOpen(true)}
+        onOpenPermissions={() => setIsPermissionsOpen(true)}
+        onOpenLog={() => setIsLogOpen(true)}
         onSignOut={handleSignOut}
       />
 
@@ -330,6 +338,14 @@ export default function App() {
       <ThreatFeed
         isOpen={isThreatFeedOpen}
         onClose={() => setIsThreatFeedOpen(false)}
+      />
+      <PermissionsPanel
+        isOpen={isPermissionsOpen}
+        onClose={() => setIsPermissionsOpen(false)}
+      />
+      <PerimeterLogPanel
+        isOpen={isLogOpen}
+        onClose={() => setIsLogOpen(false)}
       />
     </div>
   );

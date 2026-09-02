@@ -178,6 +178,17 @@ Return ONLY raw JSON, no markdown code block fences if possible.`;
 // Vite Dev Server / Production Static Serving
 // -------------------------------------------------------------
 async function startServer() {
+  // An unmatched /api path must 404 as JSON rather than falling through to the
+  // SPA. Serving index.html with a 200 for a mistyped route hides the typo,
+  // hands the client HTML where it expected JSON, and makes every API path
+  // look reachable to anything probing the surface.
+  //
+  // Registered here, after every router, so it only catches what nothing else
+  // claimed.
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'Not found.' });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
