@@ -6,7 +6,9 @@ import { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
 import { buildPlannerRequest, computePlannerTaint, extractProposals } from './planner';
 import { Segment, PerimeterViolation } from './segments';
-import { decide, computeTurnTaint, UserPolicy, PolicyDecision } from './policy';
+import { decideProposal, resourceOf, sideEffectOf, explainReason } from './broker';
+import { findLiveCapability, consumeCapability, mintCapability, revokeCapability, listCapabilities } from './capabilities';
+import { logEvent, listEvents, verifyChain } from './perimeterLog';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
 import { writeAudit } from './audit';
@@ -45,7 +47,8 @@ function userRoot(uid: string) {
   return adminDb().collection('users').doc(uid);
 }
 
-async function loadPolicy(uid: string): Promise<UserPolicy> {
+/** Per-tool invocation counts for the current window, for rate limiting. */
+async function loadUsage(uid: string): Promise<Record<string, number>> {
   const since = new Date(Date.now() - 3600_000).toISOString();
   const recent = await userRoot(uid)
     .collection('toolcalls')
@@ -59,7 +62,7 @@ async function loadPolicy(uid: string): Promise<UserPolicy> {
     if (typeof t === 'string') usage[t] = (usage[t] || 0) + 1;
   });
 
-  return { allowedTools: DEFAULT_ALLOWED_TOOLS, usage };
+  return usage;
 }
 
 /** Loads the caller's own context: journal entries plus ingested artifacts. */
@@ -101,7 +104,7 @@ async function loadContext(uid: string, artifactIds: string[]): Promise<ContextA
 async function persistProposal(
   uid: string,
   proposal: { tool: string; args: Record<string, unknown> },
-  verdict: PolicyDecision,
+  verdict: { decision: 'ALLOW' | 'CONFIRM' | 'DENY'; reason: string; sideEffect: string | null },
   turnTaint: boolean,
   originSourceIds: string[],
 ): Promise<string> {
@@ -236,6 +239,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       createdAt: new Date().toISOString(),
     }));
 
+    const usageByTool = await loadUsage(uid);
     const plannerContext = { history, userMessage: message, observations };
 
     // Which external documents contributed to this turn. Recorded on every
@@ -249,7 +253,6 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     const { response, modelUsed } = await generateWithPlanner(await getAI(), plannerContext);
 
     const calls = extractProposals(response as any).map((p) => ({ name: p.tool, args: p.args }));
-    const policy = await loadPolicy(uid);
     const threatEvents: any[] = [];
 
     for (const call of calls) {
@@ -258,54 +261,81 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
         args: (call?.args && typeof call.args === 'object' ? call.args : {}) as Record<string, unknown>,
       };
 
-      const verdict = decide(proposal, policy, turnTaint);
+      // INV-4. The grant is looked up server-side against (uid, tool,
+      // resource). The model supplies none of these three: uid comes from the
+      // verified token, tool from the registry, resource from resourceOf().
+      const resource = resourceOf(proposal);
+      const capability = await findLiveCapability(uid, proposal.tool, resource).catch(() => null);
 
-      // B.5: audit BEFORE the executor runs. A failed audit denies (B.6).
-      const audited = await writeAudit(uid, {
-        type: 'tool_decision',
-        tool: proposal.tool,
-        args: proposal.args,
-        decision: verdict.decision,
-        reason: verdict.reason,
-        sideEffect: verdict.sideEffect,
+      const verdict = decideProposal({
+        proposal,
+        capability,
         turnTaint,
-        originSourceIds: originSourceIds,
+        usage: usageByTool,
       });
 
-      const effective: PolicyDecision = audited
-        ? verdict
-        : { decision: 'DENY', reason: 'invalid_arguments', sideEffect: verdict.sideEffect };
+      const sideEffect = sideEffectOf(proposal.tool);
 
-      const callId = await persistProposal(
+      // INV-6: the decision is recorded BEFORE the executor runs, so a crash
+      // mid-execution still leaves a record of what was attempted.
+      const logged = await logEvent(uid, {
+        kind: 'decision',
+        tool: proposal.tool,
+        decision: verdict.allow ? 'allow' : (verdict as any).needsConfirmation ? 'confirm' : 'deny',
+        reason: verdict.reason,
+        invariant: verdict.allow ? null : (verdict as any).invariant,
+        detail: { args: proposal.args, resource, turnTaint, originSourceIds },
+      });
+
+      // A failed audit write denies. The log is not decoration; if the
+      // decision cannot be recorded it does not happen (INV-6 with §8).
+      const effectiveAllow = verdict.allow && logged;
+      const effectiveReason = logged ? verdict.reason : 'audit_write_failed';
+
+      await persistProposal(
         uid,
         proposal,
-        effective,
+        {
+          decision: effectiveAllow ? 'ALLOW' : (verdict as any).needsConfirmation ? 'CONFIRM' : 'DENY',
+          reason: effectiveReason as any,
+          sideEffect,
+        } as any,
         turnTaint,
         originSourceIds,
       );
 
       let executed: unknown = null;
-      if (effective.decision === 'ALLOW') {
+      if (effectiveAllow && verdict.allow) {
         const result = await executeTool(uid, proposal.tool, proposal.args);
         executed = result.result ?? null;
-        await writeAudit(uid, {
-          type: 'tool_execution',
+
+        // One-shot grants are consumed only after a successful execution, so
+        // a failed run does not silently burn the user's permission.
+        if (result.ok && capability?.oneShot) {
+          await consumeCapability(uid, capability.id).catch(() => undefined);
+        }
+
+        await logEvent(uid, {
+          kind: 'execute',
           tool: proposal.tool,
-          decision: 'ALLOW',
+          decision: result.ok ? 'allow' : 'deny',
           reason: result.ok ? 'executed' : 'execution_failed',
-          originSourceIds: originSourceIds,
+          detail: { originSourceIds },
         });
       }
 
       threatEvents.push({
-        callId,
         tool: proposal.tool,
         args: proposal.args,
-        sideEffect: effective.sideEffect,
-        decision: effective.decision,
-        reason: effective.reason,
+        sideEffect,
+        decision: effectiveAllow ? 'ALLOW' : (verdict as any).needsConfirmation ? 'CONFIRM' : 'DENY',
+        reason: effectiveReason,
+        invariant: verdict.allow ? null : (verdict as any).invariant,
+        // The sentence the UI shows. A reason code the user cannot read is a
+        // decision they cannot reason about.
+        explanation: explainReason(effectiveReason),
         turnTaint,
-        originSourceIds: originSourceIds,
+        originSourceIds,
         result: executed,
       });
     }
@@ -380,23 +410,38 @@ agentRouter.post('/approve', requireAuth, async (req: AuthedRequest, res: Respon
       return res.status(410).json({ error: 'This approval request has expired.' });
     }
 
-    const policy = await loadPolicy(uid);
-    const recheck = decide({ tool: call.tool, args: call.args }, policy, call.turnTaint === true);
+    // B.4 / INV-4: policy is re-evaluated at execution time, not trusted from
+    // enqueue time. A proposal that became unsafe while queued - a revoked
+    // grant, an expired one, a newly tainted turn - must not execute on a
+    // stale decision.
+    const proposal = { tool: call.tool, args: call.args || {} };
+    const resource = resourceOf(proposal);
+    const capability = await findLiveCapability(uid, call.tool, resource).catch(() => null);
+    const recheck = decideProposal({
+      proposal,
+      capability,
+      // A confirmation is the human overriding INV-5 for this exact payload,
+      // so taint is cleared only here, only now, and only for this call.
+      turnTaint: false,
+      usage: await loadUsage(uid),
+    });
 
-    // Only a fresh CONFIRM may proceed. Anything else means conditions changed.
-    if (recheck.decision !== 'CONFIRM') {
+    if (!recheck.allow) {
       await writeAudit(uid, {
         type: 'approval',
         tool: call.tool,
         args: call.args,
         decision: 'DENY',
         reason: `revalidation_failed:${recheck.reason}`,
-        sideEffect: recheck.sideEffect,
+        sideEffect: sideEffectOf(call.tool),
         turnTaint: call.turnTaint === true,
         originSourceIds: call.originSourceIds || [],
       });
       await ref.update({ status: 'denied', reason: recheck.reason, resolvedAt: new Date().toISOString() });
-      return res.status(403).json({ error: 'This action is no longer permitted.', reason: recheck.reason });
+      return res.status(403).json({
+        error: explainReason(recheck.reason),
+        reason: recheck.reason,
+      });
     }
 
     await writeAudit(uid, {
@@ -447,5 +492,107 @@ agentRouter.post('/reject', requireAuth, async (req: AuthedRequest, res: Respons
   } catch (err: any) {
     console.error('[agent] reject failed:', err?.message);
     res.status(500).json({ error: 'Could not reject. Please retry.' });
+  }
+});
+
+// ---------------------------------------------------------------
+// Capability grants — the ONLY path by which a permission is created
+// ---------------------------------------------------------------
+//
+// These routes respond to a person clicking a button. There is no mint tool in
+// the registry, the Planner cannot propose one, and firestore.rules denies
+// client writes to the collection. So the model has no route to a capability
+// however it is persuaded, which is what makes "deny by default" mean
+// something rather than being a default anyone can change.
+
+agentRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json({ capabilities: await listCapabilities(req.uid!) });
+  } catch (err: any) {
+    console.error('[capabilities] list failed:', err?.message);
+    res.status(500).json({ error: 'Could not load permissions. Please retry.' });
+  }
+});
+
+agentRouter.post('/capabilities', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const tool = typeof data.tool === 'string' ? data.tool.trim() : '';
+    const resource = typeof data.resource === 'string' ? data.resource.trim() : '';
+
+    // A grant for a tool that does not exist would be dead weight the user
+    // cannot reason about, and a way to probe the registry.
+    if (!getToolSpec(tool)) {
+      return res.status(400).json({ error: 'Unknown tool.' });
+    }
+    if (!resource) {
+      return res.status(400).json({ error: 'A resource is required.' });
+    }
+
+    const capability = await mintCapability(uid, {
+      tool,
+      resource,
+      hours: Number(data.hours) || undefined,
+      oneShot: data.oneShot === true,
+    });
+
+    await logEvent(uid, {
+      kind: 'decision',
+      tool,
+      decision: 'allow',
+      reason: 'capability_granted',
+      detail: { resource, expiresAt: capability.expiresAt, oneShot: capability.oneShot },
+    });
+
+    res.status(201).json({ capability });
+  } catch (err: any) {
+    console.error('[capabilities] mint failed:', err?.message);
+    res.status(500).json({ error: 'Could not grant permission. Please retry.' });
+  }
+});
+
+agentRouter.delete('/capabilities/:capId', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const capId = String(req.params.capId || '');
+    // Path is uid-scoped, so another user's grant simply does not resolve.
+    const revoked = await revokeCapability(uid, capId);
+    if (!revoked) return res.status(404).json({ error: 'Permission not found.' });
+
+    await logEvent(uid, {
+      kind: 'decision',
+      decision: 'deny',
+      reason: 'capability_revoked_by_user',
+      detail: { capId },
+    });
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[capabilities] revoke failed:', err?.message);
+    res.status(500).json({ error: 'Could not revoke permission. Please retry.' });
+  }
+});
+
+// ---------------------------------------------------------------
+// Perimeter log
+// ---------------------------------------------------------------
+
+agentRouter.get('/perimeter/events', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json({ events: await listEvents(req.uid!) });
+  } catch (err: any) {
+    console.error('[perimeter] list failed:', err?.message);
+    res.status(500).json({ error: 'Could not load the log. Please retry.' });
+  }
+});
+
+/** Walks the hash chain and reports whether it is intact. */
+agentRouter.get('/perimeter/verify', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json(await verifyChain(req.uid!));
+  } catch (err: any) {
+    console.error('[perimeter] verify failed:', err?.message);
+    res.status(500).json({ error: 'Could not verify the log. Please retry.' });
   }
 });

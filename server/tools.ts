@@ -57,6 +57,32 @@ export const TOOL_REGISTRY: Readonly<Record<string, ToolSpec>> = Object.freeze({
     },
   },
 
+  send_digest: {
+    name: 'send_digest',
+    description:
+      'Send a digest to a destination the user has previously authorised. Egress class.',
+    // The only egress tool. INV-5 exists for this row.
+    sideEffect: 'write',
+    rateLimitPerHour: 5,
+    parameters: {
+      type: 'object',
+      properties: {
+        // NOTE what is absent: no URL, no email address, no webhook, no
+        // recipient of any kind. The model names an opaque id and the server
+        // resolves it against that user's own destinations. If the model
+        // cannot express "send to attacker@example.com", an injection cannot
+        // make it - the attack is structurally inexpressible rather than
+        // detected and blocked.
+        destinationId: {
+          type: 'string',
+          description: 'Id of a destination the user has already authorised.',
+        },
+        body: { type: 'string', description: 'The digest text to send.' },
+      },
+      required: ['destinationId', 'body'],
+    },
+  },
+
   create_note: {
     name: 'create_note',
     description: "Create a note in the user's private journal.",
