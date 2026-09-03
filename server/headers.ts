@@ -56,9 +56,15 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   // Clickjacking: this app is never framed. Belt to CSP's frame-ancestors.
   res.setHeader('X-Frame-Options', 'DENY');
   // Turn off powerful features the app never uses.
+  //
+  // microphone is (self), not (): the journal editor offers speech-to-text
+  // dictation via the Web Speech API. Denying it outright would have silently
+  // broken a shipped feature - the button would appear and simply do nothing,
+  // which is worse than not offering it. Everything the app genuinely never
+  // touches stays fully denied.
   res.setHeader(
     'Permissions-Policy',
-    'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
+    'geolocation=(), microphone=(self), camera=(), payment=(), usb=()',
   );
   // Cloud Run terminates TLS; tell browsers to stay on HTTPS.
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
