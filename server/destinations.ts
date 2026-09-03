@@ -1,4 +1,5 @@
 import { adminDb } from './auth';
+import { FieldValue } from 'firebase-admin/firestore';
 
 /**
  * Egress destinations — the resource `send_digest` is scoped to.
@@ -116,11 +117,20 @@ export async function recordSandboxDelivery(
     at: new Date().toISOString(),
   };
 
-  await doc.set(clean(delivery));
-  await destRef(uid)
-    .doc(destinationId)
-    .update({ deliveryCount: (await getDestination(uid, destinationId))!.deliveryCount + 1 })
-    .catch(() => undefined);
+  // One atomic write for both. The previous version did a read, added one,
+  // then wrote it back, and swallowed any failure with .catch(() => undefined)
+  // — so two deliveries in the same second could each read the same count and
+  // the second would silently overwrite the first, and a failed update left
+  // the record present with a stale count and nothing reported. Both are
+  // exactly what §6 "Guaranteed Transaction Verification / Explicit Error
+  // Escalation" forbids. FieldValue.increment is atomic server-side, and the
+  // batch means the delivery and its count either both land or neither does.
+  const batch = adminDb().batch();
+  batch.set(doc, clean(delivery));
+  batch.update(destRef(uid).doc(destinationId), {
+    deliveryCount: FieldValue.increment(1),
+  });
+  await batch.commit();
 
   return delivery;
 }

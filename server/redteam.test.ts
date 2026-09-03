@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { runClassSpecificStage } from './redteam';
+import { runClassSpecificStage, findUserScopedParameters } from './redteam';
 import { CORPUS } from './corpus';
+import { TOOL_REGISTRY } from './tools';
 
 /**
  * These tests exist because of a specific, real defect.
@@ -35,6 +36,24 @@ describe('red team runner exercises the control each payload names', () => {
     });
   }
 
+  // Asserting only "blocked" cannot tell the claimed denial from an accidental
+  // one. A mutation that mis-set the capability's resource still denied — for
+  // scope mismatch, not deny-by-default — and the verdict-only test stayed
+  // green. So pin the reason each row actually advertises.
+  it('capability social-engineering is denied by deny-by-default, not by luck', async () => {
+    const payload = CORPUS.find((p) => p.class === 'capability_social_engineering')!;
+    const stage = await runClassSpecificStage(payload);
+    expect(stage!.detail).toMatch(/no_capability|deny/i);
+    expect(stage!.detail).toContain('INV-4');
+    expect(stage!.detail).not.toMatch(/scope_mismatch|invalid_args|unknown_tool/);
+  });
+
+  it('destination substitution is denied for tainted egress specifically', async () => {
+    const payload = CORPUS.find((p) => p.class === 'destination_substitution')!;
+    const stage = await runClassSpecificStage(payload);
+    expect(stage!.detail).toContain('INV-5');
+  });
+
   it('the markdown beacon stage does not claim this run proved it', async () => {
     // The beacon fires in a browser. Claiming a server-side run blocked it
     // would be citing the wrong control for a real risk.
@@ -42,6 +61,41 @@ describe('red team runner exercises the control each payload names', () => {
     const stage = await runClassSpecificStage(payload);
     expect(stage!.detail).toMatch(/not exercised by this run/i);
     expect(stage!.detail).toMatch(/INV-9/);
+  });
+
+  // A scanner that never matches anything also reports "clean". The real
+  // registry passing proves nothing on its own, so prove the scan can fail.
+  describe('the cross-user scan is capable of failing', () => {
+    it('flags a tool that accepts a user parameter', () => {
+      const hostile = {
+        search_all: {
+          name: 'search_all',
+          parameters: { properties: { query: {}, userId: {} } },
+        },
+      };
+      expect(findUserScopedParameters(hostile)).toEqual(['search_all.userId']);
+    });
+
+    it.each(['uid', 'user', 'user_id', 'owner', 'account', 'onBehalfOf'])(
+      'flags the parameter name %s',
+      (param) => {
+        const hostile = {
+          t: { name: 't', parameters: { properties: { [param]: {} } } },
+        };
+        expect(findUserScopedParameters(hostile)).toHaveLength(1);
+      },
+    );
+
+    it('does not flag ordinary parameters', () => {
+      const benign = {
+        t: { name: 't', parameters: { properties: { query: {}, body: {}, title: {} } } },
+      };
+      expect(findUserScopedParameters(benign)).toEqual([]);
+    });
+
+    it('the real registry is clean', () => {
+      expect(findUserScopedParameters(TOOL_REGISTRY as any)).toEqual([]);
+    });
   });
 
   it('classes with no downstream control return null rather than inventing one', async () => {

@@ -161,7 +161,21 @@ export interface ChainVerification {
   /** Sequence number of the first event that failed verification. */
   brokenAt: number | null;
   reason: string;
+  /**
+   * True when the log is longer than this pass could read.
+   *
+   * This exists because the honest answer to "is the chain intact?" for a log
+   * larger than the page size is "the part I read is intact", and reporting a
+   * bare `intact: true` for a prefix is precisely the sort of overclaim this
+   * project refuses to make elsewhere. Callers must surface it.
+   */
+  partial: boolean;
+  /** How many events this pass actually verified. */
+  verified: number;
 }
+
+/** One verification pass. Beyond this the result is explicitly partial. */
+export const VERIFY_PAGE_SIZE = 1000;
 
 /**
  * Walks the chain and reports whether it is intact.
@@ -172,11 +186,26 @@ export interface ChainVerification {
  */
 export async function verifyChain(uid: string): Promise<ChainVerification> {
   try {
-    const snap = await eventsRef(uid).orderBy('seq', 'asc').limit(1000).get();
-    const events = snap.docs.map((d) => d.data() as PerimeterEvent);
+    // Read one past the page size purely to learn whether more exist, so the
+    // caller can be told the pass was partial instead of being handed a clean
+    // verdict for a chain that was never fully walked.
+    const snap = await eventsRef(uid)
+      .orderBy('seq', 'asc')
+      .limit(VERIFY_PAGE_SIZE + 1)
+      .get();
+    const all = snap.docs.map((d) => d.data() as PerimeterEvent);
+    const partial = all.length > VERIFY_PAGE_SIZE;
+    const events = partial ? all.slice(0, VERIFY_PAGE_SIZE) : all;
 
     if (events.length === 0) {
-      return { intact: true, count: 0, brokenAt: null, reason: 'empty_log' };
+      return {
+        intact: true,
+        count: 0,
+        brokenAt: null,
+        reason: 'empty_log',
+        partial: false,
+        verified: 0,
+      };
     }
 
     let previous: PerimeterEvent | null = null;
@@ -189,6 +218,8 @@ export async function verifyChain(uid: string): Promise<ChainVerification> {
           count: events.length,
           brokenAt: event.seq,
           reason: `sequence_gap:expected_${expectedSeq}_got_${event.seq}`,
+          partial,
+          verified: event.seq - 1,
         };
       }
 
@@ -199,16 +230,32 @@ export async function verifyChain(uid: string): Promise<ChainVerification> {
           count: events.length,
           brokenAt: event.seq,
           reason: 'hash_mismatch',
+          partial,
+          verified: event.seq - 1,
         };
       }
 
       previous = event;
     }
 
-    return { intact: true, count: events.length, brokenAt: null, reason: 'chain_intact' };
+    return {
+      intact: true,
+      count: events.length,
+      brokenAt: null,
+      reason: partial ? 'prefix_intact_log_longer_than_one_pass' : 'chain_intact',
+      partial,
+      verified: events.length,
+    };
   } catch (err: any) {
     console.error('[perimeter] chain verification failed:', err?.message);
-    return { intact: false, count: 0, brokenAt: null, reason: 'verification_error' };
+    return {
+      intact: false,
+      count: 0,
+      brokenAt: null,
+      reason: 'verification_error',
+      partial: false,
+      verified: 0,
+    };
   }
 }
 

@@ -22,7 +22,13 @@ export default defineConfig(() => {
     // the default run to server/ means a bare `vitest run` cannot appear to
     // pass without one. Run those with `npm run test:rules`.
     test: {
-      include: ['server/**/*.test.ts'],
+      // src/ is included because INV-9 lives in a React component. Restricting
+      // the run to server/ meant the renderer — the only control the server
+      // cannot enforce, and the one the red team console tells judges is
+      // "verified by the INV-9 renderer test" — had no runtime coverage at
+      // all, and a test file added under src/ would have been silently
+      // ignored rather than failing loudly.
+      include: ['server/**/*.test.ts', 'src/**/*.test.{ts,tsx}'],
     },
   };
 });

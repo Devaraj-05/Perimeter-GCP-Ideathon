@@ -39,18 +39,26 @@ else, cannot read secrets, and cannot touch Firestore.
 The application refuses all scheduled invocations when this is unset — a missing config value
 closes the endpoint rather than opening it (B.6).
 
-```bash
-gcloud run services update perimeter \
-  --project "$PROJECT" --region "$REGION" \
-  --update-env-vars="SCHEDULER_SERVICE_ACCOUNT=${SCHED_SA}"
-```
-
-## 4. Create the job
+The audience must be set too. Verifying only the signature and the caller's email would accept
+**any** Google-issued token belonging to that service account — including one minted for a
+different service entirely. That is a valid credential presented at the wrong door, and checking
+`aud` is what closes it. Both variables are required: if either is missing the endpoint returns
+503 rather than guessing (B.6).
 
 ```bash
 SERVICE_URL=$(gcloud run services describe perimeter \
   --project "$PROJECT" --region "$REGION" --format='value(status.url)')
 
+gcloud run services update perimeter \
+  --project "$PROJECT" --region "$REGION" \
+  --update-env-vars="SCHEDULER_SERVICE_ACCOUNT=${SCHED_SA},SCHEDULER_AUDIENCE=${SERVICE_URL}"
+```
+
+`SCHEDULER_AUDIENCE` must match `--oidc-token-audience` in step 4 exactly.
+
+## 4. Create the job
+
+```bash
 gcloud scheduler jobs create http perimeter-ingest \
   --project "$PROJECT" --location "$REGION" \
   --schedule="0 */6 * * *" \

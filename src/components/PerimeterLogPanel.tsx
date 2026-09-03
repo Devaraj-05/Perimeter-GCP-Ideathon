@@ -222,17 +222,31 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
         {chain && (
           <div
             className={`mx-5 mt-4 rounded-lg border p-3 text-xs ${
-              chain.intact
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                : 'border-rose-200 bg-rose-50 text-rose-900'
+              !chain.intact
+                ? 'border-rose-200 bg-rose-50 text-rose-900'
+                : chain.partial
+                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-900'
             }`}
           >
             {chain.intact ? (
-              <>
-                <strong>Chain intact.</strong> All {chain.count} events verified. Each record
-                carries a hash of the one before it, so removing or editing any entry would break
-                every link after it.
-              </>
+              chain.partial ? (
+                <>
+                  {/*
+                    Saying "chain intact" for a log longer than one pass would
+                    claim more than was checked. Amber, and say what was read.
+                  */}
+                  <strong>First {chain.verified} events verified.</strong> This log is longer than
+                  one verification pass, so the rest has not been checked yet. The part that was
+                  read is intact.
+                </>
+              ) : (
+                <>
+                  <strong>Chain intact.</strong> All {chain.count} events verified. Each record
+                  carries a hash of the one before it, so removing or editing any entry would break
+                  every link after it.
+                </>
+              )
             ) : (
               <>
                 <strong>Chain broken at event {chain.brokenAt}.</strong> {chain.reason}

@@ -241,7 +241,10 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     }));
 
     const usageByTool = await loadUsage(uid);
-    const plannerContext = { history, userMessage: message, observations };
+    // Without this the model can only guess an id, every guess misses, and
+    // send_digest is unusable — INV-5 would govern a tool that never fires.
+    const destinations = (await listDestinations(uid)).map((d) => ({ id: d.id, label: d.label }));
+    const plannerContext = { history, userMessage: message, observations, destinations };
 
     // Which external documents contributed to this turn. Recorded on every
     // decision so a refusal can name the source that triggered it.

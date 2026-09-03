@@ -24,10 +24,28 @@ function expectedInvoker(): string | null {
   return process.env.SCHEDULER_SERVICE_ACCOUNT || null;
 }
 
+/**
+ * The audience the Scheduler job mints its token for
+ * (`--oidc-token-audience`, set to the service URL in docs/scheduler-setup.md).
+ *
+ * Checking this closes token-audience confusion. Verifying only the signature
+ * and the caller's email accepts ANY Google-issued token belonging to that
+ * service account — including one minted for a completely different service.
+ * Such a token is a valid credential presented to the wrong door, and without
+ * an `aud` check this door opens.
+ */
+function expectedAudience(): string | null {
+  return process.env.SCHEDULER_AUDIENCE || null;
+}
+
+/** Google's OIDC issuer, in both forms Google emits. */
+const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com']);
+
 interface OidcClaims {
   email?: string;
   email_verified?: string | boolean;
   aud?: string;
+  iss?: string;
   exp?: string | number;
 }
 
@@ -65,6 +83,15 @@ async function requireScheduler(req: Request, res: Response, next: () => void) {
     return res.status(503).json({ error: 'Scheduled ingest is not configured.' });
   }
 
+  // B.6 again: a half-configured endpoint is a closed one. If the invoker is
+  // named but the audience is not, we cannot tell a token minted for THIS
+  // service from one minted for another, so we refuse rather than guess.
+  const audience = expectedAudience();
+  if (!audience) {
+    console.error('[internal] SCHEDULER_AUDIENCE unset - refusing.');
+    return res.status(503).json({ error: 'Scheduled ingest is not configured.' });
+  }
+
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized.' });
@@ -73,6 +100,17 @@ async function requireScheduler(req: Request, res: Response, next: () => void) {
   const claims = await verifyOidc(header.slice(7).trim());
   if (!claims) {
     return res.status(401).json({ error: 'Unauthorized.' });
+  }
+
+  if (!claims.iss || !GOOGLE_ISSUERS.has(claims.iss)) {
+    console.warn(`[internal] rejected issuer: ${claims.iss ?? 'unknown'}`);
+    return res.status(403).json({ error: 'Forbidden.' });
+  }
+
+  if (claims.aud !== audience) {
+    // A valid token for the wrong door.
+    console.warn(`[internal] rejected audience: ${claims.aud ?? 'unknown'}`);
+    return res.status(403).json({ error: 'Forbidden.' });
   }
 
   const verified = claims.email_verified === true || claims.email_verified === 'true';

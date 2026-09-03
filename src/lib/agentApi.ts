@@ -144,6 +144,10 @@ export interface ChainVerification {
   count: number;
   brokenAt: number | null;
   reason: string;
+  /** True when the log is longer than one verification pass could read. */
+  partial: boolean;
+  /** How many events were actually verified. */
+  verified: number;
 }
 
 export async function listPerimeterEvents(): Promise<PerimeterEvent[]> {

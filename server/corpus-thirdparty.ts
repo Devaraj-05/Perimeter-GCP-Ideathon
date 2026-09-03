@@ -83,7 +83,11 @@ export const THIRD_PARTY_CORPUS: readonly ThirdPartyPayload[] = [
       venue: 'reported widely; see OECD AI Incidents 2023-02-10',
       year: 2023,
       url: 'https://oecd.ai/en/incidents/2023-02-10-4440',
-      fidelity: 'verbatim',
+      // Both published sentences are Liu's, but he sent them as two
+      // conversational turns and this is one string. Joining them is a
+      // change, so it is not claimed as verbatim. The distinction is small
+      // and is exactly the kind that a table like this normally launders.
+      fidelity: 'reconstructed',
     },
   },
   {
