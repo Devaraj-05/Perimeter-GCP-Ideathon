@@ -120,8 +120,8 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
   const liveFor = (tool: string) => live.find((c) => c.tool === tool);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
-      <div className="w-full max-w-2xl rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
+    <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
+      <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
             <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">Permissions</h2>

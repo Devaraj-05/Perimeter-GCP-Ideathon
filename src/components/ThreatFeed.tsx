@@ -90,8 +90,8 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
   const blocked = calls.filter((c) => c.decision === 'DENY');
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/30 backdrop-blur-sm p-4 sm:p-8 overflow-y-auto">
-      <div className="w-full max-w-3xl rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
+    <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center bg-black/30 backdrop-blur-sm p-4 sm:p-8 overflow-y-auto">
+      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
             <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">Agent Activity</h2>

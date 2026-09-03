@@ -47,7 +47,7 @@ export const InsightsModal: React.FC<InsightsModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2c2c24]/50 p-4 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 anim-backdrop flex items-center justify-center bg-[#2c2c24]/50 p-4 backdrop-blur-xs">
       <div className="relative w-full max-w-2xl rounded-2xl bg-[#fcfaf7] p-6 shadow-xl border border-[#e5e0d3] max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[#e5e0d3] pb-4">
           <div className="flex items-center gap-2.5">

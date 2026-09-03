@@ -40,13 +40,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-serif text-lg font-semibold tracking-tight text-[#2c2c24]">
-                ReflectAI
+                Perimeter
               </span>
               <span className="rounded-md bg-[#f3efe6] px-1.5 py-0.5 text-[11px] font-medium text-[#5a5a40] border border-[#e5e0d3]">
                 Gemini 3.6 Flash
               </span>
             </div>
-            <p className="text-xs text-[#8a8a75]">Private Reflection & Journal Companion</p>
+            <p className="text-xs text-[#8a8a75]">Secure journal & agent workspace</p>
           </div>
         </div>
 
@@ -162,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="sign-out-btn"
                 onClick={onSignOut}
                 className="rounded-lg p-2 text-[#8a8a75] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
-                title="Sign out of ReflectAI"
+                title="Sign out"
               >
                 <LogOut className="h-4 w-4" />
               </button>

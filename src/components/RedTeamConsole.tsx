@@ -89,8 +89,8 @@ export const RedTeamConsole: React.FC<RedTeamConsoleProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:p-8">
-      <div className="w-full max-w-3xl rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
+    <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:p-8">
+      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
             <h2 className="flex items-center gap-2 font-serif text-xl font-semibold text-[#2c2c24]">
