@@ -81,8 +81,13 @@ beforeEach(async () => {
       expiresAt: '2099-01-01T00:00:00.000Z',
     });
     await setDoc(doc(db, `users/${ALICE}/destinations/dest_1`), {
-      kind: 'webhook',
-      host: 'hooks.slack.com',
+      kind: 'sandbox',
+      label: 'Sandbox destination',
+    });
+    await setDoc(doc(db, `users/${ALICE}/destinations/dest_1/deliveries/d1`), {
+      bodySha256: 'abc',
+      bodyLength: 12,
+      preview: 'private journal text',
     });
     await setDoc(doc(db, `users/${ALICE}/perimeter_events/pe1`), {
       seq: 1,
@@ -311,6 +316,39 @@ describe('HOSTILE: self-granting capabilities (INV-4)', () => {
 
   it('B cannot read A capabilities', async () => {
     await assertFails(getDoc(doc(bob(), `users/${ALICE}/capabilities/cap1`)));
+  });
+});
+
+describe('HOSTILE: delivery records (INV-5 evidence)', () => {
+  it('A can read their own delivery records', async () => {
+    await assertSucceeds(
+      getDoc(doc(alice(), `users/${ALICE}/destinations/dest_1/deliveries/d1`)),
+    );
+  });
+
+  it('A cannot forge a delivery record', async () => {
+    // Deliveries are the evidence that an egress happened. A client able to
+    // write them could manufacture a clean history, or erase a real send.
+    await assertFails(
+      setDoc(doc(alice(), `users/${ALICE}/destinations/dest_1/deliveries/forged`), {
+        bodySha256: 'fake',
+        bodyLength: 0,
+        preview: '',
+      }),
+    );
+  });
+
+  it('A cannot delete a delivery record', async () => {
+    await assertFails(
+      deleteDoc(doc(alice(), `users/${ALICE}/destinations/dest_1/deliveries/d1`)),
+    );
+  });
+
+  it('B cannot read A delivery records', async () => {
+    // The preview field carries A's journal text.
+    await assertFails(
+      getDoc(doc(bob(), `users/${ALICE}/destinations/dest_1/deliveries/d1`)),
+    );
   });
 });
 

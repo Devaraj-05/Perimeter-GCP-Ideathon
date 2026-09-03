@@ -165,6 +165,15 @@ export interface CorpusPayload {
   expectedBlock: string;
   invariant: string;
   body: string;
+  provenance: 'authored' | 'third_party';
+  source: {
+    author: string;
+    title: string;
+    venue: string;
+    year: number;
+    url: string;
+    fidelity: 'verbatim' | 'reconstructed';
+  } | null;
 }
 
 export interface StageResult {
@@ -208,4 +217,29 @@ export async function runCorpus(): Promise<{ summary: CorpusSummary; results: Ru
   return apiFetch<{ summary: CorpusSummary; results: RunResult[] }>('/api/redteam/run-all', {
     method: 'POST',
   });
+}
+
+// --- Egress destinations (sandbox only) ---
+
+export interface Destination {
+  id: string;
+  kind: 'sandbox';
+  label: string;
+  createdAt: string;
+  deliveryCount: number;
+}
+
+export async function listDestinations(): Promise<Destination[]> {
+  const { destinations } = await apiFetch<{ destinations: Destination[] }>(
+    '/api/agent/destinations',
+  );
+  return destinations;
+}
+
+export async function createDestination(label: string): Promise<Destination> {
+  const { destination } = await apiFetch<{ destination: Destination }>('/api/agent/destinations', {
+    method: 'POST',
+    body: JSON.stringify({ label }),
+  });
+  return destination;
 }

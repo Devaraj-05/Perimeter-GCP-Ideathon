@@ -13,7 +13,9 @@
  *   npx tsx scripts/replay-corpus.ts --md    # markdown table for the README
  */
 
-import { CORPUS } from '../server/corpus';
+import { AUTHORED_CORPUS } from '../server/corpus';
+import { THIRD_PARTY_CORPUS } from '../server/corpus-thirdparty';
+import type { CorpusPayload } from '../server/corpus';
 import { detectL1, fuseVerdict } from '../server/detect';
 import { buildReaderRequest, assertReaderHasNoTools } from '../server/reader';
 import { assertPublicHttpUrl, isBlockedAddress } from '../server/fetchurl';
@@ -21,6 +23,9 @@ import { decideProposal } from '../server/broker';
 
 interface Row {
   id: string;
+  /** Present only for published payloads: who wrote it, and how faithfully. */
+  cite?: string;
+  fidelity?: 'verbatim' | 'reconstructed';
   cls: string;
   invariant: string;
   /** Did the architectural boundary stop it? */
@@ -88,8 +93,9 @@ function architecturalBlock(id: string, cls: string, body: string): { blocked: b
   }
 }
 
-function run(): Row[] {
-  return CORPUS.map((p) => {
+function run(set: readonly CorpusPayload[]): Row[] {
+  return set.map((p) => {
+    const src = (p as any).source;
     const arch = architecturalBlock(p.id, p.class, p.body);
     const l1 = detectL1(p.body);
     const l1Detected = fuseVerdict(l1, null) !== 'clean';
@@ -100,23 +106,34 @@ function run(): Row[] {
       architecturallyBlocked: arch.blocked,
       l1Detected,
       block: arch.how,
+      cite: src ? `${String(src.author).split(',')[0]}, ${src.year}` : undefined,
+      fidelity: src?.fidelity,
     };
   });
 }
 
-function printTable(rows: Row[], markdown: boolean) {
+function printTable(rows: Row[], markdown: boolean, heading: string) {
   const attempted = rows.length;
   const blocked = rows.filter((r) => r.architecturallyBlocked).length;
   const l1Hits = rows.filter((r) => r.l1Detected).length;
 
   if (markdown) {
-    console.log('| Payload | Class | Invariant | Architectural block | L1 detected |');
-    console.log('|---|---|---|---|---|');
+    console.log(`
+### ${heading}
+`);
+    const cited = rows.some((r) => r.cite);
+    console.log(
+      cited
+        ? '| Payload | Class | Source | Fidelity | Invariant | Architectural block | L1 |'
+        : '| Payload | Class | Invariant | Architectural block | L1 detected |',
+    );
+    console.log(cited ? '|---|---|---|---|---|---|---|' : '|---|---|---|---|---|');
     for (const r of rows) {
+      const verdict = r.architecturallyBlocked ? '✅ ' + r.block : '❌ REACHED EXECUTION';
       console.log(
-        `| ${r.id} | ${r.cls.replace(/_/g, ' ')} | ${r.invariant} | ${
-          r.architecturallyBlocked ? '✅ ' + r.block : '❌ REACHED EXECUTION'
-        } | ${r.l1Detected ? '✅' : '—'} |`,
+        cited
+          ? `| ${r.id} | ${r.cls.replace(/_/g, ' ')} | ${r.cite ?? '—'} | ${r.fidelity ?? '—'} | ${r.invariant} | ${verdict} | ${r.l1Detected ? '✅' : '—'} |`
+          : `| ${r.id} | ${r.cls.replace(/_/g, ' ')} | ${r.invariant} | ${verdict} | ${r.l1Detected ? '✅' : '—'} |`,
       );
     }
     console.log('');
@@ -129,7 +146,7 @@ function printTable(rows: Row[], markdown: boolean) {
     return;
   }
 
-  console.log('\n  Perimeter — corpus replay\n  ' + '='.repeat(60));
+  console.log(`\n  Perimeter — ${heading}\n  ` + '='.repeat(60));
   for (const r of rows) {
     const mark = r.architecturallyBlocked ? '  BLOCKED ' : '  LEAKED  ';
     const l1 = r.l1Detected ? 'L1:hit ' : 'L1:miss';
@@ -141,11 +158,32 @@ function printTable(rows: Row[], markdown: boolean) {
   console.log(`  Architecturally blocked: ${blocked}/${attempted}`);
   console.log(`  L1 detection (in depth): ${l1Hits}/${attempted}\n`);
 
-  if (blocked < attempted) {
-    console.error('  FAIL: a payload reached execution.');
-    process.exit(1);
-  }
+  return blocked < attempted;
 }
 
-const rows = run();
-printTable(rows, process.argv.includes('--md'));
+// Reported apart, deliberately. A combined "17/17" would let the twelve
+// payloads we wrote ourselves carry the five we did not, and the second number
+// is the only one a sceptic has reason to trust.
+const md = process.argv.includes('--md');
+const authoredFailed = printTable(run(AUTHORED_CORPUS), md, 'Authored payloads (written by us)');
+const thirdPartyFailed = printTable(
+  run(THIRD_PARTY_CORPUS),
+  md,
+  'Third-party payloads (published by others, cited)',
+);
+
+if (md) {
+  const recon = THIRD_PARTY_CORPUS.filter((p) => p.source.fidelity === 'reconstructed').length;
+  console.log(
+    `
+${THIRD_PARTY_CORPUS.length - recon} of the ${THIRD_PARTY_CORPUS.length} third-party ` +
+      `payloads are the published attack string verbatim; ${recon} are the documented technique ` +
+      `rewritten against this app's tool names, because the originals targeted other systems and ` +
+      `would be inert here. Both are labelled per row rather than averaged away.`,
+  );
+}
+
+if (authoredFailed || thirdPartyFailed) {
+  console.error('  FAIL: a payload reached execution.');
+  process.exit(1);
+}

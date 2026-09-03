@@ -5,6 +5,9 @@ import {
   listCapabilities,
   grantCapability,
   revokeCapability,
+  Destination,
+  listDestinations,
+  createDestination,
 } from '../lib/agentApi';
 
 /**
@@ -42,6 +45,14 @@ const GRANTABLE = [
     risk: 'low' as const,
   },
   {
+    tool: 'send_digest',
+    resource: 'destination:SANDBOX',
+    label: 'Send a digest to a destination',
+    detail:
+      'Send a summary to a destination you created. Every destination here is a sandbox: the delivery is recorded and discarded, and nothing leaves the app.',
+    risk: 'egress' as const,
+  },
+  {
     tool: 'create_note',
     resource: 'entries:own',
     label: 'Write notes into my journal',
@@ -70,12 +81,15 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setCaps(await listCapabilities());
+      const [c, d] = await Promise.all([listCapabilities(), listDestinations()]);
+      setCaps(c);
+      setDestinations(d);
     } catch (err: any) {
       setError(err?.message || 'Could not load permissions.');
     } finally {
@@ -91,7 +105,18 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
     setBusy(tool);
     setError(null);
     try {
-      await grantCapability({ tool, resource, hours: 24 });
+      let scoped = resource;
+
+      // Egress is scoped to a REAL destination id, because that is what
+      // resourceOf() computes at decision time. A grant against a placeholder
+      // would look valid in this list and then never match, which is a worse
+      // failure than refusing outright. Create one on first grant.
+      if (tool === 'send_digest') {
+        const existing = destinations[0] ?? (await createDestination('Sandbox destination'));
+        scoped = `destination:${existing.id}`;
+      }
+
+      await grantCapability({ tool, resource: scoped, hours: 24 });
       await load();
     } catch (err: any) {
       setError(err?.message || 'Could not grant that permission.');
@@ -173,6 +198,11 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium text-[#2c2c24]">{g.label}</span>
+                      {g.risk === 'egress' && (
+                        <span className="rounded border border-rose-300 bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-rose-900">
+                          leaves the app
+                        </span>
+                      )}
                       {g.risk === 'write' && (
                         <span className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-900">
                           changes data

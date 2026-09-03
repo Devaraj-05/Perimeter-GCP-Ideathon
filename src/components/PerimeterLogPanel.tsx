@@ -9,6 +9,7 @@ import {
   listPerimeterEvents,
   verifyPerimeterChain,
 } from '../lib/agentApi';
+import { auth, subscribeToPerimeterLog } from '../lib/firebase';
 
 /**
  * The Perimeter Log — INV-6 and INV-7 made visible.
@@ -96,6 +97,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
   const [error, setError] = useState<string | null>(null);
   const [chain, setChain] = useState<ChainVerification | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,7 +112,36 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
   }, []);
 
   useEffect(() => {
-    if (isOpen) void load();
+    if (!isOpen) return;
+
+    // Read directly from Firestore so rows appear as the server writes them.
+    // firestore.rules permits the owner to READ this collection; writes stay
+    // denied, so watching the log cannot compromise it.
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      void load();
+      return;
+    }
+
+    setLoading(true);
+    const unsubscribe = subscribeToPerimeterLog(
+      uid,
+      (rows) => {
+        setEvents(rows as PerimeterEvent[]);
+        setIsLive(true);
+        setLoading(false);
+        setError(null);
+      },
+      (message) => {
+        // Degrade to the API fetch rather than showing an empty panel.
+        setIsLive(false);
+        setError(message);
+        void load();
+      },
+    );
+
+    // Without this the listener outlives the panel and leaks.
+    return () => unsubscribe();
   }, [isOpen, load]);
 
   const verify = async () => {
@@ -149,8 +180,15 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-[#e5e0d3] px-5 py-3">
-          <span className="rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338]">
-            {events.length} events
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338]">
+            {isLive && (
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                title="Streaming"
+              />
+            )}
+            {events.length} events{isLive ? ' · live' : ''}
           </span>
           {denied > 0 && (
             <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-800">

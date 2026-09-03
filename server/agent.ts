@@ -9,6 +9,7 @@ import { Segment, PerimeterViolation } from './segments';
 import { decideProposal, resourceOf, sideEffectOf, explainReason } from './broker';
 import { findLiveCapability, consumeCapability, mintCapability, revokeCapability, listCapabilities } from './capabilities';
 import { logEvent, listEvents, verifyChain } from './perimeterLog';
+import { createSandboxDestination, listDestinations } from './destinations';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
 import { writeAudit } from './audit';
@@ -594,5 +595,45 @@ agentRouter.get('/perimeter/verify', requireAuth, async (req: AuthedRequest, res
   } catch (err: any) {
     console.error('[perimeter] verify failed:', err?.message);
     res.status(500).json({ error: 'Could not verify the log. Please retry.' });
+  }
+});
+
+
+// ---------------------------------------------------------------
+// Egress destinations
+// ---------------------------------------------------------------
+//
+// Created only by an explicit user action, exactly like capability grants.
+// There is no tool that mints one and nothing the Planner can propose, so a
+// destination can never originate from model output.
+
+agentRouter.get('/destinations', requireAuth, async (req: AuthedRequest, res: Response) => {
+  try {
+    res.json({ destinations: await listDestinations(req.uid!) });
+  } catch (err: any) {
+    console.error('[destinations] list failed:', err?.message);
+    res.status(500).json({ error: 'Could not load destinations. Please retry.' });
+  }
+});
+
+agentRouter.post('/destinations', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const label = typeof data.label === 'string' ? data.label.trim() : '';
+
+    const destination = await createSandboxDestination(uid, label || 'Sandbox destination');
+
+    await logEvent(uid, {
+      kind: 'decision',
+      decision: 'allow',
+      reason: 'destination_created',
+      detail: { destinationId: destination.id, kind: destination.kind },
+    });
+
+    res.status(201).json({ destination });
+  } catch (err: any) {
+    console.error('[destinations] create failed:', err?.message);
+    res.status(400).json({ error: err?.message || 'Could not create the destination.' });
   }
 });

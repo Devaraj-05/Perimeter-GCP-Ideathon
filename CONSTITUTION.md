@@ -176,10 +176,16 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
 - **C.3** Results are recorded honestly, including misses. Detection efficacy is published as
   attempted / detected / reached-execution. A security claim that cannot be falsified is not a
   security claim (INV — honest limits).
-- **C.4** The demonstration toggle that disables the defence is a controlled hazard. It affects
-  only the current user's own session, never touches a real egress destination, records every
-  activation in the perimeter log, and any "leak" it shows is written to a sandbox that
-  discards the payload. It exists to make the defence legible by showing the undefended
-  failure, and for no other purpose.
+- **C.4** ~~The demonstration toggle that disables the defence is a controlled hazard.~~
+  **WITHDRAWN, 2026-09-03. Never implemented.**
+
+  This clause governed a toggle that would disable the defence to show the undefended failure.
+  The toggle was cut early and never built, which left the constitution regulating a feature
+  that does not exist — the "documenting instead of shipping" failure `phase-plan.md` warns
+  about, and precisely the kind of gap between claim and code this project exists to argue
+  against. Striking it rather than quietly deleting it: the withdrawal is the record.
+
+  A deliberate consequence: there is now **no supported way to turn the perimeter off**. The
+  airlock is not a mode.
 - **C.5** Every new integration adds at least one corpus payload targeting its surface (this is
   §9.7 restated as a standing obligation).

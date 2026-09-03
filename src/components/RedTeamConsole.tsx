@@ -226,6 +226,30 @@ export const RedTeamConsole: React.FC<RedTeamConsoleProps> = ({ isOpen, onClose 
                       {p.expectedBlock}
                     </p>
 
+                    {/*
+                      Provenance is shown because a defence tested only against
+                      attacks its own author imagined proves very little. A
+                      judge should be able to see, per payload, whether we wrote
+                      it — and for published ones, whether the body is the
+                      original string or our reconstruction of the technique.
+                    */}
+                    {p.source ? (
+                      <p className="mb-2 rounded border border-[#d8cfae] bg-[#fbf6e6] px-2.5 py-1.5 text-[11px] text-[#5a5a40]">
+                        <span className="font-medium">Published by someone else: </span>
+                        {p.source.author} — {p.source.title} ({p.source.venue}, {p.source.year}).{' '}
+                        <span className="font-medium">
+                          {p.source.fidelity === 'verbatim'
+                            ? 'The published attack string, verbatim.'
+                            : "The documented technique, rewritten against this app's tool names — the original targeted another system and would be inert here."}
+                        </span>{' '}
+                        <span className="break-all text-[#8a8a75]">{p.source.url}</span>
+                      </p>
+                    ) : (
+                      <p className="mb-2 text-[11px] italic text-[#8a8a75]">
+                        Written by us. See the T-series below for payloads published by others.
+                      </p>
+                    )}
+
                     {result && (
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8a8a75]">

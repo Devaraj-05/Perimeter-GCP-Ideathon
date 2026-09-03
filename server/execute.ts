@@ -1,5 +1,6 @@
 import { adminDb } from './auth';
 import { getToolSpec } from './tools';
+import { getDestination, recordSandboxDelivery } from './destinations';
 
 /**
  * Tool Executor - Amendment B.2.
@@ -102,6 +103,39 @@ async function createNote(
 }
 
 /**
+ * Sends a digest to one of the caller's own destinations.
+ *
+ * Every destination in this build is a sandbox: the delivery is recorded and
+ * discarded, and no network call is made. The security-relevant part is the
+ * resolution step - the model supplied an opaque id, and it is resolved here
+ * against records only this user created, on a uid-scoped path. An address in
+ * model output cannot become a destination because this lookup is the only way
+ * a destination is ever obtained.
+ */
+async function sendDigest(
+  uid: string,
+  destinationId: string,
+  body: string,
+): Promise<ExecutionResult> {
+  const destination = await getDestination(uid, destinationId);
+  if (!destination) {
+    // Ownership re-verified at execution time, not only at the boundary.
+    return { ok: false, error: 'Destination not found.' };
+  }
+
+  const delivery = await recordSandboxDelivery(uid, destinationId, body);
+  return {
+    ok: true,
+    result: {
+      destination: destination.label,
+      sandbox: true,
+      note: 'Recorded against a sandbox destination. Nothing left the application.',
+      bytes: delivery.bodyLength,
+    },
+  };
+}
+
+/**
  * Runs an approved proposal. Callers must have obtained an ALLOW (or an
  * approved CONFIRM) from the Policy Engine first; this function does not
  * re-decide policy, it enforces ownership and executes.
@@ -124,6 +158,8 @@ export async function executeTool(
         return await summariseSource(uid, String(args.sourceId ?? ''));
       case 'create_note':
         return await createNote(uid, String(args.title ?? ''), String(args.body ?? ''));
+      case 'send_digest':
+        return await sendDigest(uid, String(args.destinationId ?? ''), String(args.body ?? ''));
       default:
         return { ok: false, error: 'Unknown tool.' };
     }

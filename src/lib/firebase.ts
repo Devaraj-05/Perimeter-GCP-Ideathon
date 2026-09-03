@@ -16,6 +16,8 @@ import {
   deleteDoc,
   query,
   orderBy,
+  limit,
+  onSnapshot,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { JournalEntry, UserProfile } from '../types';
@@ -118,5 +120,46 @@ export async function deleteUserEntry(userId: string, entryId: string): Promise<
   } catch (error) {
     console.error(`Failed to delete entry ${entryId} from Firestore:`, error);
     throw error;
+  }
+}
+
+/**
+ * Live subscription to the user's own perimeter log.
+ *
+ * This is a client READ, which firestore.rules permits for the owner
+ * (`allow read: if isOwner(userId)`). Writes stay server-only and denied, so
+ * subscribing changes nothing about the log's integrity — the client can watch
+ * its own audit trail, and still cannot forge, edit or delete a single row.
+ *
+ * Reading directly rather than polling the API is what makes the word "live"
+ * honest: rows appear as the server writes them, so a judge watches the log
+ * fill during an attack instead of clicking Refresh afterwards.
+ *
+ * Returns an unsubscribe function. Callers MUST call it on unmount, or the
+ * listener outlives the panel and leaks.
+ */
+export function subscribeToPerimeterLog(
+  userId: string,
+  onEvents: (events: any[]) => void,
+  onError: (message: string) => void,
+): () => void {
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'perimeter_events'),
+      orderBy('seq', 'desc'),
+      limit(200),
+    );
+    return onSnapshot(
+      q,
+      (snap) => onEvents(snap.docs.map((d) => d.data())),
+      (err) => {
+        console.warn('[perimeter] live subscription failed:', err?.message);
+        onError('Live updates unavailable. Use Refresh.');
+      },
+    );
+  } catch (err: any) {
+    console.warn('[perimeter] could not subscribe:', err?.message);
+    onError('Live updates unavailable. Use Refresh.');
+    return () => undefined;
   }
 }

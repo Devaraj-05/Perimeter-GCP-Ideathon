@@ -80,6 +80,16 @@ service cloud.firestore {
       match /destinations/{destId} {
         allow read: if isOwner(userId);
         allow write: if false;
+
+        // Delivery records hold a preview of what was sent, which is journal
+        // content. Stated explicitly rather than left to fall through to the
+        // default deny: a later recursive wildcard elsewhere in this file
+        // would silently open it, and this is the one path under
+        // destinations that carries user text.
+        match /deliveries/{deliveryId} {
+          allow read: if isOwner(userId);
+          allow write: if false;
+        }
       }
 
       // Tool call proposals and decisions. Approval runs through

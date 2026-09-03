@@ -41,7 +41,7 @@ The five threat zones are the ones named in Directive 1.
 
 | Threat | Countermeasure | Where |
 |---|---|---|
-| Cross-user data access | Owner-bound rules; 46 adversarial tests | `firestore.rules`, `tests/firestore.rules.test.ts` |
+| Cross-user data access | Owner-bound rules; 50 adversarial tests | `firestore.rules`, `tests/firestore.rules.test.ts` |
 | Provenance laundering | `segments.zone` and `artifacts.trust` are client-unwritable | `firestore.rules` |
 | Verdict laundering | `artifacts.verdict` client-unwritable | `firestore.rules` |
 | Self-approval by DB edit | `toolcalls` client-unwritable | `firestore.rules` |
