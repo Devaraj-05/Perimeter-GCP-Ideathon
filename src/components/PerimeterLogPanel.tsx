@@ -62,7 +62,25 @@ function explain(reason: string, invariant: string | null): string {
   };
 
   if (table[code]) return table[code];
+
   if (code === 'fetched') return `External content read and screened (${reason.split(':')[1]}).`;
+
+  // redteam:<payload>:<outcome> — rendered as a sentence rather than echoing
+  // the code, which previously made every row print the same string twice.
+  if (code === 'redteam') {
+    const [, payload, outcome] = reason.split(':');
+    if (payload === 'corpus') {
+      return `Ran the full injection corpus. ${String(outcome || '').replace('_blocked', ' blocked')}.`;
+    }
+    if (outcome === 'blocked') {
+      return `Attack ${payload} was fired at the app and refused.`;
+    }
+    if (outcome === 'leaked') {
+      return `Attack ${payload} was fired and REACHED EXECUTION. This is a finding.`;
+    }
+    return `Attack ${payload} was fired; outcome ${outcome}.`;
+  }
+
   if (invariant === 'INV-11') return `Refused to fetch that link. ${reason}`;
   return reason;
 }
