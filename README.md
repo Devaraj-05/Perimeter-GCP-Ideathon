@@ -23,10 +23,21 @@ Your assistant reads it, holds your credentials, has tools — and absent a cont
 model's intent and the tool's execution, it obeys. This is **indirect prompt injection**, OWASP
 LLM01, and it is the one genuinely unsolved problem in agentic AI.
 
-Perimeter's claim is deliberately narrow and defensible:
+Perimeter's claim is deliberately narrow — narrower than the architecture makes it tempting to say:
 
-> **Untrusted content cannot cause a privileged action, because the component that reads
-> untrusted content has no privileges.**
+> **An injection can reach the privileged model. It still cannot reach an action, because the
+> thing standing between the model and the action is not a model.**
+
+There are two controls here and it matters which one is load-bearing. The **airlock** puts untrusted
+text in front of a model that holds no tools, so what crosses into the tool-holding Planner is
+bounded, typed, and framed as reported data about a document. That shrinks the attacker's bandwidth.
+It does not sever the channel — the Reader's output is still attacker-influenced text arriving in a
+privileged context — and a defence that depends on a model staying persuaded is not a boundary.
+
+The **Broker** is the boundary. It is a pure function: no model, no I/O, deny-by-default against a
+capability the user granted, tainted egress held for a fresh click regardless of any standing
+permission. Nothing an attacker writes changes how it decides, because there is no inference in it
+to change. The airlock is defence in depth around it.
 
 It does **not** claim to make the model injection-proof. An injected document can still make a
 summary wrong. It assumes the model can be compromised and puts the enforceable control outside it.
@@ -35,11 +46,11 @@ summary wrong. It assumes the model can be compromised and puts the enforceable 
 
 ## The result, measured honestly
 
-Twenty-three injection payloads run through the real defensive code (`npm run replay`), reported as
+Twenty-four injection payloads run through the real defensive code (`npm run replay`), reported as
 **two separate tables** — because a defence tested only against attacks its own author imagined
 proves very little, and averaging the two sets together would hide exactly that.
 
-#### Payloads we wrote (18)
+#### Payloads we wrote (19)
 
 | Payload | Class | Invariant | Architectural block | L1 detected |
 |---|---|---|---|---|
@@ -86,7 +97,7 @@ not a citation, and is not counted as one.
 #### Why the detection number is published as a miss
 
 The console also takes **an attack you write yourself**, run through the same code path and
-recorded in the same log. A fixed corpus invites one fair objection — *these are the seventeen
+recorded in the same log. A fixed corpus invites one fair objection — *these are the nineteen
 they made sure to handle* — and the answer to it should be a text box, not a paragraph.
 
 **Pattern-based detection (L1) caught only 10 of the 19 authored payloads — and that gap is the
@@ -119,8 +130,25 @@ flowchart LR
 - **The Perimeter Log** is append-only and hash-chained; the client cannot write to it, and the
   chain can be verified in-app.
 
-Seventeen numbered invariants (`CONSTITUTION.md` §2) are referenced by the code, the tests, and the
-log. Each is mechanically checkable.
+Seventeen numbered invariants (`CONSTITUTION.md` §2 and its amendments) are referenced by the code,
+the tests, and the log. Each is mechanically checkable.
+
+#### Prior art — the pattern is not ours
+
+The Reader/Planner split is the **Dual LLM pattern**, described by Simon Willison in April 2023
+([The Dual LLM pattern for building AI assistants that can resist prompt
+injection](https://simonwillison.net/2023/Apr/25/dual-llm-pattern/)), and given a formal capability
+system by Google DeepMind's **CaMeL** ([Debenedetti et al., *Defeating Prompt Injections by Design*,
+2025](https://arxiv.org/abs/2503.18813)). Citing Willison for payload T01 and not for the
+architecture would have been the wrong way round.
+
+What is ours is what shipping it actually costs, and those costs are in this repo rather than in a
+paper. The Planner has to be handed the user's own destination list or `send_digest` is a phantom
+tool that can never succeed (`server/planner.ts`). File upload forces a transcription call that is
+itself injectable, accepted openly rather than argued away (Amendment G). The Reader's typed output
+is attacker-influenced text arriving in a privileged context, so every field in it is length-capped
+and a test asserts the total (`server/reader.ts`, `server/airlock.test.ts`). And the pattern says
+nothing about what the user sees, which is why the Perimeter Log and the Red Team console exist.
 
 ---
 
@@ -144,7 +172,7 @@ to an authorisation decision: a client able to edit them could authorise itself.
 denies `create` as well as update and delete, so history cannot be fabricated either.
 
 ```
-npm run test:rules    # 75 tests against the Firestore emulator
+npm run test:rules    # 80 tests against the Firestore emulator
 ```
 
 **Roles are custom claims, not documents.** `users/{uid}` is owner-writable so the profile can
@@ -185,8 +213,8 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
 
 ## Honest limits
 
-- **Detection is probabilistic; the boundary is not.** L1 is pattern-based and evadable (6/12
-  above); the model classifier can be fooled. That is *why* neither is the control — a write still
+- **Detection is probabilistic; the boundary is not.** L1 is pattern-based and evadable — it missed
+  9 of the 19 authored payloads above; the model classifier can be fooled. That is *why* neither is the control — a write still
   requires a human click and the log still records the attempt.
 - **An injection can still corrupt a summary.** Schema-constrained output is still output. This is
   why derived content stays tainted and is marked in the UI.
@@ -216,8 +244,8 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 415 unit tests, no infrastructure needed
-npm run test:rules            # 75 emulator tests: 66 rules + 9 end-to-end egress
+npm test                      # 419 unit tests, no infrastructure needed
+npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
 

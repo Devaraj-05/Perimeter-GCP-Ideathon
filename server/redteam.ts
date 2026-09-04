@@ -294,7 +294,7 @@ redteamRouter.get('/payloads', requireAuth, (_req: AuthedRequest, res: Response)
       body: p.body,
       // Provenance travels with the payload so the console can show which
       // attacks we did not write. Without it the list silently implies we
-      // authored all seventeen.
+      // authored the whole corpus.
       provenance: p.provenance ?? 'authored',
       source: (p as any).source ?? null,
     })),
@@ -345,7 +345,7 @@ redteamRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response
  * Fires text the user typed themselves.
  *
  * This exists to answer the only real objection to a fixed corpus: "how do I
- * know these seventeen aren't just the ones you made sure to handle?" Here the
+ * know these aren't just the ones you made sure to handle?" Here the
  * attacker writes the attack. It runs through the same runPayload() as every
  * catalogued payload — same detection, same toolless Reader, same logging — so
  * there is no separate, friendlier path for text we have not seen.

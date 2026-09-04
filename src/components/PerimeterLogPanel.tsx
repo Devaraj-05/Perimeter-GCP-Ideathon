@@ -55,6 +55,8 @@ function explain(reason: string, invariant: string | null): string {
     unknown_tool: 'Refused. The assistant asked for a tool that does not exist.',
     invalid_args: 'Refused. The request was incomplete.',
     capability_matched: 'Allowed by a permission you granted.',
+    instruction_attempt_detected:
+      'This source tried to issue instructions to the assistant. It was read as data by a model that holds no tools, and nothing was run.',
     capability_granted: 'You granted a permission.',
     capability_revoked_by_user: 'You revoked a permission.',
     executed: 'Completed.',

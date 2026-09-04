@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPlannerRequest, computePlannerTaint, extractProposals } from './planner';
-import { buildReaderRequest } from './reader';
+import { buildReaderRequest, normaliseReaderOutput } from './reader';
 import { PerimeterViolation, Segment, Zone } from './segments';
 
 /**
@@ -223,5 +223,53 @@ describe('extractProposals', () => {
   it('normalises malformed calls rather than trusting model output', () => {
     const proposals = extractProposals({ functionCalls: [{ args: 'not-an-object' } as any] });
     expect(proposals).toEqual([{ tool: '', args: {} }]);
+  });
+});
+
+describe('airlock bandwidth — what a Reader can hand the Planner is bounded', () => {
+  /**
+   * The Reader's output crosses into a model that holds tools, so every field
+   * in it is attacker-influenced text arriving in a privileged context. The
+   * Broker is what stops an action; this is what stops the laundered payload
+   * being arbitrarily large. Capping the array length alone was not enough —
+   * ten unbounded key_points is still ten unbounded strings.
+   */
+  const long = 'A'.repeat(5_000);
+
+  it('caps each key_point, not just how many there are', () => {
+    const out = normaliseReaderOutput({ key_points: Array(50).fill(long) });
+    expect(out.key_points).toHaveLength(10);
+    for (const k of out.key_points) expect(k.length).toBeLessThanOrEqual(300);
+  });
+
+  it('caps each entity', () => {
+    const out = normaliseReaderOutput({ entities: Array(50).fill(long) });
+    expect(out.entities).toHaveLength(20);
+    for (const e of out.entities) expect(e.length).toBeLessThanOrEqual(100);
+  });
+
+  it('caps each date', () => {
+    const out = normaliseReaderOutput({ dates_mentioned: Array(50).fill(long) });
+    expect(out.dates_mentioned).toHaveLength(20);
+    for (const d of out.dates_mentioned) expect(d.length).toBeLessThanOrEqual(40);
+  });
+
+  it('bounds the total text one document can push into the Planner', () => {
+    const out = normaliseReaderOutput({
+      summary: long,
+      key_points: Array(50).fill(long),
+      entities: Array(50).fill(long),
+      dates_mentioned: Array(50).fill(long),
+      instruction_attempt_excerpt: long,
+    });
+    const total =
+      out.summary.length +
+      out.key_points.join('').length +
+      out.entities.join('').length +
+      out.dates_mentioned.join('').length +
+      (out.instruction_attempt_excerpt ?? '').length;
+    // 2000 + 3000 + 2000 + 800 + 200. Before the per-member cap this was
+    // unbounded: 50 x 5000 chars of attacker prose reached a tool-holding model.
+    expect(total).toBeLessThanOrEqual(8_000);
   });
 });

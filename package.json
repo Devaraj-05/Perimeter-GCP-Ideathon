@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "vitest run --dir server",
+    "test": "vitest run",
     "test:rules": "firebase emulators:exec --only firestore --project perimeter-rules-test \"vitest run --config vitest.rules.config.ts\"",
     "test:all": "npm run test && npm run test:rules",
     "replay": "tsx scripts/replay-corpus.ts"

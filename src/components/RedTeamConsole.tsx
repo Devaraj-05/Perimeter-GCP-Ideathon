@@ -192,7 +192,7 @@ export const RedTeamConsole: React.FC<RedTeamConsoleProps> = ({ isOpen, onClose 
         )}
 
         {/* Write your own.
-            A fixed list invites one fair objection: "these are the seventeen you
+            A fixed list invites one fair objection: "these are the ones you
             made sure to handle." This removes it — the viewer writes the attack,
             it runs through the same runPayload() as everything else, and the
             result is rendered by the same stageList() so there is visibly no

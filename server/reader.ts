@@ -139,15 +139,25 @@ export function assertReaderHasNoTools(request: { config?: Record<string, unknow
 /** Clamps and shapes whatever the model returned into a known good object. */
 export function normaliseReaderOutput(raw: unknown): ReaderOutput {
   const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const strings = (v: unknown, cap: number): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, cap) : [];
+  // Caps the array AND each member. Capping only the array left key_points,
+  // entities and dates_mentioned as unbounded attacker-chosen strings crossing
+  // into the Planner's context. That is the airlock's bandwidth rather than its
+  // boundary — the Broker is what refuses the action — but there is no reason to
+  // leave it wide, and each cap is sized to what the field legitimately holds.
+  const strings = (v: unknown, cap: number, chars: number): string[] =>
+    Array.isArray(v)
+      ? v
+          .filter((x): x is string => typeof x === 'string')
+          .slice(0, cap)
+          .map((x) => x.slice(0, chars))
+      : [];
 
   const sentiment = obj.sentiment;
   return {
     summary: typeof obj.summary === 'string' ? obj.summary.slice(0, 2000) : '',
-    key_points: strings(obj.key_points, 10),
-    entities: strings(obj.entities, 20),
-    dates_mentioned: strings(obj.dates_mentioned, 20),
+    key_points: strings(obj.key_points, 10, 300),
+    entities: strings(obj.entities, 20, 100),
+    dates_mentioned: strings(obj.dates_mentioned, 20, 40),
     sentiment:
       sentiment === 'positive' || sentiment === 'negative' || sentiment === 'mixed'
         ? sentiment

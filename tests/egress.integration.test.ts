@@ -32,6 +32,8 @@ let listDeliveries: any;
 let executeTool: any;
 let decideProposal: any;
 let adminDb: any;
+let claimOneShot: any;
+let mintCapability: any;
 
 const liveGrant = (tool: string, resource: string) => ({
   id: 'cap-int',
@@ -60,10 +62,13 @@ beforeAll(async () => {
   ({ executeTool } = await import('../server/execute'));
   ({ decideProposal } = await import('../server/broker'));
   ({ adminDb } = await import('../server/auth'));
+  ({ claimOneShot, mintCapability } = await import('../server/capabilities'));
 });
 
 afterAll(async () => {
   for (const uid of [ALICE, BOB]) {
+    const caps = await adminDb().collection('users').doc(uid).collection('capabilities').get();
+    await Promise.all(caps.docs.map((c: any) => c.ref.delete()));
     const dests = await adminDb().collection('users').doc(uid).collection('destinations').get();
     for (const d of dests.docs) {
       const deliveries = await d.ref.collection('deliveries').get();
@@ -205,5 +210,76 @@ describe('INV-5 egress path, end to end', () => {
         for (let i = 0; i < 10; i++) await createSandboxDestination(BOB, `d${i}`);
       })(),
     ).rejects.toThrow(/at most/i);
+  });
+});
+
+
+describe('INV-4 one-shot grants are at-most-once under concurrency', () => {
+  /**
+   * findLiveCapability -> decideProposal -> executeTool -> consumeCapability
+   * put a read, a decision and a write either side of a network call with no
+   * atomicity between them. Two concurrent turns both read the same live
+   * one-shot grant, both satisfied the broker, and both executed — so a
+   * "one-time permission" was at-LEAST-once, while the UI told the user it had
+   * "already been used".
+   *
+   * These fire the claim concurrently, which is the only way the old code was
+   * ever wrong. A sequential test passed against the broken version.
+   */
+  it('lets exactly one of N concurrent claims win', async () => {
+    const cap = await mintCapability(ALICE, {
+      tool: 'send_digest',
+      resource: 'destination:x',
+      oneShot: true,
+      hours: 1,
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => claimOneShot(ALICE, cap.id)),
+    );
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((r: boolean) => !r)).toHaveLength(7);
+  });
+
+  it('marks the grant used so a later sequential claim also loses', async () => {
+    const cap = await mintCapability(ALICE, {
+      tool: 'send_digest',
+      resource: 'destination:y',
+      oneShot: true,
+      hours: 1,
+    });
+
+    expect(await claimOneShot(ALICE, cap.id)).toBe(true);
+    expect(await claimOneShot(ALICE, cap.id)).toBe(false);
+  });
+
+  it('is a no-op that succeeds repeatedly for a standing grant', async () => {
+    const cap = await mintCapability(ALICE, {
+      tool: 'send_digest',
+      resource: 'destination:z',
+      oneShot: false,
+      hours: 1,
+    });
+
+    expect(await claimOneShot(ALICE, cap.id)).toBe(true);
+    expect(await claimOneShot(ALICE, cap.id)).toBe(true);
+  });
+
+  it('fails closed on a grant that does not exist', async () => {
+    expect(await claimOneShot(ALICE, 'no-such-capability')).toBe(false);
+  });
+
+  it("cannot claim another user's grant", async () => {
+    const cap = await mintCapability(BOB, {
+      tool: 'send_digest',
+      resource: 'destination:bob',
+      oneShot: true,
+      hours: 1,
+    });
+
+    // Scoped by uid path, so Alice's claim looks up a document that is not there.
+    expect(await claimOneShot(ALICE, cap.id)).toBe(false);
+    expect(await claimOneShot(BOB, cap.id)).toBe(true);
   });
 });

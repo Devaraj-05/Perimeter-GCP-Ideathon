@@ -1,4 +1,25 @@
 /**
+ * SUPERSEDED BY THE AIRLOCK — read this before believing anything below.
+ *
+ * `assembleContext` and `DATA_ONLY_PREAMBLE` are the PRE-AIRLOCK design
+ * (Amendment A.2) and are on no live code path. Nothing in the running
+ * application imports them; `grep -rn assembleContext server/ src/` returns
+ * this file and its test and nothing else. Only the `ContextArtifact` type is
+ * still used, by server/agent.ts.
+ *
+ * They are kept, clearly labelled, rather than deleted because AUDIT.md F1
+ * cites this file as the critical INV-1 violation and the fix should be
+ * legible next to the finding. Note what `assembleContext` does: it places
+ * raw untrusted bodies into `contextBlock`, which agent.ts then handed to a
+ * tool-bound call. That is exactly the thing the airlock replaced. Fencing
+ * plus a system-position preamble is a prompt-level defence — the reason it
+ * was not enough is the reason server/reader.ts and server/planner.ts exist.
+ *
+ * Do not reintroduce a caller. A call to `assembleContext` on a tool-bound
+ * path is an INV-1 violation.
+ */
+
+/**
  * Prompt Assembler - Amendment A.2.
  *
  * The one rule this file exists to enforce: untrusted content is only ever

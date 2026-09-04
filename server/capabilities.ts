@@ -115,6 +115,42 @@ export async function consumeCapability(uid: string, capId: string): Promise<voi
   await capsRef(uid).doc(capId).update({ usedAt: new Date().toISOString() });
 }
 
+/**
+ * Atomically claims a one-shot grant BEFORE the tool runs. Returns false if
+ * another caller already claimed it.
+ *
+ * findLiveCapability -> decideProposal -> executeTool -> consumeCapability is
+ * a read, a decision and a write with network I/O in between and no atomicity
+ * anywhere in it. Two concurrent turns both read the same live one-shot grant,
+ * both satisfy the broker, and both execute — so "one shot" meant at-LEAST-once
+ * rather than at-most-once, and `explainReason('capability_already_used')`
+ * promised the user a guarantee the code did not make.
+ *
+ * The claim moves ahead of execution deliberately. A crash or a failed run now
+ * burns the grant, which is the cost of the trade: for an egress tool, sending
+ * twice is a worse outcome than making the user grant permission again.
+ * Constitution §8 — fail closed — settles which way this goes.
+ */
+export async function claimOneShot(uid: string, capId: string): Promise<boolean> {
+  const ref = capsRef(uid).doc(capId);
+  try {
+    return await adminDb().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return false;
+      const cap = snap.data() as Capability;
+      // Re-checked inside the transaction: liveness read outside it is stale
+      // by definition, and staleness is the whole bug.
+      if (!cap.oneShot) return true;
+      if (cap.usedAt || cap.revokedAt) return false;
+      tx.update(ref, { usedAt: new Date().toISOString() });
+      return true;
+    });
+  } catch {
+    // Fail closed: an unreadable claim is not a claim.
+    return false;
+  }
+}
+
 export async function revokeCapability(uid: string, capId: string): Promise<boolean> {
   const doc = capsRef(uid).doc(capId);
   if (!(await doc.get()).exists) return false;

@@ -7,7 +7,7 @@ import { read as readerRead, ReaderOutput } from './reader';
 import { buildPlannerRequest, computePlannerTaint, extractProposals } from './planner';
 import { Segment, PerimeterViolation } from './segments';
 import { decideProposal, resourceOf, sideEffectOf, explainReason } from './broker';
-import { findLiveCapability, consumeCapability, mintCapability, revokeCapability, listCapabilities } from './capabilities';
+import { findLiveCapability, claimOneShot, mintCapability, revokeCapability, listCapabilities } from './capabilities';
 import { logEvent, listEvents, verifyChain } from './perimeterLog';
 import { createSandboxDestination, listDestinations, listDeliveries } from './destinations';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
@@ -219,6 +219,35 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
           sourceRef: artifact.sourceRef ?? null,
           output,
         });
+
+        // S6. The Reader is the only component that actually read this
+        // document, which makes its finding the strongest attempt signal in
+        // the system — and it was being handed to the Planner and dropped.
+        // Pattern matching (L1) misses roughly half the corpus, so without
+        // this row, whether the user ever learns an attempt was made came
+        // down to the Planner choosing to mention it in prose. A model
+        // deciding whether to disclose is not a visibility guarantee, and
+        // "shows you every attempt" cannot rest on one.
+        //
+        // Logged as an observation, not a decision: nothing was refused
+        // here. The refusal, if a tool call follows, is its own event.
+        if (output.contains_instruction_attempt) {
+          await logEvent(uid, {
+            kind: 'reader',
+            zone: 'UNTRUSTED',
+            tool: null,
+            decision: null,
+            reason: 'instruction_attempt_detected',
+            invariant: 'INV-1',
+            detail: {
+              segmentId: artifact.id,
+              sourceRef: artifact.sourceRef ?? null,
+              // Already capped at 200 chars upstream; §7 caps it again here.
+              excerpt: output.instruction_attempt_excerpt ?? '',
+              detectedBy: 'reader',
+            },
+          }).catch(() => undefined);
+        }
       } catch (err: any) {
         // Constitution section 8: a Reader failure degrades, it never falls
         // back to passing raw untrusted text to the Planner. The document is
@@ -309,15 +338,33 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       );
 
       let executed: unknown = null;
+      // INV-4. A one-shot grant is claimed transactionally BEFORE the tool
+      // runs. It used to be consumed after a successful execution, which meant
+      // findLiveCapability and consumeCapability sat either side of a network
+      // call with no atomicity between them: two concurrent turns both read the
+      // same live grant, both satisfied the broker, and both executed. For a
+      // standing grant claimOneShot is a no-op that returns true.
+      let claimLost = false;
       if (effectiveAllow && verdict.allow) {
+        claimLost = capability ? !(await claimOneShot(uid, capability.id)) : true;
+      }
+
+      if (effectiveAllow && verdict.allow && claimLost) {
+        // Losing the claim is a denial and is logged as one. Silently skipping
+        // execution would leave the user told a tool ran when it did not.
+        await logEvent(uid, {
+          kind: 'decision',
+          tool: proposal.tool,
+          decision: 'deny',
+          reason: 'capability_already_used',
+          invariant: 'INV-4',
+          detail: { args: proposal.args, resource, turnTaint, originSourceIds },
+        });
+      }
+
+      if (effectiveAllow && verdict.allow && !claimLost) {
         const result = await executeTool(uid, proposal.tool, proposal.args);
         executed = result.result ?? null;
-
-        // One-shot grants are consumed only after a successful execution, so
-        // a failed run does not silently burn the user's permission.
-        if (result.ok && capability?.oneShot) {
-          await consumeCapability(uid, capability.id).catch(() => undefined);
-        }
 
         await logEvent(uid, {
           kind: 'execute',
@@ -332,12 +379,18 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
         tool: proposal.tool,
         args: proposal.args,
         sideEffect,
-        decision: effectiveAllow ? 'ALLOW' : (verdict as any).needsConfirmation ? 'CONFIRM' : 'DENY',
-        reason: effectiveReason,
-        invariant: verdict.allow ? null : (verdict as any).invariant,
+        decision: claimLost
+          ? 'DENY'
+          : effectiveAllow
+            ? 'ALLOW'
+            : (verdict as any).needsConfirmation
+              ? 'CONFIRM'
+              : 'DENY',
+        reason: claimLost ? 'capability_already_used' : effectiveReason,
+        invariant: claimLost ? 'INV-4' : verdict.allow ? null : (verdict as any).invariant,
         // The sentence the UI shows. A reason code the user cannot read is a
         // decision they cannot reason about.
-        explanation: explainReason(effectiveReason),
+        explanation: explainReason(claimLost ? 'capability_already_used' : effectiveReason),
         turnTaint,
         originSourceIds,
         result: executed,
@@ -402,17 +455,49 @@ agentRouter.post('/approve', requireAuth, async (req: AuthedRequest, res: Respon
     if (!callId) return res.status(400).json({ error: 'callId is required.' });
 
     const ref = userRoot(uid).collection('toolcalls').doc(callId);
-    const snap = await ref.get();
-    if (!snap.exists) return res.status(404).json({ error: 'Tool call not found.' });
 
-    const call = snap.data() as any;
-    if (call.status !== 'pending') {
-      return res.status(409).json({ error: `This call is already ${call.status}.` });
+    // The pending check and the status write must be one atomic step. Reading
+    // status === 'pending', awaiting executeTool, then writing 'executed' is a
+    // TOCTOU window: two concurrent approvals of the same callId both saw
+    // 'pending' and both executed. send_digest is egress and not idempotent, so
+    // one human click could produce N outbound sends — the hazard Constitution
+    // §8 names when it forbids retrying a non-idempotent egress call.
+    //
+    // Firestore retries a contended transaction, so exactly one caller moves
+    // pending -> executing and every other is refused with 409. A process that
+    // dies mid-flight leaves the call stuck in 'executing' and it never runs
+    // again; that is the fail-closed direction and the correct one here.
+    let call: any;
+    let claimStatus = 0;
+    let claimMessage = '';
+    try {
+      call = await adminDb().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+          claimStatus = 404;
+          claimMessage = 'Tool call not found.';
+          return null;
+        }
+        const d = snap.data() as any;
+        if (d.status !== 'pending') {
+          claimStatus = 409;
+          claimMessage = `This call is already ${d.status}.`;
+          return null;
+        }
+        if (d.expiresAt && new Date(d.expiresAt).getTime() < Date.now()) {
+          tx.update(ref, { status: 'expired', resolvedAt: new Date().toISOString() });
+          claimStatus = 410;
+          claimMessage = 'This approval request has expired.';
+          return null;
+        }
+        tx.update(ref, { status: 'executing', claimedAt: new Date().toISOString() });
+        return d;
+      });
+    } catch {
+      // An unreadable claim is not a claim (§8, fail closed).
+      return res.status(503).json({ error: 'Could not claim this approval. Please retry.' });
     }
-    if (call.expiresAt && new Date(call.expiresAt).getTime() < Date.now()) {
-      await ref.update({ status: 'expired', resolvedAt: new Date().toISOString() });
-      return res.status(410).json({ error: 'This approval request has expired.' });
-    }
+    if (!call) return res.status(claimStatus || 409).json({ error: claimMessage || 'Unavailable.' });
 
     // B.4 / INV-4: policy is re-evaluated at execution time, not trusted from
     // enqueue time. A proposal that became unsafe while queued - a revoked
@@ -441,6 +526,7 @@ agentRouter.post('/approve', requireAuth, async (req: AuthedRequest, res: Respon
         turnTaint: call.turnTaint === true,
         originSourceIds: call.originSourceIds || [],
       });
+      // Release the claim to a terminal state; 'executing' is only ever transient.
       await ref.update({ status: 'denied', reason: recheck.reason, resolvedAt: new Date().toISOString() });
       return res.status(403).json({
         error: explainReason(recheck.reason),

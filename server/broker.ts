@@ -197,6 +197,8 @@ export function explainReason(reason: string): string {
       return 'Blocked: the request could not be read.';
     case 'capability_matched':
       return 'Allowed by a permission you granted.';
+    case 'instruction_attempt_detected':
+      return 'Noted: this source tried to issue instructions to the assistant. It was read as data and nothing was run.';
     default:
       return reason;
   }

@@ -9,7 +9,7 @@
 | For | See |
 |---|---|
 | What it defends against, the measured result, honest limits | [`README.md`](README.md) |
-| The threat model, all eleven invariants, and their amendments | [`CONSTITUTION.md`](CONSTITUTION.md) |
+| The threat model, all seventeen invariants, and their amendments | [`CONSTITUTION.md`](CONSTITUTION.md) |
 | The pre-migration audit that motivated the rework | [`AUDIT.md`](AUDIT.md) |
 | Threat Summary Tables by zone | [`docs/threat-model.md`](docs/threat-model.md) |
 | The scheduled-ingest / OIDC setup | [`docs/scheduler-setup.md`](docs/scheduler-setup.md) |
@@ -50,5 +50,5 @@ therefore reaches a context with nothing to call. The **Broker** — a pure func
 model in it — decides every action against a capability the user granted. Every decision is
 recorded in an append-only, hash-chained log the client cannot write to.
 
-Eleven numbered invariants govern this; they live in [`CONSTITUTION.md`](CONSTITUTION.md) §2
+Seventeen numbered invariants govern this; they live in [`CONSTITUTION.md`](CONSTITUTION.md) §2
 and are referenced by the code, the tests, and the log.
