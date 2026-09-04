@@ -18,7 +18,6 @@ export interface TurnInput {
 export interface ConversationInput {
   content: string;
   mode: string;
-  mood: string;
   category: string;
   turns: TurnInput[];
 }
@@ -58,7 +57,7 @@ export function buildConversationContents(input: ConversationInput): GeminiConte
   const content = typeof input.content === 'string' ? input.content.trim() : '';
   const turns = Array.isArray(input.turns) ? input.turns : [];
 
-  let contextHeader = `[User Context: Mood: ${input.mood}, Category: ${input.category}, Mode: ${input.mode}]\n`;
+  let contextHeader = `[User Context: Category: ${input.category}, Mode: ${input.mode}]\n`;
   if (content) {
     contextHeader += `[Initial Journal Entry]:\n${content}\n\n`;
   }

@@ -64,7 +64,6 @@ export default function App() {
       title: '',
       content: '',
       category: 'Personal',
-      mood: 'Reflective',
       mode: 'companion',
       turns: [],
       createdAt: new Date().toISOString(),

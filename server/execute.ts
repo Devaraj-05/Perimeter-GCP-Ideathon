@@ -89,7 +89,6 @@ async function createNote(
     title: title.slice(0, 200),
     content: body.slice(0, 20_000),
     category: 'Ideas & Brainstorming',
-    mood: 'Reflective',
     mode: 'companion',
     turns: [],
     // Provenance: a note the agent created is marked as such, so it is never

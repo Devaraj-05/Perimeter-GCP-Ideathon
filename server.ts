@@ -87,7 +87,6 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
     const data = req.body && typeof req.body === 'object' ? req.body : {};
     const content = typeof data.content === 'string' ? data.content.trim() : '';
     const mode = typeof data.mode === 'string' ? data.mode : 'companion';
-    const mood = typeof data.mood === 'string' ? data.mood : 'Neutral';
     const category = typeof data.category === 'string' ? data.category : 'General';
     const turns = Array.isArray(data.turns) ? data.turns : [];
 
@@ -99,7 +98,7 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
     // Multi-turn is a graded Phase 2 requirement; leaving it inline meant the
     // only way to verify it was to click the app.
     const systemInstruction = buildSystemInstruction(mode);
-    const contents = buildConversationContents({ content, mode, mood, category, turns });
+    const contents = buildConversationContents({ content, mode, category, turns });
 
     const { text, modelUsed } = await generateContentWithFallback(contents, {
       systemInstruction,

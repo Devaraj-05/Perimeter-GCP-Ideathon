@@ -1,6 +1,6 @@
 import { requestReflection } from './geminiApi';
 import { agentChat, ThreatEvent } from './agentApi';
-import { ReflectionMode, MoodType, CategoryType, TurnMessage } from '../types';
+import { ReflectionMode, CategoryType, TurnMessage } from '../types';
 
 /**
  * Chooses how a journal reflection is answered.
@@ -27,7 +27,6 @@ const MODE_GUIDANCE: Record<ReflectionMode, string> = {
 export interface ReflectParams {
   content: string;
   mode: ReflectionMode;
-  mood: MoodType;
   category: CategoryType;
   turns: TurnMessage[];
   /** Artifact ids to ground this reflection in. Empty = ungrounded. */
@@ -55,7 +54,7 @@ function composeMessage(params: ReflectParams): string {
 
   return [
     MODE_GUIDANCE[params.mode] ?? MODE_GUIDANCE.companion,
-    `The writer's current mood is ${params.mood}; the entry is filed under ${params.category}.`,
+    `The entry is filed under ${params.category}.`,
     '',
     recent ? `Conversation so far:\n${recent}` : '',
     '',
@@ -72,7 +71,6 @@ export async function reflectGrounded(params: ReflectParams): Promise<ReflectRes
     const r = await requestReflection({
       content: params.content,
       mode: params.mode,
-      mood: params.mood,
       category: params.category,
       turns: params.turns,
     });

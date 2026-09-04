@@ -12,7 +12,7 @@ import {
   MoreVertical,
   Pencil,
 } from 'lucide-react';
-import { JournalEntry, CategoryType, MoodType } from '../types';
+import { JournalEntry, CategoryType } from '../types';
 
 interface HistorySidebarProps {
   entries: JournalEntry[];
@@ -66,7 +66,6 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     };
   }, [menu]);
   const [selectedCategory, setSelectedCategory] = useState<'All' | CategoryType>('All');
-  const [selectedMood, setSelectedMood] = useState<string>('All');
 
   // Filter entries
   const filteredEntries = useMemo(() => {
@@ -81,12 +80,9 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       const matchesCat =
         selectedCategory === 'All' || entry.category === selectedCategory;
 
-      const matchesMood =
-        selectedMood === 'All' || entry.mood === selectedMood;
-
-      return matchesSearch && matchesCat && matchesMood;
+      return matchesSearch && matchesCat;
     });
-  }, [entries, searchQuery, selectedCategory, selectedMood]);
+  }, [entries, searchQuery, selectedCategory]);
 
   // Group entries by date
   const groupedEntries = useMemo<Record<string, JournalEntry[]>>(() => {
@@ -287,15 +283,6 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                 }`}
                               >
                                 {item.category}
-                              </span>
-                              <span
-                                className={`rounded px-1.5 py-0.5 ${
-                                  isActive
-                                    ? 'bg-[#484833] text-stone-200'
-                                    : 'bg-[#faf5ee] text-[#8a8a75] border border-[#e5e0d3]'
-                                }`}
-                              >
-                                {item.mood}
                               </span>
                             </div>
 

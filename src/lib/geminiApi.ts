@@ -1,4 +1,4 @@
-import { ReflectionMode, MoodType, CategoryType, TurnMessage } from '../types';
+import { ReflectionMode, CategoryType, TurnMessage } from '../types';
 import { authedHeaders, readError } from './apiClient';
 
 export interface ReflectResponse {
@@ -19,7 +19,6 @@ export interface SummarizeResponse {
 export async function requestReflection(params: {
   content: string;
   mode: ReflectionMode;
-  mood: MoodType;
   category: CategoryType;
   turns: TurnMessage[];
 }): Promise<ReflectResponse> {

@@ -32,12 +32,6 @@ export const InsightsModal: React.FC<InsightsModalProps> = ({
     catCounts[e.category] = (catCounts[e.category] || 0) + 1;
   });
 
-  // Mood counts
-  const moodCounts: { [k: string]: number } = {};
-  entries.forEach((e) => {
-    moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
-  });
-
   // Collect all actionable takeaways
   const allInsights: string[] = [];
   entries.forEach((e) => {
@@ -118,26 +112,6 @@ export const InsightsModal: React.FC<InsightsModalProps> = ({
                 </div>
               );
             })}
-          </div>
-        </div>
-
-        {/* Mood Distribution */}
-        <div className="mt-6 space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[#5a5a40]">
-            Mood Distribution
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(moodCounts).map(([m, count]) => (
-              <div
-                key={m}
-                className="flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-1.5 text-xs font-medium text-[#434338]"
-              >
-                <span>{m}</span>
-                <span className="rounded bg-[#f3efe6] border border-[#e5e0d3] px-1.5 py-0.5 text-[10px] text-[#5a5a40]">
-                  {count}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
 

@@ -1,5 +1,3 @@
-export type MoodType = 'Reflective' | 'Grateful' | 'Energized' | 'Stressed' | 'Curious' | 'Calm' | 'Determined' | 'Overwhelmed';
-
 export type CategoryType = 'Personal' | 'Career & Ambition' | 'Mindfulness & Gratitude' | 'Ideas & Brainstorming' | 'Relationships' | 'Learning';
 
 export type ReflectionMode = 'companion' | 'brainstorm' | 'socratic' | 'gratitude_wellness' | 'executive_summary';
@@ -18,7 +16,6 @@ export interface JournalEntry {
   title: string;
   content: string;
   category: CategoryType;
-  mood: MoodType;
   mode: ReflectionMode;
   summary?: string;
   insights?: string[];

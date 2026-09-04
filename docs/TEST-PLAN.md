@@ -46,7 +46,7 @@ Left to right:
 |---|---|
 | **Title** field | Names the entry. Placeholder: "Give your reflection a title…" |
 | **Mode** selector | Five modes: Thought Companion, Brainstorm & Ideas, Socratic Inquiry, Mindfulness & Grounding, Executive Synthesis. Each changes how Gemini responds. |
-| **Mood** / **Category** selectors | Metadata attached to the entry |
+| **Category** selector | Files the entry and drives the history filter |
 | **Body** textarea | Where you write. Placeholder about what is on your mind. |
 | 🎤 **Mic** | Speech-to-text dictation (browser-dependent) |
 | **Reflect with Gemini** | Sends your entry to Gemini for a response |

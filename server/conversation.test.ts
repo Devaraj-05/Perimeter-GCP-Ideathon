@@ -13,7 +13,7 @@ import { buildConversationContents, buildSystemInstruction } from './conversatio
  * These tests exist so that would show up red instead.
  */
 
-const base = { mode: 'companion', mood: 'Reflective', category: 'Personal' };
+const base = { mode: 'companion', category: 'Personal' };
 
 describe('multi-turn conversation (G4)', () => {
   it('a first message becomes a single user turn', () => {
@@ -70,18 +70,20 @@ describe('multi-turn conversation (G4)', () => {
     expect(contents[1].parts[0].text).not.toContain('[User Context:');
   });
 
-  it('includes mood, category and mode in the context header', () => {
+  it('includes category and mode in the context header', () => {
     const contents = buildConversationContents({
       content: 'x',
       mode: 'socratic',
-      mood: 'Curious',
       category: 'Learning',
       turns: [],
     });
     const text = contents[0].parts[0].text;
-    expect(text).toContain('Curious');
     expect(text).toContain('Learning');
     expect(text).toContain('socratic');
+    // Mood was removed: it decorated the UI and contributed one token of
+    // context. Category drives the history filter and mode changes how the
+    // assistant answers, so both stayed.
+    expect(text).not.toMatch(/Mood/i);
   });
 
   it('treats any non-user role as model, never dropping the turn', () => {

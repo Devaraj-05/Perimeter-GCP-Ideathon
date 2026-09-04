@@ -33,7 +33,6 @@ import {
 import {
   JournalEntry,
   TurnMessage,
-  MoodType,
   CategoryType,
   ReflectionMode,
 } from '../types';
@@ -64,7 +63,7 @@ interface JournalEditorProps {
    * True when this account has no saved entries yet.
    *
    * Drives the one-time orientation banner below. Without it a first-time
-   * visitor sees moods and modes and concludes this is a chat app — the entire
+   * visitor sees categories and modes and concludes this is a chat app — the entire
    * reason the project exists is behind navigation they have no reason to
    * touch.
    */
@@ -87,17 +86,6 @@ const CATEGORIES: CategoryType[] = [
   'Ideas & Brainstorming',
   'Relationships',
   'Learning',
-];
-
-const MOODS: { type: MoodType; label: string; icon: string }[] = [
-  { type: 'Reflective', label: 'Reflective', icon: '🤔' },
-  { type: 'Grateful', label: 'Grateful', icon: '🙏' },
-  { type: 'Energized', label: 'Energized', icon: '⚡' },
-  { type: 'Calm', label: 'Calm', icon: '🌿' },
-  { type: 'Curious', label: 'Curious', icon: '💡' },
-  { type: 'Stressed', label: 'Stressed', icon: '🌪️' },
-  { type: 'Determined', label: 'Determined', icon: '🎯' },
-  { type: 'Overwhelmed', label: 'Overwhelmed', icon: '🌊' },
 ];
 
 const MODES: {
@@ -154,7 +142,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [title, setTitle] = useState(entry.title || '');
   const [content, setContent] = useState(entry.content || '');
   const [category, setCategory] = useState<CategoryType>(entry.category || 'Personal');
-  const [mood, setMood] = useState<MoodType>(entry.mood || 'Reflective');
   const [mode, setMode] = useState<ReflectionMode>(entry.mode || 'companion');
   const [turns, setTurns] = useState<TurnMessage[]>(entry.turns || []);
   const [summary, setSummary] = useState<string | undefined>(entry.summary);
@@ -195,7 +182,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setTitle(entry.title || '');
     setContent(entry.content || '');
     setCategory(entry.category || 'Personal');
-    setMood(entry.mood || 'Reflective');
     setLocation(entry.location);
     setLocationError(null);
     titledRef.current = false;
@@ -435,7 +421,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     title: title.trim() || 'Untitled Reflection',
     content,
     category,
-    mood,
     mode,
     turns,
     summary,
@@ -520,7 +505,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       const response = await reflectGrounded({
         content: userPrompt,
         mode,
-        mood,
         category,
         turns: updatedTurns,
         groundingArtifactIds,
@@ -580,7 +564,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       const response = await reflectGrounded({
         content: content.trim(),
         mode,
-        mood,
         category,
         turns: updatedTurns,
         groundingArtifactIds,
@@ -660,7 +643,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const handleExportMarkdown = () => {
     const lines = [
       `# ${title || 'Journal Reflection'}`,
-      `**Date:** ${new Date(entry.createdAt).toLocaleDateString()} | **Category:** ${category} | **Mood:** ${mood}` +
+      `**Date:** ${new Date(entry.createdAt).toLocaleDateString()} | **Category:** ${category}` +
         (location ? ` | **Place:** ${location.placeName}` : ''),
       '',
       `## Journal Entry`,
@@ -784,7 +767,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           </div>
         </div>
 
-        {/* Category & Mood metadata pills */}
+        {/* Category, place and sentiment */}
         <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-[#f0ede6] text-xs">
           {/* Category Dropdown */}
           <div className="flex items-center gap-1.5">
@@ -801,26 +784,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Mood Selector */}
-          <div className="flex items-center gap-1.5 ml-2">
-            <Smile className="h-3.5 w-3.5 text-[#8a8a75]" />
-            <select
-              id="mood-select"
-              value={mood}
-              onChange={(e) => {
-                setMood(e.target.value as MoodType);
-                setHasUnsavedChanges(true);
-              }}
-              className="rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-xs font-medium text-[#434338] focus:border-[#5a5a40] focus:outline-hidden"
-            >
-              {MOODS.map((m) => (
-                <option key={m.type} value={m.type}>
-                  {m.icon} {m.label}
                 </option>
               ))}
             </select>
