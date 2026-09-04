@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Calendar,
-  Sparkles,
   ChevronRight,
   Filter,
   Trash2,
@@ -265,32 +264,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between mt-2 pt-1 text-[10px]">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`rounded px-1.5 py-0.5 ${
-                                  isActive
-                                    ? 'bg-[#484833] text-amber-200'
-                                    : 'bg-[#f3efe6] text-[#5a5a40] border border-[#e5e0d3]'
-                                }`}
-                              >
-                                {item.category}
-                              </span>
-                            </div>
-
+                          <div className="flex items-center justify-end mt-1 text-[10px]">
                             <div className="flex items-center gap-1">
-                              {item.turns && item.turns.length > 0 && (
-                                <span
-                                  className={`flex items-center gap-0.5 ${
-                                    isActive ? 'text-amber-200' : 'text-[#5a5a40]'
-                                  }`}
-                                  title={`${item.turns.length} dialogue turns with Gemini`}
-                                >
-                                  <Sparkles className="h-3 w-3" />
-                                  <span>{item.turns.length}</span>
-                                </span>
-                              )}
-
                               <div className="relative">
                                 <button
                                   type="button"
