@@ -183,3 +183,34 @@ describe('INV-18 — the scanner does not think', () => {
     expect(SOURCE).not.toMatch(/ingestUntrustedText/);
   });
 });
+
+describe('signal quality in a repository', () => {
+  /**
+   * A finding a user learns to scroll past is worse than one never shown: it
+   * teaches them to distrust the whole report. Scanning this project's own
+   * repository produced thirteen matches on README.md, eight of them
+   * offdomain_url, burying instruction_override and concealment_request.
+   */
+  it('treats offdomain_url as noise inside a repository', async () => {
+    const source = readFileSync(join(process.cwd(), 'server', 'reposcan.ts'), 'utf8');
+    expect(source).toContain('NOISE_IN_REPOSITORIES');
+    expect(source).toContain("'offdomain_url'");
+  });
+
+  it('does not discard any signal that can stand on its own', () => {
+    // Only weak, non-high-confidence signals may ever be filtered. If this
+    // list grows to include one that justifies a hostile verdict alone, the
+    // scan has started hiding the findings it exists to surface.
+    const source = readFileSync(join(process.cwd(), 'server', 'reposcan.ts'), 'utf8');
+    for (const strong of [
+      'instruction_override',
+      'concealment_request',
+      'tool_invocation_request',
+      'fake_system_role',
+      'hidden_unicode',
+      'bidi_override',
+    ]) {
+      expect(source.includes(`NOISE_IN_REPOSITORIES = new Set([${strong}`)).toBe(false);
+    }
+  });
+});

@@ -26,6 +26,33 @@ export const MAX_TOTAL_BYTES = 5_000_000;
 export const WALL_CLOCK_MS = 60_000;
 
 /**
+ * Blobs fetched at once.
+ *
+ * Serial was honest but slow: 500 files at ~150ms each is over a minute, so
+ * the wall-clock cap ended most scans before the caps that were supposed to.
+ * Eight is chosen to be fast without bursting — GitHub throttles concurrent
+ * requests separately from the hourly budget, and a scan that trips secondary
+ * rate limiting costs every user of the deployment, not just this one.
+ */
+export const CONCURRENCY = 8;
+
+/**
+ * Signals that carry no information in a repository.
+ *
+ * offdomain_url asks "does this link point somewhere other than the source's
+ * own domain?" — a real question about a fetched web page, and a meaningless
+ * one about a README, where linking outward is the entire point. Scanning this
+ * project's own repository produced thirteen matches on README.md, eight of
+ * them offdomain_url, burying the two that mattered.
+ *
+ * This is not suppressing an inconvenient result. The signal is weak by its own
+ * weighting (0.15, and not high-confidence), and a finding a user learns to
+ * scroll past is worse than one that was never shown: it teaches them to
+ * distrust the whole report.
+ */
+const NOISE_IN_REPOSITORIES = new Set(['offdomain_url']);
+
+/**
  * Files an agent is built to obey.
  *
  * A poisoned one of these is the highest-value target in any repository:
@@ -68,6 +95,15 @@ export type StopReason = 'complete' | 'max_files' | 'max_bytes' | 'time' | 'rate
 export interface RepoFinding {
   path: string;
   matches: Match[];
+}
+
+/** Emitted as each batch lands, so a long scan is legible while it runs. */
+export interface ScanProgress {
+  scanned: number;
+  total: number;
+  /** The last path read in this batch. Shown so progress is visibly real. */
+  path: string;
+  findings: number;
 }
 
 export interface RepoScanResult {
@@ -163,11 +199,18 @@ export function summariseCoverage(input: {
 /**
  * Scans one public repository.
  *
- * Sequential rather than parallel on purpose: bursting 500 requests at the
- * GitHub API is how a scan turns into a rate-limit ban for every user of this
- * deployment, and the wall-clock cap already bounds the wait.
+ * Fetches in bounded batches rather than one at a time. Findings are collected
+ * by the file's position in the prioritised list and sorted before returning,
+ * so a scan of an unchanged repository reports in the same order every time
+ * even though the fetches finish out of order.
+ *
+ * @param onProgress called after each batch. Purely for display — nothing about
+ * the scan's result depends on anyone listening.
  */
-export async function scanRepository(repoRef: string): Promise<RepoScanResult> {
+export async function scanRepository(
+  repoRef: string,
+  onProgress?: (p: ScanProgress) => void,
+): Promise<RepoScanResult> {
   const startedAt = Date.now();
 
   const defaultBranch = await fetchDefaultBranch(repoRef);
@@ -175,16 +218,15 @@ export async function scanRepository(repoRef: string): Promise<RepoScanResult> {
 
   const eligible = prioritise(tree.filter(isScannable));
 
-  const findings: RepoFinding[] = [];
+  const found = new Map<number, RepoFinding>();
   let filesScanned = 0;
   let bytesScanned = 0;
   let stoppedBy: StopReason = 'complete';
 
-  for (const entry of eligible) {
-    if (filesScanned >= MAX_FILES) {
-      stoppedBy = 'max_files';
-      break;
-    }
+  const capped = eligible.slice(0, MAX_FILES);
+  if (eligible.length > MAX_FILES) stoppedBy = 'max_files';
+
+  for (let start = 0; start < capped.length; start += CONCURRENCY) {
     if (bytesScanned >= MAX_TOTAL_BYTES) {
       stoppedBy = 'max_bytes';
       break;
@@ -194,29 +236,53 @@ export async function scanRepository(repoRef: string): Promise<RepoScanResult> {
       break;
     }
 
-    let text: string;
-    try {
-      text = await fetchBlobText(repoRef, entry.sha, MAX_BLOB_BYTES);
-    } catch (err) {
-      // A rate limit ends the scan and is reported as coverage, not as a
-      // failure: partial findings the user can act on beat an error page.
-      if (err instanceof IngestError && /rate limit/i.test(err.message)) {
-        stoppedBy = 'rate_limit';
-        break;
-      }
-      // One unreadable blob is not a reason to abandon the other 499.
-      continue;
+    const batch = capped.slice(start, start + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (entry, offset) => {
+        try {
+          const text = await fetchBlobText(repoRef, entry.sha, MAX_BLOB_BYTES);
+          return { index: start + offset, entry, text, rateLimited: false };
+        } catch (err) {
+          const rateLimited =
+            err instanceof IngestError && /rate limit|unauthenticated budget/i.test(err.message);
+          // One unreadable blob is not a reason to abandon the other 499.
+          return { index: start + offset, entry, text: null, rateLimited };
+        }
+      }),
+    );
+
+    let lastPath = '';
+    for (const r of results) {
+      if (r.rateLimited) stoppedBy = 'rate_limit';
+      if (r.text === null) continue;
+
+      filesScanned++;
+      bytesScanned += Buffer.byteLength(r.text, 'utf8');
+      lastPath = r.entry.path;
+
+      // The repository's own domain is not a signal here — every link in a
+      // README points outward. Passing the host allowlist keeps offdomain_url
+      // from firing on every file and drowning the findings that matter.
+      const { matches } = detectL1(r.text, {
+        allowedHosts: ['github.com', 'githubusercontent.com'],
+      });
+      const signal = matches.filter((m) => !NOISE_IN_REPOSITORIES.has(m.signal));
+      if (signal.length > 0) found.set(r.index, { path: r.entry.path, matches: signal });
     }
 
-    filesScanned++;
-    bytesScanned += Buffer.byteLength(text, 'utf8');
+    onProgress?.({
+      scanned: filesScanned,
+      total: capped.length,
+      path: lastPath,
+      findings: found.size,
+    });
 
-    // The repository's own domain is not a signal here — every link in a
-    // README points outward. Passing the host allowlist keeps offdomain_url
-    // from firing on every file and drowning the findings that matter.
-    const { matches } = detectL1(text, { allowedHosts: ['github.com', 'githubusercontent.com'] });
-    if (matches.length > 0) findings.push({ path: entry.path, matches });
+    if (stoppedBy === 'rate_limit') break;
   }
+
+  // Sorted by position in the prioritised list, not by completion order, so a
+  // rerun of an unchanged repository reports identically.
+  const findings = [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f);
 
   return {
     repo: repoRef,

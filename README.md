@@ -262,9 +262,19 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   files and issues, was considered and rejected; the mitigation is ordering, not suppression.
 
 - **A repository scan needs `GITHUB_TOKEN` to finish.** Unauthenticated, the GitHub API allows
-  60 requests an hour, which cannot walk the tree of any real repository — the scan will stop
-  early and say so. With the token it allows 5,000. Caps are 500 files, 256 KB per file, 5 MB
-  total and 60 seconds; whichever trips first ends the scan and is named in the coverage line.
+  60 requests an hour, which cannot walk the tree of any real repository. Measured: scanning this
+  project's own repo without a token read **50 of 121 files** before the budget ran out, then
+  stopped and said so rather than failing. With the token it allows 5,000. Caps are 500 files,
+  256 KB per file, 5 MB total and 60 seconds; whichever trips first ends the scan and is named in
+  the coverage line. Blobs are fetched eight at a time — enough to be quick, not enough to trip
+  GitHub's separate concurrency throttle.
+
+- **The scan drops `offdomain_url` findings.** That signal asks whether a link points away from
+  a source's own domain — a real question about a fetched web page, a meaningless one about a
+  README, where linking outward is the point. Left in, it produced eight of the thirteen matches
+  on this project's own README and buried the two that mattered. It is the only signal filtered,
+  it is the weakest one by the project's own weighting, and no signal that can justify a hostile
+  verdict on its own is ever dropped — asserted in `reposcan.test.ts`.
 
 - **Gmail runs unverified.** `gmail.readonly` is a Google *restricted* scope; production
   verification needs a security assessment and weeks of review. The consent screen is in

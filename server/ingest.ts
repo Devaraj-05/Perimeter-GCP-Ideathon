@@ -635,7 +635,20 @@ ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Res
       return res.status(400).json({ error: 'Expected a repository as "owner/name".' });
     }
 
-    const result = await scanRepository(repo);
+    // NDJSON: one JSON object per line, flushed as each batch lands. A tree
+    // walk takes tens of seconds and a spinner with no numbers reads as a
+    // hang, so progress is streamed rather than withheld until the end.
+    //
+    // Streamed over POST rather than SSE deliberately: EventSource cannot set
+    // an Authorization header, and moving the token into a query string to
+    // work around that would put a credential in URLs and access logs.
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const result = await scanRepository(repo, (progress) => {
+      res.write(JSON.stringify({ type: 'progress', ...progress }) + '\n');
+    });
 
     await logEvent(uid, {
       kind: 'ingest',
@@ -654,13 +667,23 @@ ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Res
       },
     });
 
-    res.json(result);
+    res.write(JSON.stringify({ type: 'result', ...result }) + '\n');
+    res.end();
   } catch (err: any) {
-    if (err instanceof IngestError) {
-      // Describes our own refusal or GitHub's answer, never an internal path.
-      return res.status(err.retryable ? 503 : 400).json({ error: err.message });
+    const message =
+      err instanceof IngestError
+        ? err.message
+        : 'That scan could not be completed. Please retry.';
+    if (!(err instanceof IngestError)) {
+      console.error('[ingest] repo scan failed:', err?.message);
     }
-    console.error('[ingest] repo scan failed:', err?.message);
-    res.status(500).json({ error: 'That scan could not be completed. Please retry.' });
+
+    // Once bytes are on the wire the status line is already sent, so a failure
+    // mid-scan has to arrive as a line in the stream rather than as a status.
+    if (res.headersSent) {
+      res.write(JSON.stringify({ type: 'error', error: message }) + '\n');
+      return res.end();
+    }
+    res.status(err instanceof IngestError && err.retryable ? 503 : 400).json({ error: message });
   }
 });

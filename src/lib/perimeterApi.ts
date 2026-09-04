@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient';
+import { apiFetch, authedHeaders } from './apiClient';
 import { Source, Artifact, IngestRunResult, Match } from '../types';
 
 /**
@@ -209,16 +209,73 @@ export interface RepoScanResult {
   findings: RepoFinding[];
 }
 
+export interface ScanProgress {
+  scanned: number;
+  total: number;
+  path: string;
+  findings: number;
+}
+
 /**
  * Scans a public repository for prompt injections — INV-18.
  *
  * Nothing here reaches a model. The server fetches the tree, matches each file
- * against the deterministic patterns, and returns spans. It cannot summarise
- * the repository and is not meant to.
+ * against the deterministic patterns, and streams back spans. It cannot
+ * summarise the repository and is not meant to.
+ *
+ * The response is NDJSON — one JSON object per line — so progress arrives while
+ * the scan runs instead of after it. Read with fetch and a stream reader rather
+ * than EventSource, because EventSource cannot set an Authorization header and
+ * the workaround is putting a credential in a URL.
+ *
+ * No client timeout: a 500-file scan legitimately takes longer than a normal
+ * request, and the server's own wall-clock cap is what bounds it.
  */
-export async function scanRepository(repo: string): Promise<RepoScanResult> {
-  return apiFetch<RepoScanResult>('/api/ingest/repo-scan', {
+export async function scanRepository(
+  repo: string,
+  onProgress?: (p: ScanProgress) => void,
+): Promise<RepoScanResult> {
+  const res = await fetch('/api/ingest/repo-scan', {
     method: 'POST',
+    headers: await authedHeaders(),
     body: JSON.stringify({ repo }),
   });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? 'That repository could not be scanned.');
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('That repository could not be scanned.');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: RepoScanResult | null = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Keep the trailing fragment: a chunk boundary can fall mid-line.
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let event: any;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (event.type === 'progress') onProgress?.(event as ScanProgress);
+      else if (event.type === 'result') result = event as RepoScanResult;
+      else if (event.type === 'error') throw new Error(event.error);
+    }
+  }
+
+  if (!result) throw new Error('The scan ended without a result. Please retry.');
+  return result;
 }

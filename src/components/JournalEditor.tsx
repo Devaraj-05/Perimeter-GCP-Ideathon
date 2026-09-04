@@ -50,6 +50,7 @@ import {
   gmailIngest,
   scanRepository,
   type RepoScanResult,
+  type ScanProgress,
 } from '../lib/perimeterApi';
 import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
@@ -199,6 +200,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [repoRef, setRepoRef] = useState('');
   const [repoScanning, setRepoScanning] = useState(false);
   const [repoResult, setRepoResult] = useState<RepoScanResult | null>(null);
+  /** Live scan progress. A tree walk takes tens of seconds; a bare spinner reads as a hang. */
+  const [repoProgress, setRepoProgress] = useState<ScanProgress | null>(null);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -677,13 +680,15 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setRepoScanning(true);
     setAttachError(null);
     setRepoResult(null);
+    setRepoProgress(null);
     try {
-      setRepoResult(await scanRepository(ref));
+      setRepoResult(await scanRepository(ref, setRepoProgress));
       setRepoPrompt(false);
     } catch (err: any) {
       setAttachError(err?.message ?? 'That repository could not be scanned.');
     } finally {
       setRepoScanning(false);
+      setRepoProgress(null);
     }
   };
 
@@ -1142,17 +1147,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
       {/* Grounding notice — shown only when connected sources are in play, so
           the user knows external content reached the conversation. */}
-      {groundingArtifactIds.length > 0 && (
+      {/*
+          The "Grounded in N items" banner is gone. It counted every artifact
+          the account had ever ingested, which is not something the user is
+          doing right now and not a number they can act on. What matters about
+          a turn is whether THIS turn touched external content, and that is on
+          the chips and in the taint notice below.
+      */}
+      {lastTurnTainted && (
         <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 rounded-xl border border-[#e5e0d3] bg-[#f3efe6] px-3.5 py-2.5 text-xs text-[#434338]">
           <Github className="h-4 w-4 shrink-0 text-[#5a5a40]" />
-          <span>
-            Grounded in <strong>{groundingArtifactIds.length}</strong> item
-            {groundingArtifactIds.length === 1 ? '' : 's'} from your connected sources.
-            {lastTurnTainted && (
-              <span className="ml-1 font-medium text-rose-700">
-                Untrusted content was screened before the assistant read it.
-              </span>
-            )}
+          <span className="font-medium text-rose-700">
+            Untrusted content was screened before the assistant read it.
           </span>
         </div>
       )}
@@ -1529,6 +1535,35 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     Cancel
                   </button>
                 </div>
+
+                {repoProgress && (
+                  <div className="mt-2.5">
+                    <div className="flex items-baseline justify-between gap-2 text-[10px] text-[#5a5a40]">
+                      <span className="truncate font-mono">{repoProgress.path || 'reading…'}</span>
+                      <span className="shrink-0 tabular-nums">
+                        {repoProgress.scanned} / {repoProgress.total}
+                        {repoProgress.findings > 0 && (
+                          <span className="ml-1.5 font-medium text-rose-700">
+                            {repoProgress.findings} found
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#e5e0d3]">
+                      <div
+                        className="h-full rounded-full bg-[#5a5a40] transition-[width] duration-200"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (repoProgress.scanned / Math.max(1, repoProgress.total)) * 100,
+                            ),
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

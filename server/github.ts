@@ -147,6 +147,13 @@ export async function fetchOpenIssues(
  * fetch path with weaker rules. Every caller passes a path built from
  * isValidRepoRef-validated, URL-encoded components; no caller passes a URL.
  */
+function minutesUntilReset(header: string | null): string {
+  const reset = Number(header);
+  if (!Number.isFinite(reset) || reset <= 0) return '';
+  const minutes = Math.max(1, Math.ceil((reset * 1000 - Date.now()) / 60_000));
+  return ` It resets in about ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+}
+
 async function ghFetch(path: string, accept: string): Promise<Response> {
   const url = `https://${ALLOWED_HOST}${path}`;
   assertAllowedHost(url);
@@ -156,7 +163,7 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'perimeter-ingest',
   };
-  const token = process.env.GITHUB_TOKEN;
+  const token = process.env.GITHUB_TOKEN?.trim();
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
@@ -177,10 +184,38 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     throw new IngestError('Repository not found, or it is private.', false);
   }
   if (res.status === 401 || res.status === 403) {
-    if (res.headers.get('x-ratelimit-remaining') === '0') {
-      throw new IngestError('GitHub rate limit exceeded. Try again shortly.', true);
+    // "Check the configured token" was the old message for all of these, which
+    // is actively misleading when there is no token to check. Each of these
+    // causes needs a different action from the operator, so each gets its own
+    // sentence.
+    const remaining = res.headers.get('x-ratelimit-remaining');
+    const ceiling = res.headers.get('x-ratelimit-limit') ?? '60';
+    const resetsIn = minutesUntilReset(res.headers.get('x-ratelimit-reset'));
+
+    // GitHub's own explanation, capped and treated as third-party text.
+    const detail = await res
+      .json()
+      .then((b: any) => (typeof b?.message === 'string' ? b.message.slice(0, 200) : ''))
+      .catch(() => '');
+
+    if (remaining === '0') {
+      throw new IngestError(
+        token
+          ? `GitHub rate limit reached (${ceiling}/hour).${resetsIn}`
+          : `GitHub allows ${ceiling} unauthenticated requests an hour and this server has spent them.${resetsIn} Set GITHUB_TOKEN to raise the limit to 5,000.`,
+        true,
+      );
     }
-    throw new IngestError('GitHub rejected the request. Check the configured token.', false);
+    if (!token) {
+      throw new IngestError(
+        `GitHub refused the request and no GITHUB_TOKEN is configured.${detail ? ` GitHub said: ${detail}` : ''}`,
+        false,
+      );
+    }
+    throw new IngestError(
+      `GitHub rejected the configured GITHUB_TOKEN — it may be expired, revoked, or missing the scope for this repository.${detail ? ` GitHub said: ${detail}` : ''}`,
+      false,
+    );
   }
   if (!res.ok) {
     throw new IngestError(`GitHub returned ${res.status}.`, res.status >= 500);
@@ -188,9 +223,14 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
 
   // A budget this thin cannot finish a tree walk, and a scan that dies at file
   // 400 with an error is worse than one that stops and says how far it got.
-  const remaining = Number(res.headers.get('x-ratelimit-remaining') ?? '999');
-  if (Number.isFinite(remaining) && remaining <= 2) {
-    throw new IngestError('GitHub rate limit exceeded. Try again shortly.', true);
+  const left = Number(res.headers.get('x-ratelimit-remaining') ?? '999');
+  if (Number.isFinite(left) && left <= 2) {
+    throw new IngestError(
+      token
+        ? `GitHub rate limit nearly exhausted.${minutesUntilReset(res.headers.get('x-ratelimit-reset'))}`
+        : `GitHub's unauthenticated budget for this server is nearly spent.${minutesUntilReset(res.headers.get('x-ratelimit-reset'))} Set GITHUB_TOKEN to raise it to 5,000.`,
+      true,
+    );
   }
 
   return res;

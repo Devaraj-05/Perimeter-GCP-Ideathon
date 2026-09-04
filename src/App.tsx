@@ -79,12 +79,12 @@ export default function App() {
       const userEntries = await fetchUserEntries(currentUser.uid);
       setEntries(userEntries);
 
-      if (userEntries.length > 0) {
-        setActiveEntry(userEntries[0]);
-      } else {
-        const fresh = createNewEntryTemplate(currentUser.uid);
-        setActiveEntry(fresh);
-      }
+      // Always open on a blank entry, never on the last one.
+      //
+      // Reopening the previous conversation puts whatever was last attached
+      // back in front of the user before they have asked anything, and the
+      // history is one click away in the sidebar. A new session starts empty.
+      setActiveEntry(createNewEntryTemplate(currentUser.uid));
     } catch (err: any) {
       console.error('Failed to load user entries from Firestore:', err);
       setSaveError(err?.message || 'Could not load your journal entries.');

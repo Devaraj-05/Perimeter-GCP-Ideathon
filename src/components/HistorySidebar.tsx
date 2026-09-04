@@ -265,17 +265,6 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                             </span>
                           </div>
 
-                          <p
-                            className={`text-[11px] line-clamp-2 mt-1 ${
-                              isActive ? 'text-[#f3efe6]' : 'text-[#5a5a40]'
-                            }`}
-                          >
-                            {item.summary ||
-                              item.content ||
-                              item.turns?.find((t) => t.role === 'user')?.text ||
-                              'No text written.'}
-                          </p>
-
                           <div className="flex items-center justify-between mt-2 pt-1 text-[10px]">
                             <div className="flex items-center gap-1.5">
                               <span
