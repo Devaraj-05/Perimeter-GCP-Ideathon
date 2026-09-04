@@ -467,9 +467,25 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     try {
       const result = await requestSummary({ content: saved.content, turns: saved.turns });
       const generated = (result.title || '').trim();
-      if (!generated) return;
-      setTitle(generated);
-      await onSave({ ...saved, title: generated, updatedAt: new Date().toISOString() });
+      // The Insights modal and the Synthesis card used to depend on a button
+      // the user had to press. With that button gone, this one call — already
+      // being made for the title — populates all of it, so synthesis appears on
+      // its own after the first exchange.
+      if (result.summary) setSummary(result.summary);
+      if (result.insights?.length) setInsights(result.insights);
+      if (result.tags?.length) setTags(result.tags);
+      if (result.sentiment) setSentiment(result.sentiment);
+      if (generated) setTitle(generated);
+
+      await onSave({
+        ...saved,
+        title: generated || saved.title,
+        summary: result.summary,
+        insights: result.insights,
+        tags: result.tags,
+        sentiment: result.sentiment,
+        updatedAt: new Date().toISOString(),
+      });
     } catch {
       // Leave it untitled; the user can rename it from the history menu.
       titledRef.current = false;
@@ -540,6 +556,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       };
       await onSave(updated);
       setHasUnsavedChanges(false);
+      // Name and synthesise the entry from the exchange, once. The chat is now
+      // the only input, so this is where an entry earns its title.
+      void autoTitle(updated);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Gemini reflection request failed.');
     } finally {
@@ -985,142 +1004,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-6">
-        {/* Reflection Mode Card */}
-        <div className="rounded-2xl border border-[#e5e0d3] bg-white p-4 shadow-2xs">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-[#8a8a75]">
-              Select Gemini Reflection Style
-            </label>
-            <span className="text-[11px] text-[#8a8a75]">Powered by Gemini 3.6 Flash</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {MODES.map((m) => {
-              const Icon = m.icon;
-              const isSelected = mode === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => {
-                    setMode(m.id);
-                    setHasUnsavedChanges(true);
-                  }}
-                  className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-[#5a5a40] bg-[#5a5a40] text-white shadow-xs'
-                      : 'border-[#e5e0d3] bg-[#fcfaf7] text-[#434338] hover:bg-[#f3efe6]'
-                  }`}
-                >
-                  <Icon
-                    className={`h-4 w-4 mb-1.5 ${
-                      isSelected ? 'text-amber-200' : 'text-[#5a5a40]'
-                    }`}
-                  />
-                  <div className="font-medium text-xs truncate w-full">{m.name}</div>
-                  <div
-                    className={`text-[10px] mt-0.5 line-clamp-1 ${
-                      isSelected ? 'text-[#e5e0d3]' : 'text-[#8a8a75]'
-                    }`}
-                  >
-                    {m.desc}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Primary Journal Writing Area */}
-        <div className="rounded-2xl border border-[#e5e0d3] bg-white p-5 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between text-xs text-[#8a8a75]">
-            <span className="font-medium text-[#2c2c24]">Your Reflection & Journal Entry</span>
-            <div className="flex items-center gap-3">
-              <span>
-                {wordCount} words &bull; {charCount} chars
-              </span>
-              <button
-                type="button"
-                onClick={toggleSpeech}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
-                  isListening
-                    ? 'bg-red-100 text-red-700 animate-pulse'
-                    : 'bg-[#f3efe6] text-[#5a5a40] border border-[#e5e0d3] hover:bg-[#e5e0d3]'
-                }`}
-                title="Voice dictation"
-              >
-                {isListening ? (
-                  <>
-                    <MicOff className="h-3 w-3" />
-                    <span>Listening...</span>
-                  </>
-                ) : (
-                  <>
-                    <Mic className="h-3 w-3" />
-                    <span>Dictate</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <textarea
-            id="journal-content-textarea"
-            value={content}
-            onChange={(e) => {
-              setContent(e.target.value);
-              setHasUnsavedChanges(true);
-            }}
-            placeholder="Write down what is on your mind, what challenged you today, a decision you are wrestling with, or something you are grateful for..."
-            rows={7}
-            className="w-full rounded-xl border border-[#e5e0d3] bg-[#fdfcf9] p-3.5 text-sm sm:text-base leading-relaxed text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden resize-y font-sans"
-          />
-
-          {/* Primary Action Trigger Buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2">
-              <button
-                id="reflect-gemini-btn"
-                type="button"
-                onClick={handleReflectWithGemini}
-                disabled={isGenerating || !content.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#5a5a40] px-4 py-2.5 text-xs sm:text-sm font-medium text-white shadow-xs hover:bg-[#484833] focus:outline-hidden disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                {isGenerating ? (
-                  <RefreshCw className="h-4 w-4 animate-spin text-amber-200" />
-                ) : (
-                  <Sparkles className="h-4 w-4 text-amber-200" />
-                )}
-                <span>
-                  {isGenerating ? 'Gemini is reflecting...' : 'Reflect with Gemini'}
-                </span>
-              </button>
-
-              <button
-                id="synthesize-summary-btn"
-                type="button"
-                onClick={handleGenerateSummary}
-                disabled={isSummarizing || (!content.trim() && turns.length === 0)}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#e5e0d3] bg-[#f3efe6] px-3.5 py-2.5 text-xs sm:text-sm font-medium text-[#434338] hover:bg-[#e5e0d3] focus:outline-hidden disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                {isSummarizing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin text-[#5a5a40]" />
-                ) : (
-                  <FileText className="h-4 w-4 text-[#5a5a40]" />
-                )}
-                <span>
-                  {isSummarizing ? 'Synthesizing...' : 'Extract Summary & Insights'}
-                </span>
-              </button>
-            </div>
-
-            {turns.length > 0 && (
-              <span className="text-xs text-[#8a8a75]">
-                {turns.length} exchange{turns.length === 1 ? '' : 's'} recorded
-              </span>
-            )}
-          </div>
-        </div>
+        {/* The conversation IS the journal.
+            The mode picker and the separate "write your entry" textarea were
+            removed: two input areas on one screen is confusing, and the theme
+            is a chat that reads your untrusted world, not a form. Mode still
+            exists and defaults to a warm journalling companion; it simply is no
+            longer a control the user has to set before typing. */}
 
         {/* Executive Summary & Insights Card (If generated) */}
         {(summary || (insights && insights.length > 0)) && (
@@ -1493,7 +1382,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 type="text"
                 value={followUpInput}
                 onChange={(e) => setFollowUpInput(e.target.value)}
-                placeholder="Ask a follow-up question, add a thought, or request another angle..."
+                placeholder={turns.length === 0 ? "What is on your mind? Or add something with + and ask about it…" : "Ask a follow-up, or add another angle…"}
                 disabled={isGenerating}
                 className="flex-1 rounded-xl border border-[#e5e0d3] bg-[#f8f6f0] px-4 py-2.5 text-xs sm:text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:bg-white focus:border-[#5a5a40] focus:outline-hidden transition-colors"
               />

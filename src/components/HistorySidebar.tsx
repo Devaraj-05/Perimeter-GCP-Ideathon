@@ -270,7 +270,10 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                               isActive ? 'text-[#f3efe6]' : 'text-[#5a5a40]'
                             }`}
                           >
-                            {item.summary || item.content || 'No text written.'}
+                            {item.summary ||
+                              item.content ||
+                              item.turns?.find((t) => t.role === 'user')?.text ||
+                              'No text written.'}
                           </p>
 
                           <div className="flex items-center justify-between mt-2 pt-1 text-[10px]">
