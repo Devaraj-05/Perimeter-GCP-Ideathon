@@ -28,6 +28,7 @@ import {
   ClipboardPaste,
   FileUp,
   Mail,
+  Plus,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -164,6 +165,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   // Attachments (Amendment F). Chips are local display state; the artifacts
   // themselves live server-side and drive grounding.
   const [attachMenu, setAttachMenu] = useState<null | 'note' | 'link'>(null);
+  const [plusOpen, setPlusOpen] = useState(false);
   const [attachDraft, setAttachDraft] = useState('');
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -196,6 +198,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setMood(entry.mood || 'Reflective');
     setLocation(entry.location);
     setLocationError(null);
+    titledRef.current = false;
     setMode(entry.mode || 'companion');
     setTurns(entry.turns || []);
     setSummary(entry.summary);
@@ -444,12 +447,47 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   });
 
   // Handle Save
+  /** Guards against firing the title request more than once per entry. */
+  const titledRef = useRef(false);
+
+  /**
+   * Names an entry from its content, once.
+   *
+   * A history list showing "CANDIDATE PROFILE Name: Alex Morgan Position:..."
+   * is unreadable — the first 60 characters of a pasted document say nothing
+   * about what the conversation was. The summarise endpoint already returns a
+   * 3-6 word title; it was only ever wired to the Insights button, so titles
+   * appeared only if the user happened to press it.
+   *
+   * Fires in the background and fails silently: a missing title is a cosmetic
+   * problem and must never block a save or surface an error.
+   */
+  const autoTitle = async (saved: JournalEntry) => {
+    if (titledRef.current) return;
+    const current = (saved.title || '').trim();
+    if (current && current !== 'Untitled Reflection') return;
+    if (!saved.content.trim() && saved.turns.length === 0) return;
+
+    titledRef.current = true;
+    try {
+      const result = await requestSummary({ content: saved.content, turns: saved.turns });
+      const generated = (result.title || '').trim();
+      if (!generated) return;
+      setTitle(generated);
+      await onSave({ ...saved, title: generated, updatedAt: new Date().toISOString() });
+    } catch {
+      // Leave it untitled; the user can rename it from the history menu.
+      titledRef.current = false;
+    }
+  };
+
   const handleSave = async () => {
     setErrorMsg(null);
     try {
       const updated = getCurrentEntryObject();
       await onSave(updated);
       setHasUnsavedChanges(false);
+      void autoTitle(updated);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to save reflection to Firestore.');
     }
@@ -1316,58 +1354,99 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               onSubmit={handleSendFollowUp}
               className="mt-4 pt-3 border-t border-[#f0ede6] flex items-center gap-2"
             >
-              <button
-                type="button"
-                id="attach-note-btn"
-                onClick={() => setAttachMenu(attachMenu === 'note' ? null : 'note')}
-                title="Paste text as untrusted content"
-                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6]"
-              >
-                <ClipboardPaste className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                id="attach-link-btn"
-                onClick={() => setAttachMenu(attachMenu === 'link' ? null : 'link')}
-                title="Add a web page"
-                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6]"
-              >
-                <Link2 className="h-4 w-4" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void submitFile(f);
-                }}
-              />
-              <button
-                type="button"
-                id="attach-mail-btn"
-                onClick={() => void handleMail()}
-                disabled={attaching}
-                title="Connect a mailbox, or read recent messages"
-                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
-              >
-                <Mail className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                id="attach-file-btn"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={attaching}
-                title="Upload a PDF or image"
-                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
-              >
-                {attaching ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileUp className="h-4 w-4" />
+              {/* One entry point instead of four.
+                  Four bare icons beside the composer read as a toolbar and
+                  make the user decode each one before typing. A single + that
+                  opens a labelled menu is the pattern people already know from
+                  every other assistant, and it leaves room to add sources
+                  without the row growing again. */}
+              <div className="relative shrink-0">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void submitFile(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  id="attach-menu-btn"
+                  onClick={() => setPlusOpen((v) => !v)}
+                  disabled={attaching}
+                  title="Add something for it to read"
+                  aria-haspopup="menu"
+                  aria-expanded={plusOpen}
+                  className="inline-flex h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+                >
+                  {attaching ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </button>
+
+                {plusOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setPlusOpen(false)} />
+                    <div className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white py-1 shadow-lg">
+                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8a8a75]">
+                        Everything here is treated as hostile
+                      </p>
+                      {[
+                        {
+                          id: 'menu-note',
+                          Icon: ClipboardPaste,
+                          label: 'Paste text',
+                          hint: 'An email, a message, an excerpt',
+                          run: () => setAttachMenu('note'),
+                        },
+                        {
+                          id: 'menu-link',
+                          Icon: Link2,
+                          label: 'Add a web page',
+                          hint: 'Fetched on the server',
+                          run: () => setAttachMenu('link'),
+                        },
+                        {
+                          id: 'menu-file',
+                          Icon: FileUp,
+                          label: 'Upload a PDF or image',
+                          hint: 'Text is read, the file is discarded',
+                          run: () => fileInputRef.current?.click(),
+                        },
+                        {
+                          id: 'menu-mail',
+                          Icon: Mail,
+                          label: 'Connect a mailbox',
+                          hint: 'Read-only, recent messages',
+                          run: () => void handleMail(),
+                        },
+                      ].map(({ id, Icon, label, hint, run }) => (
+                        <button
+                          key={id}
+                          id={id}
+                          type="button"
+                          onClick={() => {
+                            setPlusOpen(false);
+                            run();
+                          }}
+                          className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f3efe6]"
+                        >
+                          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#5a5a40]" />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-medium text-[#2c2c24]">{label}</span>
+                            <span className="block text-[10px] text-[#8a8a75]">{hint}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
-              </button>
+              </div>
+
               <input
                 id="followup-input"
                 type="text"

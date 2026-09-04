@@ -104,6 +104,27 @@ export default function App() {
    */
   // Stable identity. An inline arrow here would give the prop a new identity
   // every render, which is what caused the SourcesPanel render loop.
+  /**
+   * Renames an entry. Titles are generated from content, so they will
+   * sometimes be wrong — a generated title the user cannot correct is worse
+   * than no title.
+   */
+  const handleRenameEntry = useCallback(
+    async (entryId: string, title: string) => {
+      const existing = entries.find((e) => e.id === entryId);
+      if (!user || !existing) return;
+      const updated = { ...existing, title, updatedAt: new Date().toISOString() };
+      setEntries((prev) => prev.map((e) => (e.id === entryId ? updated : e)));
+      setActiveEntry((prev) => (prev && prev.id === entryId ? updated : prev));
+      try {
+        await saveUserEntry(user.uid, updated);
+      } catch (err: any) {
+        setSaveError(err?.message || 'Could not rename that reflection.');
+      }
+    },
+    [entries, user],
+  );
+
   const handleArtifactsChanged = useCallback((artifacts: { id: string }[]) => {
     setGroundingArtifactIds(artifacts.map((a) => a.id));
   }, []);
@@ -301,6 +322,7 @@ export default function App() {
         {/* History Sidebar */}
         <HistorySidebar
           entries={entries}
+        onRenameEntry={handleRenameEntry}
           activeEntryId={activeEntry?.id || null}
           onSelectEntry={handleSelectEntry}
           onNewEntry={handleNewEntry}

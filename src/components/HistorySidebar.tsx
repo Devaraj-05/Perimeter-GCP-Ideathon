@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   Calendar,
@@ -9,6 +9,8 @@ import {
   Tag,
   BookOpen,
   Plus,
+  MoreVertical,
+  Pencil,
 } from 'lucide-react';
 import { JournalEntry, CategoryType, MoodType } from '../types';
 
@@ -18,9 +20,14 @@ interface HistorySidebarProps {
   onSelectEntry: (entry: JournalEntry) => void;
   onNewEntry: () => void;
   onDeleteEntry: (entryId: string) => void;
+  /** Renames an entry in place. Titles are generated, so they need correcting. */
+  onRenameEntry: (entryId: string, title: string) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
+
+/** Which entry's row menu is open, if any. */
+type MenuState = { id: string } | null;
 
 const CATEGORIES: ('All' | CategoryType)[] = [
   'All',
@@ -38,10 +45,26 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onSelectEntry,
   onNewEntry,
   onDeleteEntry,
+  onRenameEntry,
   isOpen,
   onToggle,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [menu, setMenu] = useState<MenuState>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+
+  // A menu with no way out is a trap. Escape and any outside click close it.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
   const [selectedCategory, setSelectedCategory] = useState<'All' | CategoryType>('All');
   const [selectedMood, setSelectedMood] = useState<string>('All');
 
@@ -208,13 +231,32 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                           }`}
                         >
                           <div className="flex items-start justify-between gap-1.5">
-                            <h4
-                              className={`font-serif text-xs font-semibold line-clamp-1 ${
-                                isActive ? 'text-white' : 'text-[#2c2c24]'
-                              }`}
-                            >
-                              {item.title || 'Untitled Reflection'}
-                            </h4>
+                            {renaming?.id === item.id ? (
+                              <input
+                                autoFocus
+                                value={renaming.value}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRenaming({ id: item.id, value: e.target.value })}
+                                onBlur={() => {
+                                  const v = renaming.value.trim();
+                                  if (v && v !== item.title) onRenameEntry(item.id, v);
+                                  setRenaming(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                  if (e.key === 'Escape') setRenaming(null);
+                                }}
+                                className="min-w-0 flex-1 rounded border border-[#5a5a40] bg-white px-1.5 py-0.5 font-serif text-xs font-semibold text-[#2c2c24] focus:outline-hidden"
+                              />
+                            ) : (
+                              <h4
+                                className={`font-serif text-xs font-semibold line-clamp-1 ${
+                                  isActive ? 'text-white' : 'text-[#2c2c24]'
+                                }`}
+                              >
+                                {item.title || 'Untitled Reflection'}
+                              </h4>
+                            )}
                             <span
                               className={`text-[10px] shrink-0 ${
                                 isActive ? 'text-[#e5e0d3]' : 'text-[#8a8a75]'
@@ -270,23 +312,51 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                 </span>
                               )}
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (confirm('Delete this reflection?')) {
-                                    onDeleteEntry(item.id);
-                                  }
-                                }}
-                                className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
-                                  isActive
-                                    ? 'text-stone-300 hover:text-red-300'
-                                    : 'text-[#8a8a75] hover:text-red-600'
-                                }`}
-                                title="Delete entry"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMenu(menu?.id === item.id ? null : { id: item.id });
+                                  }}
+                                  className={`p-1 rounded transition-opacity ${
+                                    menu?.id === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                  } ${isActive ? 'text-stone-300 hover:text-white' : 'text-[#8a8a75] hover:text-[#2c2c24]'}`}
+                                  title="More"
+                                  aria-haspopup="menu"
+                                  aria-expanded={menu?.id === item.id}
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                </button>
+
+                                {menu?.id === item.id && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-[#e5e0d3] bg-white py-1 shadow-lg"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setRenaming({ id: item.id, value: item.title || '' });
+                                        setMenu(null);
+                                      }}
+                                      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[#434338] hover:bg-[#f3efe6]"
+                                    >
+                                      <Pencil className="h-3 w-3" /> Rename
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setMenu(null);
+                                        if (confirm('Delete this reflection?')) onDeleteEntry(item.id);
+                                      }}
+                                      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-3 w-3" /> Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
