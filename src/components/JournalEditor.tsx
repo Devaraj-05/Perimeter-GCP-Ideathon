@@ -36,6 +36,7 @@ import {
   TurnMessage,
   CategoryType,
   ReflectionMode,
+  Match,
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
@@ -50,6 +51,7 @@ import {
 } from '../lib/perimeterApi';
 import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
+import { InjectionReport } from './InjectionReport';
 import { UntrustedText } from './UntrustedText';
 
 interface JournalEditorProps {
@@ -179,8 +181,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<
-    { id: string; title: string; verdict: 'clean' | 'suspicious' | 'hostile' }[]
+    {
+      id: string;
+      title: string;
+      verdict: 'clean' | 'suspicious' | 'hostile';
+      /** Where each signal fired. Empty is a real answer: nothing matched. */
+      matches: Match[];
+    }[]
   >([]);
+  /** Which attachment's evidence panel is open, if any. */
+  const [reportFor, setReportFor] = useState<string | null>(null);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -359,7 +369,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       const r = await ingestFile(file);
       setAttachments((prev) => [
         ...prev,
-        { id: r.artifactId, title: r.title, verdict: r.verdict },
+        { id: r.artifactId, title: r.title, verdict: r.verdict, matches: r.matches ?? [] },
       ]);
       onAttached?.();
     } catch (err: any) {
@@ -396,7 +406,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       }
       setAttachments((prev) => [
         ...prev,
-        ...messages.map((m) => ({ id: m.artifactId, title: m.title, verdict: m.verdict })),
+        ...messages.map((m) => ({
+          id: m.artifactId,
+          title: m.title,
+          verdict: m.verdict,
+          matches: m.matches ?? [],
+        })),
       ]);
       onAttached?.();
     } catch (err: any) {
@@ -441,6 +456,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           id: r.artifactId,
           title: offer.kind === 'link' ? (r as any).url ?? offer.text : (r as any).title ?? 'Pasted text',
           verdict: r.verdict,
+          matches: r.matches ?? [],
         },
       ]);
       // It is an attachment now, not a chat message: take it out of the box.
@@ -471,6 +487,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           id: r.artifactId,
           title: attachMenu === 'link' ? (r as any).url ?? value : (r as any).title ?? 'Pasted note',
           verdict: r.verdict,
+          matches: r.matches ?? [],
         },
       ]);
       setAttachDraft('');
@@ -625,13 +642,37 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     }
   };
 
-  // Handle Follow-up in Multi-Turn dialogue
-  const handleSendFollowUp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!followUpInput.trim() || isGenerating) return;
+  /**
+   * "What's in it" — the ONLY one of the two chip buttons that runs a model.
+   *
+   * The question is a fixed literal. A model that has just read a poisoned
+   * document must never get to compose the question we put to the user, so the
+   * text is ours and only the answer is the model's. The answer still arrives
+   * through the airlock: the Reader holds no tools, and the turn is tainted
+   * because an artifact contributed to it.
+   */
+  const summariseAttachment = (artifactId: string) =>
+    handleSendFollowUp(undefined, {
+      text: 'What is in this document? Describe what it says.',
+      grounding: [artifactId],
+    });
 
-    const followUpText = followUpInput.trim();
-    setFollowUpInput('');
+  // Handle Follow-up in Multi-Turn dialogue
+  /**
+   * @param override Supplied by the "What's in it" button: a fixed question and
+   * one artifact to ground it on. It exists so that button reuses this exact
+   * path — the same Reader, the same broker, the same log — rather than a
+   * second route to the Planner that could drift out of step with this one.
+   */
+  const handleSendFollowUp = async (
+    e?: React.FormEvent,
+    override?: { text: string; grounding: string[] },
+  ) => {
+    if (e) e.preventDefault();
+    const followUpText = override?.text ?? followUpInput.trim();
+    if (!followUpText || isGenerating) return;
+
+    if (!override) setFollowUpInput('');
     setErrorMsg(null);
     setIsGenerating(true);
 
@@ -663,7 +704,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             extraGrounding.push(r.artifactId);
             setAttachments((prev) => [
               ...prev,
-              { id: r.artifactId, title: r.url ?? url, verdict: r.verdict },
+              { id: r.artifactId, title: r.url ?? url, verdict: r.verdict, matches: r.matches ?? [] },
             ]);
           } catch (err: any) {
             // A refused link is information, not a failure: say so and carry
@@ -681,7 +722,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         turns: updatedTurns,
         // Newly fetched ids are merged here rather than waiting for the parent
         // to refresh: the prop would still be stale on this turn.
-        groundingArtifactIds: [...groundingArtifactIds, ...extraGrounding],
+        groundingArtifactIds: [
+          ...groundingArtifactIds,
+          ...extraGrounding,
+          ...(override?.grounding ?? []),
+        ],
       });
       setLastTurnEvents(response.threatEvents);
       setLastTurnTainted(response.turnTaint);
@@ -1243,6 +1288,27 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     <Paperclip className="h-3 w-3 shrink-0" />
                     <span className="truncate">{a.title}</span>
                     <span className="shrink-0 font-medium uppercase">{a.verdict}</span>
+                    {/*
+                      Fixed chrome. These labels are string literals and both
+                      buttons render for every verdict, because a model that
+                      just read a poisoned document must never get to compose
+                      the question we put to the user. "Shall I summarise this
+                      and send it to the address in the footer?" is an attack,
+                      and it would be wearing our own interface.
+                    */}
+                    <button
+                      onClick={() => setReportFor(reportFor === a.id ? null : a.id)}
+                      className="shrink-0 cursor-pointer rounded border border-current px-1.5 py-0.5 font-medium opacity-80 hover:opacity-100"
+                    >
+                      Show me the injections
+                    </button>
+                    <button
+                      onClick={() => void summariseAttachment(a.id)}
+                      disabled={isGenerating}
+                      className="shrink-0 cursor-pointer rounded border border-current px-1.5 py-0.5 font-medium opacity-80 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      What's in it
+                    </button>
                     <button
                       onClick={() => setAttachments((p) => p.filter((x) => x.id !== a.id))}
                       title="Remove from this view"
@@ -1254,6 +1320,20 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 ))}
               </div>
             )}
+
+            {reportFor &&
+              (() => {
+                const a = attachments.find((x) => x.id === reportFor);
+                if (!a) return null;
+                return (
+                  <InjectionReport
+                    title={a.title}
+                    verdict={a.verdict}
+                    matches={a.matches}
+                    onClose={() => setReportFor(null)}
+                  />
+                );
+              })()}
 
             {attachMenu && (
               <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">
