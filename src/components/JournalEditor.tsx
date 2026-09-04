@@ -48,10 +48,13 @@ import {
   gmailStatus,
   gmailConnectUrl,
   gmailIngest,
+  scanRepository,
+  type RepoScanResult,
 } from '../lib/perimeterApi';
 import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
 import { InjectionReport } from './InjectionReport';
+import { RepoScanReport } from './RepoScanReport';
 import { UntrustedText } from './UntrustedText';
 
 interface JournalEditorProps {
@@ -191,6 +194,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   >([]);
   /** Which attachment's evidence panel is open, if any. */
   const [reportFor, setReportFor] = useState<string | null>(null);
+  /** A repository scan in flight, and its result. Never persisted (INV-18). */
+  const [repoPrompt, setRepoPrompt] = useState(false);
+  const [repoRef, setRepoRef] = useState('');
+  const [repoScanning, setRepoScanning] = useState(false);
+  const [repoResult, setRepoResult] = useState<RepoScanResult | null>(null);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -639,6 +647,43 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setErrorMsg(err?.message || 'Gemini reflection request failed.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  /**
+   * Scans a public repository for prompt injections — INV-18.
+   *
+   * The question is fixed and there is only one of it: where are the
+   * injections. No model runs anywhere in this path, on the server or here,
+   * which is what makes the scanner itself impossible to hijack. It is also
+   * why there is deliberately no "summarise this repo" button beside it.
+   */
+  const runRepoScan = async () => {
+    // Accepts a full URL or just owner/name. Plain string work rather than
+    // regexes: the server validates the result with isValidRepoRef anyway,
+    // and this is the tidying, not the check.
+    let ref = repoRef.trim();
+    for (const prefix of ['https://github.com/', 'http://github.com/', 'github.com/']) {
+      if (ref.toLowerCase().startsWith(prefix)) {
+        ref = ref.slice(prefix.length);
+        break;
+      }
+    }
+    if (ref.toLowerCase().endsWith('.git')) ref = ref.slice(0, -4);
+    while (ref.endsWith('/')) ref = ref.slice(0, -1);
+
+    if (!ref || repoScanning) return;
+
+    setRepoScanning(true);
+    setAttachError(null);
+    setRepoResult(null);
+    try {
+      setRepoResult(await scanRepository(ref));
+      setRepoPrompt(false);
+    } catch (err: any) {
+      setAttachError(err?.message ?? 'That repository could not be scanned.');
+    } finally {
+      setRepoScanning(false);
     }
   };
 
@@ -1451,6 +1496,46 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               </div>
             )}
 
+            {repoPrompt && (
+              <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">
+                <p className="text-[11px] font-medium text-[#2c2c24]">
+                  Scan a public repository for prompt injections
+                </p>
+                <p className="mt-0.5 text-[10px] text-[#5a5a40]">
+                  Files are read on the server, matched against fixed patterns, and discarded.
+                  Nothing is stored and no model sees them &mdash; so this reports where the
+                  injections are, and cannot tell you what the code does.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={repoRef}
+                    onChange={(e) => setRepoRef(e.target.value)}
+                    placeholder="owner/name"
+                    className="flex-1 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] placeholder:text-[#b5b0a0] focus:border-[#5a5a40] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void runRepoScan()}
+                    disabled={repoScanning || !repoRef.trim()}
+                    className="cursor-pointer rounded-lg bg-[#5a5a40] px-3 py-2 text-xs font-medium text-white hover:bg-[#484833] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {repoScanning ? 'Scanning…' : 'Scan'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRepoPrompt(false)}
+                    className="cursor-pointer text-[11px] text-[#8a8a75] underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {repoResult && (
+              <RepoScanReport result={repoResult} onClose={() => setRepoResult(null)} />
+            )}
+
             {webSearch && mentionsUrl(followUpInput) && (
               <button
                 type="button"
@@ -1535,6 +1620,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                           label: 'Connect a mailbox',
                           hint: 'Read-only, recent messages',
                           run: () => void handleMail(),
+                        },
+                        {
+                          id: 'menu-repo',
+                          Icon: Github,
+                          label: 'Scan a GitHub repository',
+                          hint: 'Finds injections. Does not summarise.',
+                          run: () => setRepoPrompt(true),
                         },
                       ].map(({ id, Icon, label, hint, run }) => (
                         <button

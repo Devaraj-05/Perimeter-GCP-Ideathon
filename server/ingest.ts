@@ -9,6 +9,7 @@ import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
 import { checkRateLimit } from './ratelimit';
 import { extractTextFromFile, ExtractError, MAX_FILE_BYTES } from './extract';
+import { scanRepository } from './reposcan';
 
 /**
  * Amendment A.5 - Ingestion endpoints.
@@ -594,5 +595,72 @@ ingestRouter.post('/file', requireAuth, async (req: AuthedRequest, res: Response
   } catch (err: any) {
     console.error('[ingest] file failed:', err?.message);
     res.status(500).json({ error: 'Could not read that file. Please retry.' });
+  }
+});
+
+/**
+ * Repository injection scan — Amendment I, INV-18.
+ *
+ * Reads a public repository and reports where prompt injections are, with the
+ * matched text quoted. It does not summarise, and it never will: no model is
+ * involved anywhere in this path, which is what makes the scanner itself
+ * un-injectable. server/reposcan.test.ts asserts that property against the
+ * source rather than trusting this comment.
+ *
+ * Nothing is persisted. Repository text lives for the length of this request;
+ * only the fact that a scan ran reaches the perimeter log, because storing
+ * excerpts of someone else's repository in this user's database is not
+ * something this feature should do.
+ */
+ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const limit = checkRateLimit(
+      `reposcan:${uid}`,
+      Number(process.env.REPOSCAN_RATE_LIMIT_PER_HOUR) || 10,
+    );
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      return res.status(429).json({
+        error: `Too many repository scans. Try again in ${Math.ceil(
+          limit.retryAfterSeconds / 60,
+        )} minute(s).`,
+      });
+    }
+
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const repo = typeof data.repo === 'string' ? data.repo.trim() : '';
+    if (!isValidRepoRef(repo)) {
+      // Rejected before any network call: the reference becomes a URL path.
+      return res.status(400).json({ error: 'Expected a repository as "owner/name".' });
+    }
+
+    const result = await scanRepository(repo);
+
+    await logEvent(uid, {
+      kind: 'ingest',
+      zone: 'UNTRUSTED',
+      decision: 'allow',
+      reason: `repo_scanned:${result.findings.length > 0 ? 'findings' : 'clean'}`,
+      invariant: 'INV-18',
+      detail: {
+        repo: result.repo,
+        branch: result.defaultBranch,
+        filesScanned: result.filesScanned,
+        filesTotal: result.filesTotal,
+        stoppedBy: result.stoppedBy,
+        // Counts only. The excerpts stay in the response and are never stored.
+        findingCount: result.findings.length,
+      },
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    if (err instanceof IngestError) {
+      // Describes our own refusal or GitHub's answer, never an internal path.
+      return res.status(err.retryable ? 503 : 400).json({ error: err.message });
+    }
+    console.error('[ingest] repo scan failed:', err?.message);
+    res.status(500).json({ error: 'That scan could not be completed. Please retry.' });
   }
 });

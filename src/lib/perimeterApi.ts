@@ -190,3 +190,35 @@ export async function resolveLocation(
   });
   return location;
 }
+
+/** One finding: a file, and every place a signal fired inside it. */
+export interface RepoFinding {
+  path: string;
+  matches: Match[];
+}
+
+export interface RepoScanResult {
+  repo: string;
+  defaultBranch: string;
+  filesScanned: number;
+  filesTotal: number;
+  bytesScanned: number;
+  stoppedBy: 'complete' | 'max_files' | 'max_bytes' | 'time' | 'rate_limit';
+  /** The sentence the UI shows. Never phrased as a clean bill of health. */
+  coverage: string;
+  findings: RepoFinding[];
+}
+
+/**
+ * Scans a public repository for prompt injections — INV-18.
+ *
+ * Nothing here reaches a model. The server fetches the tree, matches each file
+ * against the deterministic patterns, and returns spans. It cannot summarise
+ * the repository and is not meant to.
+ */
+export async function scanRepository(repo: string): Promise<RepoScanResult> {
+  return apiFetch<RepoScanResult>('/api/ingest/repo-scan', {
+    method: 'POST',
+    body: JSON.stringify({ repo }),
+  });
+}

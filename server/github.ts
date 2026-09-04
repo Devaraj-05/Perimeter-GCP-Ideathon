@@ -139,3 +139,147 @@ export async function fetchOpenIssues(
     }))
     .filter((issue: GitHubIssue) => issue.number > 0);
 }
+
+/**
+ * One guarded GET against the allowlisted host — Amendment I.
+ *
+ * Extracted so the repository scanner cannot accidentally introduce a second
+ * fetch path with weaker rules. Every caller passes a path built from
+ * isValidRepoRef-validated, URL-encoded components; no caller passes a URL.
+ */
+async function ghFetch(path: string, accept: string): Promise<Response> {
+  const url = `https://${ALLOWED_HOST}${path}`;
+  assertAllowedHost(url);
+
+  const headers: Record<string, string> = {
+    Accept: accept,
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'perimeter-ingest',
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      // A.4: never follow a redirect — the destination is not re-checked
+      // against the allowlist by the runtime.
+      redirect: 'error',
+      headers,
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err: any) {
+    if (err?.name === 'TimeoutError') throw new IngestError('GitHub request timed out.', true);
+    throw new IngestError('Could not reach GitHub.', true);
+  }
+
+  if (res.status === 404) {
+    throw new IngestError('Repository not found, or it is private.', false);
+  }
+  if (res.status === 401 || res.status === 403) {
+    if (res.headers.get('x-ratelimit-remaining') === '0') {
+      throw new IngestError('GitHub rate limit exceeded. Try again shortly.', true);
+    }
+    throw new IngestError('GitHub rejected the request. Check the configured token.', false);
+  }
+  if (!res.ok) {
+    throw new IngestError(`GitHub returned ${res.status}.`, res.status >= 500);
+  }
+
+  // A budget this thin cannot finish a tree walk, and a scan that dies at file
+  // 400 with an error is worse than one that stops and says how far it got.
+  const remaining = Number(res.headers.get('x-ratelimit-remaining') ?? '999');
+  if (Number.isFinite(remaining) && remaining <= 2) {
+    throw new IngestError('GitHub rate limit exceeded. Try again shortly.', true);
+  }
+
+  return res;
+}
+
+function ownerAndName(repoRef: string): [string, string] {
+  if (!isValidRepoRef(repoRef)) {
+    throw new IngestError('Invalid repository reference. Expected "owner/name".', false);
+  }
+  const [owner, name] = repoRef.trim().split('/');
+  return [encodeURIComponent(owner), encodeURIComponent(name)];
+}
+
+/** The branch a scan reads. Never taken from user input. */
+export async function fetchDefaultBranch(repoRef: string): Promise<string> {
+  const [owner, name] = ownerAndName(repoRef);
+  const res = await ghFetch(`/repos/${owner}/${name}`, 'application/vnd.github+json');
+  const payload: any = await res.json().catch(() => null);
+  const branch = payload?.default_branch;
+  if (typeof branch !== 'string' || !branch) {
+    throw new IngestError('Unexpected response shape from GitHub.', true);
+  }
+  return branch;
+}
+
+export interface GitHubTreeEntry {
+  path: string;
+  sha: string;
+  size?: number;
+  type: string;
+}
+
+/**
+ * The whole default-branch tree in one request.
+ *
+ * GitHub truncates very large trees and says so. Reported rather than hidden:
+ * a scan that silently read half a repository is the failure INV-18 names.
+ */
+export async function fetchTree(repoRef: string, branch: string): Promise<GitHubTreeEntry[]> {
+  const [owner, name] = ownerAndName(repoRef);
+  const res = await ghFetch(
+    `/repos/${owner}/${name}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    'application/vnd.github+json',
+  );
+  const payload: any = await res.json().catch(() => null);
+  if (!payload || !Array.isArray(payload.tree)) {
+    throw new IngestError('Unexpected response shape from GitHub.', true);
+  }
+  return payload.tree as GitHubTreeEntry[];
+}
+
+/**
+ * One blob as text, capped while reading.
+ *
+ * The raw media type returns file bytes rather than base64 JSON. The cap is
+ * enforced on what actually arrives, because Content-Length is supplied by the
+ * other end and a size checked before the read is a size we were told.
+ */
+export async function fetchBlobText(
+  repoRef: string,
+  sha: string,
+  maxBytes: number,
+): Promise<string> {
+  const [owner, name] = ownerAndName(repoRef);
+  if (!/^[0-9a-f]{7,64}$/i.test(String(sha))) {
+    throw new IngestError('Invalid blob reference.', false);
+  }
+
+  const res = await ghFetch(
+    `/repos/${owner}/${name}/git/blobs/${sha}`,
+    'application/vnd.github.raw',
+  );
+
+  const reader = res.body?.getReader();
+  if (!reader) return '';
+
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      break;
+    }
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+}

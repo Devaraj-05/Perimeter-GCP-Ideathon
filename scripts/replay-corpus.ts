@@ -13,6 +13,8 @@
  *   npx tsx scripts/replay-corpus.ts --md    # markdown table for the README
  */
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { AUTHORED_CORPUS } from '../server/corpus';
 import { THIRD_PARTY_CORPUS } from '../server/corpus-thirdparty';
 import type { CorpusPayload } from '../server/corpus';
@@ -49,6 +51,29 @@ function architecturalBlock(id: string, cls: string, body: string): { blocked: b
     } catch (err: any) {
       return { blocked: true, how: `fetch guard: ${err?.message ?? 'refused'}` };
     }
+  }
+
+  // A poisoned agent-instruction file in a repository. The scanner that reads
+  // it holds no model at all, so the block is not "the Reader has no tools" —
+  // it is that nothing in the path can be instructed. Verified against the
+  // source, the same way server/reposcan.test.ts does it, because the claim is
+  // a property of what that file imports.
+  if (cls === 'poisoned_agent_instructions') {
+    const scanner = readFileSync(
+      join(process.cwd(), 'server', 'reposcan.ts'),
+      'utf8',
+    );
+    const modelFree = [
+      "from './gemini'",
+      "from './reader'",
+      "from './planner'",
+      'generateContent',
+      'getAI(',
+    ].every((forbidden) => !scanner.includes(forbidden));
+    return {
+      blocked: modelFree,
+      how: modelFree ? 'scanner: no model in the path (INV-18)' : 'MODEL REACHED',
+    };
   }
 
   // Capability social-engineering: no grant, so any proposed tool is denied.
