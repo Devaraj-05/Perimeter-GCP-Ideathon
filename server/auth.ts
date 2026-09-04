@@ -58,6 +58,8 @@ export function adminDb(): Firestore {
 export interface AuthedRequest extends Request {
   uid?: string;
   email?: string | null;
+  /** From the verified token's custom claim only. Never from a document. */
+  role?: string | null;
 }
 
 function bearerToken(req: Request): string | null {
@@ -88,6 +90,9 @@ export async function requireAuth(
     const decoded = await getAuth(getAdminApp()).verifyIdToken(token);
     req.uid = decoded.uid;
     req.email = decoded.email ?? null;
+    // INV-13: the role travels in the signed token. Reading it here, from the
+    // already-verified claims, is the only place a role is ever sourced.
+    req.role = typeof (decoded as any).role === 'string' ? (decoded as any).role : null;
     next();
   } catch (err: any) {
     const code = err?.errorInfo?.code || err?.code || '';
@@ -104,4 +109,24 @@ export async function requireAuth(
     console.warn('[auth] token verification failed:', err?.message);
     res.status(401).json({ error: 'Invalid authentication token.' });
   }
+}
+
+/**
+ * Administrative gate — Amendment E, INV-13.
+ *
+ * Layered AFTER requireAuth and reading the role it already extracted from the
+ * verified token. It deliberately does not decode a second time and it never
+ * consults Firestore: `users/{uid}` is owner-writable so the profile can sync,
+ * which means a role stored there would be self-grantable.
+ *
+ * Fails closed. A missing claim, an empty claim, or anything other than the
+ * exact string is denied, and the response says nothing about whether an admin
+ * role exists at all.
+ */
+export function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (req.role !== 'admin') {
+    res.status(403).json({ error: 'Not available for this account.' });
+    return;
+  }
+  next();
 }
