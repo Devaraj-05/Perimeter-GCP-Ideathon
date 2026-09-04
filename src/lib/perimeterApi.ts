@@ -206,6 +206,8 @@ export interface RepoScanResult {
   stoppedBy: 'complete' | 'max_files' | 'max_bytes' | 'time' | 'rate_limit';
   /** The sentence the UI shows. Never phrased as a clean bill of health. */
   coverage: string;
+  /** Conditions worth knowing that did not stop the scan, e.g. a rejected token. */
+  warnings?: string[];
   findings: RepoFinding[];
 }
 

@@ -147,6 +147,63 @@ export async function fetchOpenIssues(
  * fetch path with weaker rules. Every caller passes a path built from
  * isValidRepoRef-validated, URL-encoded components; no caller passes a URL.
  */
+/**
+ * Every prefix GitHub issues. A value that matches none of them is not a token
+ * and is never sent: a malformed secret produces "Bad credentials", which reads
+ * as "your token is expired" and sends the operator hunting for the wrong
+ * problem. Refusing to send it turns a confusing 401 into a clear warning.
+ */
+const TOKEN_PREFIXES = ['ghp_', 'github_pat_', 'gho_', 'ghu_', 'ghs_', 'ghr_'];
+
+/**
+ * True once GitHub has rejected the configured token in this process.
+ *
+ * Sticky on purpose: after the first rejection there is no reason to send the
+ * same bad credential 500 more times, and every one of those is a request the
+ * anonymous budget could have spent on an actual file.
+ */
+let tokenRejected = false;
+
+/** Why the current scan is running without authentication, if it is. */
+let tokenWarning: string | null = null;
+
+export function githubAuthWarning(): string | null {
+  return tokenWarning;
+}
+
+export function resetGithubAuthWarning(): void {
+  tokenWarning = null;
+}
+
+/**
+ * The token to send, or undefined to go anonymous.
+ *
+ * A broken token must never leave the caller worse off than no token. GitHub
+ * serves public repositories anonymously at 60 requests an hour, so falling
+ * back is strictly better than failing — provided the user is told, because a
+ * silent downgrade hides a real configuration fault.
+ */
+export function looksLikeGitHubToken(raw: unknown): boolean {
+  return typeof raw === 'string' && TOKEN_PREFIXES.some((prefix) => raw.trim().startsWith(prefix));
+}
+
+function usableToken(): string | undefined {
+  const raw = process.env.GITHUB_TOKEN?.trim();
+  if (!raw) return undefined;
+
+  if (!looksLikeGitHubToken(raw)) {
+    tokenWarning =
+      'GITHUB_TOKEN does not look like a GitHub token (it should start with ghp_ or github_pat_), so it was not sent. Scanning anonymously at 60 requests an hour.';
+    return undefined;
+  }
+  if (tokenRejected) {
+    tokenWarning =
+      'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan continued anonymously at 60 requests an hour. Generate a new token: a classic one needs no scopes at all for public repositories.';
+    return undefined;
+  }
+  return raw;
+}
+
 function minutesUntilReset(header: string | null): string {
   const reset = Number(header);
   if (!Number.isFinite(reset) || reset <= 0) return '';
@@ -163,7 +220,7 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'perimeter-ingest',
   };
-  const token = process.env.GITHUB_TOKEN?.trim();
+  const token = usableToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
@@ -199,21 +256,38 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
       .catch(() => '');
 
     if (remaining === '0') {
+      // If a token was configured and rejected, THAT is the actionable fact.
+      // Reporting only the anonymous rate limit would send the operator to
+      // wait an hour for a problem that waiting will not fix.
+      const anonymous = `GitHub allows ${ceiling} unauthenticated requests an hour and this server has spent them.${resetsIn}`;
       throw new IngestError(
         token
           ? `GitHub rate limit reached (${ceiling}/hour).${resetsIn}`
-          : `GitHub allows ${ceiling} unauthenticated requests an hour and this server has spent them.${resetsIn} Set GITHUB_TOKEN to raise the limit to 5,000.`,
+          : tokenWarning
+            ? `${tokenWarning} ${anonymous}`
+            : `${anonymous} Set GITHUB_TOKEN to raise the limit to 5,000.`,
         true,
       );
     }
+    // A bad credential degrades to anonymous rather than ending the scan.
+    // Public repositories are readable without a token, so failing outright
+    // would be a strictly worse outcome than never configuring one.
+    if (token && /bad credentials|requires authentication/i.test(detail)) {
+      tokenRejected = true;
+      tokenWarning =
+        'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan continued anonymously at 60 requests an hour. Generate a new token: a classic one needs no scopes at all for public repositories.';
+      console.warn('[github] GITHUB_TOKEN rejected; continuing anonymously');
+      return ghFetch(path, accept);
+    }
+
     if (!token) {
       throw new IngestError(
-        `GitHub refused the request and no GITHUB_TOKEN is configured.${detail ? ` GitHub said: ${detail}` : ''}`,
+        `GitHub refused the request and no usable GITHUB_TOKEN is configured.${detail ? ` GitHub said: ${detail}` : ''}`,
         false,
       );
     }
     throw new IngestError(
-      `GitHub rejected the configured GITHUB_TOKEN — it may be expired, revoked, or missing the scope for this repository.${detail ? ` GitHub said: ${detail}` : ''}`,
+      `GitHub rejected the configured GITHUB_TOKEN — it may be expired, revoked, or missing access to this repository.${detail ? ` GitHub said: ${detail}` : ''}`,
       false,
     );
   }
@@ -225,10 +299,14 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
   // 400 with an error is worse than one that stops and says how far it got.
   const left = Number(res.headers.get('x-ratelimit-remaining') ?? '999');
   if (Number.isFinite(left) && left <= 2) {
+    const resets = minutesUntilReset(res.headers.get('x-ratelimit-reset'));
+    const anonymous = `GitHub's unauthenticated budget for this server is nearly spent.${resets}`;
     throw new IngestError(
       token
-        ? `GitHub rate limit nearly exhausted.${minutesUntilReset(res.headers.get('x-ratelimit-reset'))}`
-        : `GitHub's unauthenticated budget for this server is nearly spent.${minutesUntilReset(res.headers.get('x-ratelimit-reset'))} Set GITHUB_TOKEN to raise it to 5,000.`,
+        ? `GitHub rate limit nearly exhausted.${resets}`
+        : tokenWarning
+          ? `${tokenWarning} ${anonymous}`
+          : `${anonymous} Set GITHUB_TOKEN to raise it to 5,000.`,
       true,
     );
   }

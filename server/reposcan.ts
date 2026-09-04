@@ -1,5 +1,12 @@
 import { detectL1, Match } from './detect';
-import { fetchDefaultBranch, fetchTree, fetchBlobText, IngestError } from './github';
+import {
+  fetchDefaultBranch,
+  fetchTree,
+  fetchBlobText,
+  githubAuthWarning,
+  resetGithubAuthWarning,
+  IngestError,
+} from './github';
 
 /**
  * Repository scanning — INV-18 (Amendment I).
@@ -114,6 +121,12 @@ export interface RepoScanResult {
   bytesScanned: number;
   stoppedBy: StopReason;
   coverage: string;
+  /**
+   * Conditions the user should know about that did not stop the scan — a
+   * rejected token, for instance. Degrading silently would hide a real
+   * configuration fault behind a thinner set of results.
+   */
+  warnings: string[];
   findings: RepoFinding[];
 }
 
@@ -212,6 +225,7 @@ export async function scanRepository(
   onProgress?: (p: ScanProgress) => void,
 ): Promise<RepoScanResult> {
   const startedAt = Date.now();
+  resetGithubAuthWarning();
 
   const defaultBranch = await fetchDefaultBranch(repoRef);
   const tree = await fetchTree(repoRef, defaultBranch);
@@ -292,6 +306,7 @@ export async function scanRepository(
     bytesScanned,
     stoppedBy,
     coverage: summariseCoverage({ filesScanned, filesTotal: eligible.length, stoppedBy }),
+    warnings: [githubAuthWarning()].filter((w): w is string => typeof w === 'string'),
     findings,
   };
 }

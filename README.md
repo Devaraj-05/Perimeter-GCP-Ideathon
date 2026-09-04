@@ -261,6 +261,12 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   correct behaviour rather than a bug. The narrower option, scanning only agent-instruction
   files and issues, was considered and rejected; the mitigation is ordering, not suppression.
 
+- **A bad `GITHUB_TOKEN` degrades to anonymous rather than failing.** A value that is not a
+  GitHub token is never sent at all; one GitHub rejects as bad credentials is dropped after the
+  first refusal and the scan continues at the 60/hour anonymous limit. Either way the report
+  carries a warning saying so, because a silent downgrade hides a real configuration fault
+  behind a thinner set of results.
+
 - **A repository scan needs `GITHUB_TOKEN` to finish.** Unauthenticated, the GitHub API allows
   60 requests an hour, which cannot walk the tree of any real repository. Measured: scanning this
   project's own repo without a token read **50 of 121 files** before the budget ran out, then
@@ -293,7 +299,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 478 unit tests, no infrastructure needed
+npm test                      # 486 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
