@@ -1,5 +1,5 @@
 import { apiFetch } from './apiClient';
-import { Source, Artifact, IngestRunResult } from '../types';
+import { Source, Artifact, IngestRunResult, Match } from '../types';
 
 /**
  * Client for the ingest gateway. Note there is no "write artifact" call:
@@ -43,6 +43,8 @@ export interface LinkIngestResult {
   segmentId: string;
   url: string;
   verdict: 'clean' | 'suspicious' | 'hostile';
+  /** Optional so a response cached before this field existed cannot break the panel. */
+  matches?: Match[];
   signals: string[];
   bytes: number;
   truncated: boolean;
@@ -68,6 +70,8 @@ export interface NoteIngestResult {
   segmentId: string;
   title: string;
   verdict: 'clean' | 'suspicious' | 'hostile';
+  /** Optional so a response cached before this field existed cannot break the panel. */
+  matches?: Match[];
   signals: string[];
   bytes: number;
 }
@@ -94,6 +98,8 @@ export interface FileIngestResult {
   title: string;
   kind: 'pdf' | 'image';
   verdict: 'clean' | 'suspicious' | 'hostile';
+  /** Optional so a response cached before this field existed cannot break the panel. */
+  matches?: Match[];
   signals: string[];
   bytes: number;
 }
@@ -133,6 +139,8 @@ export interface GmailIngested {
   artifactId: string;
   title: string;
   verdict: 'clean' | 'suspicious' | 'hostile';
+  /** Optional so a response cached before this field existed cannot break the panel. */
+  matches?: Match[];
 }
 
 export async function gmailStatus(): Promise<boolean> {
