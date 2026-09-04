@@ -130,7 +130,7 @@ flowchart LR
 - **The Perimeter Log** is append-only and hash-chained; the client cannot write to it, and the
   chain can be verified in-app.
 
-Seventeen numbered invariants (`CONSTITUTION.md` §2 and its amendments) are referenced by the code,
+Eighteen numbered invariants (`CONSTITUTION.md` §2 and its amendments) are referenced by the code,
 the tests, and the log. Each is mechanically checkable.
 
 #### Prior art — the pattern is not ours

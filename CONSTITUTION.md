@@ -412,3 +412,62 @@ submission that quietly implies Google has reviewed it would be exactly the kind
 project exists to argue against.
 
 **7. Corpus payload.** An email whose signature block carries instructions is added to the corpus.
+
+---
+
+## Amendment I — Repository scanning (adopted 2026-09-05)
+
+Adopted **before** any scanning code was written, per §9. A user may point Perimeter at a
+public GitHub repository and ask one question: **is there a prompt injection in it?**
+
+This is the first integration that reads untrusted content and deliberately does **not** route
+it through the Reader. That is not a weakening. It is the stronger position: the content goes
+through no model at all.
+
+**1. Data flows.** A repository reference the user types → our server → `api.github.com` → file
+text held in memory for the life of one request → `detectL1` → match spans returned to that
+user. The fetched text is `UNTRUSTED` and is never promoted, never stored, and never shown to a
+model.
+
+**2. New untrusted input?** Yes, and a large one — an entire repository, most of it written by
+strangers. §9.2 says untrusted input routes through the Reader "no exceptions". This amendment
+is not an exception to that rule; it is a case the rule did not anticipate. The Reader exists to
+let a model read hostile text safely by removing its tools. Here no model reads the text at all,
+so there is nothing to quarantine. A scanner that cannot be injected is one that does not think.
+
+The consequence is deliberate and is the feature’s boundary: Perimeter can tell you a
+repository contains an injection and quote it. It cannot tell you what the repository does.
+Asking it to summarise a repository would require a model, and that is a different feature with
+a different amendment.
+
+**3. New egress path?** No. Every request goes to `api.github.com`, the single host already
+allowlisted in `server/github.ts`. No user input reaches the host component of any URL — the
+owner and name are validated by `isValidRepoRef` and URL-encoded into a path. Not egress-class,
+so no destination id and no capability grant.
+
+**4. New secret?** No. `GITHUB_TOKEN` already exists. Without it the GitHub API allows 60
+requests an hour, which cannot complete a tree walk of any real repository; with it, 5,000. That
+limit is published in the README rather than discovered by a user whose scan dies at file 60.
+
+**5. New Firestore paths?** None. A scan writes one event to the existing perimeter log and
+nothing else. No artifact, no segment, no stored excerpt.
+
+**6. New invariant.**
+
+- **INV-18** Repository scanning is read-only and model-free. Fetched repository text is never
+  placed in a model context, never persisted as an artifact, and never becomes grounding. The
+  scan reports spans; it does not summarise. Coverage is reported honestly — a scan stopped by a
+  cap says which cap and how many files it did not read, because a partial scan that reports
+  itself as complete is worse than no scan.
+
+**A note on false positives, recorded because it was a deliberate choice.** The narrower option
+was to scan only the surfaces an agent is built to obey — `AGENTS.md`, `CLAUDE.md`,
+`.cursorrules`, `README`, `.github/**`, issues and pull requests. Whole-tree scanning was chosen
+instead, with the cost understood: source code that legitimately mentions "ignore previous
+instructions" will fire patterns, and security repositories will fire many. This repository will
+report findings in `server/corpus.ts`, and that is correct behaviour, not a bug. The mitigation
+is ordering, not suppression — agent-instruction files are scanned and reported first, so a real
+finding is never buried under noise from a test fixture.
+
+**7. Corpus payload.** A repository fixture whose `AGENTS.md` carries instruction text, so the
+claim that a poisoned agent-instruction file surfaces first is tested rather than asserted.
