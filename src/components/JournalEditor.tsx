@@ -1146,18 +1146,25 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           </div>
         )}
 
-        {/* Multi-Turn Conversation History */}
-        {turns.length > 0 && (
+        {/* Conversation.
+            Rendered ALWAYS, not only once turns exist. Gating this on
+            turns.length > 0 meant a new entry had no composer at all — and
+            therefore no + button, so the one thing this product is for
+            (bringing outside content in) was unreachable until the user had
+            already written something and pressed Reflect. */}
+        {(
           <div className="rounded-2xl border border-[#e5e0d3] bg-white p-5 shadow-2xs space-y-5">
-            <div className="flex items-center justify-between border-b border-[#f0ede6] pb-3">
-              <h3 className="font-serif text-base font-semibold text-[#2c2c24] flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-[#5a5a40]" />
-                <span>Multi-Turn Reflection Dialogue</span>
-              </h3>
-              <span className="text-xs text-[#8a8a75]">
-                Isolated in Firestore Subcollection
-              </span>
-            </div>
+            {turns.length > 0 && (
+              <div className="flex items-center justify-between border-b border-[#f0ede6] pb-3">
+                <h3 className="font-serif text-base font-semibold text-[#2c2c24] flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#5a5a40]" />
+                  <span>Conversation</span>
+                </h3>
+                <span className="text-xs text-[#8a8a75]">
+                  {turns.length} exchange{turns.length === 1 ? '' : 's'}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-4">
               {turns.map((turn, index) => {
@@ -1356,21 +1363,21 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     <div className="fixed inset-0 z-10" onClick={() => setPlusOpen(false)} />
                     <div className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white py-1 shadow-lg">
                       <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8a8a75]">
-                        Everything here is treated as hostile
+                        From outside &mdash; treated as hostile
                       </p>
                       {[
                         {
                           id: 'menu-note',
                           Icon: ClipboardPaste,
-                          label: 'Paste text',
+                          label: 'Something I received',
                           hint: 'An email, a message, an excerpt',
                           run: () => setAttachMenu('note'),
                         },
                         {
                           id: 'menu-link',
                           Icon: Link2,
-                          label: 'Add a web page',
-                          hint: 'Fetched on the server',
+                          label: 'A page I was sent',
+                          hint: 'Fetched on the server, never by your browser',
                           run: () => setAttachMenu('link'),
                         },
                         {
