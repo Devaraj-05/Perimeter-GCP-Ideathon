@@ -643,6 +643,63 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   };
 
   /**
+   * Fetches and screens every URL in a piece of text the USER typed.
+   *
+   * One path, called from the send handler and from the explicit "Fetch and
+   * screen this link" button. Two fetch paths would be two places to get
+   * INV-11 wrong.
+   *
+   * extractUrls is applied only to text the user typed — never to a turn, an
+   * artifact or an attachment. A link inside untrusted content is an attacker
+   * choosing what our server requests, and following one would hand them a
+   * fetch primitive aimed wherever they like.
+   *
+   * The browser never touches these URLs. The server fetches them under
+   * INV-11: HTTPS only, resolved addresses checked against private ranges,
+   * redirects revalidated per hop.
+   */
+  const fetchAndScreenUrls = async (userTypedText: string): Promise<string[]> => {
+    const added: string[] = [];
+
+    for (const url of extractUrls(userTypedText)) {
+      try {
+        const r = await ingestLink(url);
+        added.push(r.artifactId);
+        setAttachments((prev) => [
+          ...prev,
+          { id: r.artifactId, title: r.url ?? url, verdict: r.verdict, matches: r.matches ?? [] },
+        ]);
+      } catch (err: any) {
+        // A refused link is information, not a failure: the guard saying no is
+        // the feature. Say so and carry on with the remaining links.
+        setAttachError(err?.message || `Could not read ${url}`);
+      }
+    }
+
+    if (added.length > 0) onAttached?.();
+    return added;
+  };
+
+  /**
+   * Screens a pasted link on demand, with no message attached.
+   *
+   * Until now the Web toggle only ever fetched links found in a message being
+   * sent, so pasting a URL and asking nothing did nothing at all. Reading a
+   * link is a thing a user wants to do on its own.
+   */
+  const screenPastedLinks = async () => {
+    if (isGenerating) return;
+    setAttachError(null);
+    const consumed = extractUrls(followUpInput);
+    if (consumed.length === 0) return;
+    await fetchAndScreenUrls(followUpInput);
+    // The links are attachments now, not a half-written message.
+    setFollowUpInput((prev) =>
+      consumed.reduce((acc, url) => acc.split(url).join(''), prev).trim(),
+    );
+  };
+
+  /**
    * "What's in it" — the ONLY one of the two chip buttons that runs a model.
    *
    * The question is a fixed literal. A model that has just read a poisoned
@@ -696,24 +753,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       // attachment. A link inside untrusted content is an attacker choosing
       // what our server requests, and following one would hand them a fetch
       // primitive aimed wherever they like.
-      let extraGrounding: string[] = [];
-      if (webSearch) {
-        for (const url of extractUrls(followUpText)) {
-          try {
-            const r = await ingestLink(url);
-            extraGrounding.push(r.artifactId);
-            setAttachments((prev) => [
-              ...prev,
-              { id: r.artifactId, title: r.url ?? url, verdict: r.verdict, matches: r.matches ?? [] },
-            ]);
-          } catch (err: any) {
-            // A refused link is information, not a failure: say so and carry
-            // on answering the question that was asked.
-            setAttachError(err?.message || `Could not read ${url}`);
-          }
-        }
-        if (extraGrounding.length > 0) onAttached?.();
-      }
+      const extraGrounding = webSearch ? await fetchAndScreenUrls(followUpText) : [];
 
       const response = await reflectGrounded({
         content: content.trim(),
@@ -1409,6 +1449,17 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   No, it&rsquo;s mine
                 </button>
               </div>
+            )}
+
+            {webSearch && mentionsUrl(followUpInput) && (
+              <button
+                type="button"
+                onClick={() => void screenPastedLinks()}
+                disabled={isGenerating}
+                className="mt-2 cursor-pointer rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-1.5 text-[11px] font-medium text-[#2c2c24] hover:bg-[#f5eeda] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Fetch and screen this link
+              </button>
             )}
 
             {!webSearch && mentionsUrl(followUpInput) && (

@@ -80,7 +80,13 @@ describe('extraction is applied ONLY to what the user typed', () => {
       // followUpText/followUpInput are the composer, pastedByUser is what they
       // pasted into it. Anything else — an artifact body, a turn, an attachment
       // preview — is attacker-reachable and must never be scanned for links.
-      expect(call).toMatch(/extractUrls\((followUpText|followUpInput|pastedByUser)\)/);
+      // userTypedText is the parameter of the one shared fetch helper. It is
+      // named that way so this check still reads as a claim about authorship
+      // rather than a claim about a variable. Widen this list only for a name
+      // that asserts the user wrote the text.
+      expect(call).toMatch(
+        /extractUrls\((followUpText|followUpInput|pastedByUser|userTypedText)\)/,
+      );
     }
   });
 
