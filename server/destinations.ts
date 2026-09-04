@@ -86,6 +86,28 @@ export async function listDestinations(uid: string): Promise<Destination[]> {
   return snap.docs.map((d) => d.data() as Destination);
 }
 
+/**
+ * The deliveries recorded against one of the caller's own destinations.
+ *
+ * This exists so the refusal can be SEEN. The broker holding a tainted digest
+ * is the strongest moment in the product, and until this route existed the
+ * evidence was written to Firestore and shown to nobody — so a held send and a
+ * successful send both rendered as nothing happening. Reading back the byte
+ * count and the preview turns "trust me, it was blocked" into "here is what it
+ * was about to send".
+ *
+ * Newest first, and capped: this is an evidence panel, not an archive.
+ */
+export async function listDeliveries(uid: string, destinationId: string): Promise<Delivery[]> {
+  const snap = await destRef(uid)
+    .doc(destinationId)
+    .collection('deliveries')
+    .orderBy('at', 'desc')
+    .limit(20)
+    .get();
+  return snap.docs.map((d) => d.data() as Delivery);
+}
+
 /** Ownership is structural: the path is uid-scoped, so a foreign id misses. */
 export async function getDestination(uid: string, id: string): Promise<Destination | null> {
   const doc = await destRef(uid).doc(id).get();

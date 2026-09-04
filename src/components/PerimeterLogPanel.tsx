@@ -165,7 +165,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
       <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">Perimeter Log</h2>
+            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it refused</h2>
             <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
               Everything the assistant read, proposed, and was allowed or refused. Written by the
               server only — this app cannot edit its own record, and neither can you.

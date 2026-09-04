@@ -9,7 +9,7 @@ import { Segment, PerimeterViolation } from './segments';
 import { decideProposal, resourceOf, sideEffectOf, explainReason } from './broker';
 import { findLiveCapability, consumeCapability, mintCapability, revokeCapability, listCapabilities } from './capabilities';
 import { logEvent, listEvents, verifyChain } from './perimeterLog';
-import { createSandboxDestination, listDestinations } from './destinations';
+import { createSandboxDestination, listDestinations, listDeliveries } from './destinations';
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
 import { writeAudit } from './audit';
@@ -618,6 +618,25 @@ agentRouter.get('/destinations', requireAuth, async (req: AuthedRequest, res: Re
     res.status(500).json({ error: 'Could not load destinations. Please retry.' });
   }
 });
+
+/**
+ * Evidence for one destination. Read-only, uid-scoped, and it returns the hash
+ * and preview that were already stored rather than a second copy of the body.
+ */
+agentRouter.get(
+  '/destinations/:destId/deliveries',
+  requireAuth,
+  async (req: AuthedRequest, res: Response) => {
+    try {
+      const destId = String(req.params.destId ?? '');
+      if (!destId) return res.status(400).json({ error: 'A destination id is required.' });
+      res.json({ deliveries: await listDeliveries(req.uid!, destId) });
+    } catch (err: any) {
+      console.error('[destinations] deliveries failed:', err?.message);
+      res.status(500).json({ error: 'Could not load deliveries. Please retry.' });
+    }
+  },
+);
 
 agentRouter.post('/destinations', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;

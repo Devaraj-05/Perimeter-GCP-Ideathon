@@ -311,6 +311,8 @@ export default function App() {
               isSaving={isSaving}
               saveError={saveError}
               lastSavedAt={lastSavedAt}
+              isFirstRun={entries.length === 0}
+              onOpenRedTeam={() => setIsRedTeamOpen(true)}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6 text-[#8a8a75]">

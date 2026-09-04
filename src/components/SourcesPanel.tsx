@@ -177,7 +177,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">External Context</h2>
+            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it reads</h2>
             <p className="mt-1 text-xs text-[#8a8a75] max-w-lg">
               Connect public repositories so your reflections can draw on real project context.
               Everything fetched here is treated as <strong>untrusted</strong> and screened before

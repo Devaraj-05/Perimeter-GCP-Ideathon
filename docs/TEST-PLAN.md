@@ -31,10 +31,10 @@ Left to right:
 | **ReflectAI** brand + "Gemini 3.6 Flash" chip | ✨ | Nothing; identity |
 | **New Reflection** | ＋ | Clears the editor to a blank entry |
 | **Insights** | 📊 | A modal of trends across your entries |
-| **Sources** | 🔗 | The "External Context" panel — paste a link, add a GitHub repo |
-| **Red Team** | ⚔ (red) | The attack console — fire injection payloads |
-| **Permissions** | 🔑 | What the assistant is allowed to do; grant/revoke |
-| **Log** | 📜 | The Perimeter Log — every decision, with a Verify-chain button |
+| **What it reads** (was "Sources") | 🔗 | The "What it reads" panel — paste a link, add a GitHub repo |
+| **Attack it** (was "Red Team") | ⚔ (red) | The attack console — fire injection payloads |
+| **What it can do** (was "Permissions") | 🔑 | What the assistant is allowed to do; grant/revoke |
+| **What it refused** (was "Log") | 📜 | The Perimeter Log — every decision, with a Verify-chain button |
 | **Activity** | 🛡 | Approval queue and policy decisions |
 | **Vault Protected** | 🛡 | A read-only explainer of the isolation model |
 | Profile avatar + entry count | — | Your Google photo and how many entries you have |
@@ -66,7 +66,7 @@ Left to right:
 | Verdict counts | 0 Clean / 0 Suspicious / N Hostile across fetched artifacts |
 | Per-source rows | Run ingest, Inspect (shows verdict + signals), Remove |
 
-### 1.5 The Red Team console
+### 1.5 The attack console ("Attack it")
 
 | Element | What it does |
 |---|---|
@@ -191,10 +191,10 @@ Expected: It is stored with a non-clean verdict; the assistant tells you the sou
 
 ---
 
-### D. The Red Team console (the demo — Amendment C)
+### D. The attack console, "Attack it" (the demo — Amendment C)
 
 **TC-D1 — Fire the whole corpus** *(headline result)*
-Steps: Red Team → **Fire the whole corpus**.
+Steps: Attack it → **Fire the whole corpus**.
 Expected: **17/17 blocked** (12 authored + 5 third-party). Zero leaked. Check that the T-series rows show their published source and whether the body is verbatim or reconstructed. (On the free Gemini tier, if a payload shows "error" from a rate limit, wait a minute and re-fire it — the structural block already happened.)
 
 **TC-D2 — Inspect a direct-override attack**
@@ -323,7 +323,7 @@ Run these in sequence for the video. Every step should succeed on the first try.
 2. Write an entry, Reflect, ask a follow-up. *(TC-B1, TC-B2)*
 3. Sources → save a real article → "Saved: clean". *(TC-C1)*
 4. Sources → paste the metadata URL → **refused, INV-11**. *(TC-C2)*
-5. Red Team → Fire the whole corpus → **17/17 blocked**. *(TC-D1)*
+5. Attack it → Fire the whole corpus → **17/17 blocked**. *(TC-D1)*
 6. Expand P01 → "Reader holds no tools". *(TC-D2)*
 7. Permissions → grant, use a tool, revoke, watch it refuse. *(TC-E3, TC-E4)*
 8. Log → Verify chain → "intact". *(TC-F3)*

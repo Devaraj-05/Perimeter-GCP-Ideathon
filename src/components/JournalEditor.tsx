@@ -20,6 +20,7 @@ import {
   Smile,
   Github,
   ShieldAlert,
+  Swords,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -42,6 +43,16 @@ interface JournalEditorProps {
   isSaving: boolean;
   saveError: string | null;
   lastSavedAt: string | null;
+  /**
+   * True when this account has no saved entries yet.
+   *
+   * Drives the one-time orientation banner below. Without it a first-time
+   * visitor sees moods and modes and concludes this is a chat app — the entire
+   * reason the project exists is behind navigation they have no reason to
+   * touch.
+   */
+  isFirstRun?: boolean;
+  onOpenRedTeam?: () => void;
 }
 
 const CATEGORIES: CategoryType[] = [
@@ -110,6 +121,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   isSaving,
   saveError,
   lastSavedAt,
+  isFirstRun = false,
+  onOpenRedTeam,
 }) => {
   // Local state initialized from entry
   const [title, setTitle] = useState(entry.title || '');
@@ -586,6 +599,34 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           )}
         </div>
       </div>
+
+      {/* First-run orientation.
+          Two sentences and a dare. It says what the product IS on the screen
+          people actually land on, because "Attack it" in the navigation means
+          nothing to someone who has never heard of prompt injection. Shown only
+          until the first entry is saved — this is onboarding, not chrome. */}
+      {isFirstRun && (
+        <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-4">
+          <p className="font-serif text-base font-semibold text-[#2c2c24]">
+            This journal reads pages you point it at — and assumes they're hostile.
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-[#5a5a40]">
+            Text on a web page can carry hidden instructions aimed at the AI, not at you. Here,
+            every attempt one makes to hijack this assistant is refused and written to a log you
+            can read.
+          </p>
+          {onOpenRedTeam && (
+            <button
+              id="first-run-attack-btn"
+              onClick={onOpenRedTeam}
+              className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition-colors hover:bg-rose-100"
+            >
+              <Swords className="h-4 w-4" />
+              Attack it yourself
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Error alert banner */}
       {(errorMsg || saveError) && (

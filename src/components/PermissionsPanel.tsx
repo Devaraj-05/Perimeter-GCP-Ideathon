@@ -6,9 +6,12 @@ import {
   grantCapability,
   revokeCapability,
   Destination,
+  Delivery,
   listDestinations,
   createDestination,
+  listDeliveries,
 } from '../lib/agentApi';
+import { UntrustedText } from './UntrustedText';
 
 /**
  * The Permissions screen — INV-4, made visible.
@@ -82,6 +85,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [deliveries, setDeliveries] = useState<Record<string, Delivery[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +94,20 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
       const [c, d] = await Promise.all([listCapabilities(), listDestinations()]);
       setCaps(c);
       setDestinations(d);
+
+      // Pull the evidence for each destination. A failure here must not blank
+      // the permissions list, which is the panel's primary job.
+      const byDest: Record<string, Delivery[]> = {};
+      await Promise.all(
+        d.map(async (dest) => {
+          try {
+            byDest[dest.id] = await listDeliveries(dest.id);
+          } catch {
+            byDest[dest.id] = [];
+          }
+        }),
+      );
+      setDeliveries(byDest);
     } catch (err: any) {
       setError(err?.message || 'Could not load permissions.');
     } finally {
@@ -149,7 +167,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
       <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">Permissions</h2>
+            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it can do</h2>
             <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
               What the assistant is allowed to do on your behalf. Nothing runs without a
               permission you granted here — not even when the assistant asks for it.
@@ -261,6 +279,82 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                 It can still talk with you. It just cannot take any action until you allow one
                 above — and it will tell you what it could not do.
               </p>
+            </div>
+          )}
+
+          {/* Egress evidence.
+              The whole point of INV-5 is that a send can be refused — but a
+              refusal that leaves no trace on screen is indistinguishable from
+              nothing having happened, which made the strongest security moment
+              in the product read as a dead button. These rows show what a
+              digest actually contained: its size, its fingerprint, and the
+              first 200 characters. Nothing here is a second copy of the body;
+              the server stored exactly this much and no more.
+
+              The preview goes through UntrustedText because it originates from
+              model output (INV-9). It is never rendered as markup. */}
+          {destinations.length > 0 && (
+            <div className="pt-2">
+              <h3 className="mb-2 text-xs font-medium text-[#434338]">
+                Destinations and what was sent to them
+              </h3>
+              <div className="space-y-2">
+                {destinations.map((d) => {
+                  const rows = deliveries[d.id] ?? [];
+                  return (
+                    <div
+                      key={d.id}
+                      className="rounded-xl border border-[#e5e0d3] bg-white p-3.5"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-[#2c2c24]">{d.label}</span>
+                        <span className="rounded border border-[#d8cfae] bg-[#fbf6e6] px-1.5 py-0.5 text-[10px] font-medium uppercase text-[#5a5a40]">
+                          sandbox
+                        </span>
+                        <span className="ml-auto text-[11px] text-[#8a8a75]">
+                          {rows.length === 0
+                            ? 'nothing sent'
+                            : `${rows.length} delivery${rows.length === 1 ? '' : 's'}`}
+                        </span>
+                      </div>
+
+                      <p className="mt-1 text-[11px] text-[#8a8a75]">
+                        Recorded against a sandbox. Nothing left the application.
+                      </p>
+
+                      {rows.length > 0 && (
+                        <div className="mt-2.5 space-y-2">
+                          {rows.map((r) => (
+                            <div
+                              key={r.id}
+                              className="rounded-lg border border-[#e5e0d3] bg-[#fcfaf7] p-2.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#8a8a75]">
+                                <span className="font-medium text-[#434338]">
+                                  {r.bodyLength} bytes
+                                </span>
+                                <span className="font-mono">
+                                  sha256 {String(r.bodySha256).slice(0, 12)}…
+                                </span>
+                                <span className="ml-auto">
+                                  {new Date(r.at).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 border-t border-[#e5e0d3] pt-1.5">
+                                <UntrustedText
+                                  text={r.preview}
+                                  className="text-[11px] text-[#434338]"
+                                  placeholder="Empty body."
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

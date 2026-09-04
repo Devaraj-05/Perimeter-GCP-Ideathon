@@ -132,7 +132,7 @@ to an authorisation decision: a client able to edit them could authorise itself.
 denies `create` as well as update and delete, so history cannot be fabricated either.
 
 ```
-npm run test:rules    # 57 tests against the Firestore emulator
+npm run test:rules    # 59 tests against the Firestore emulator
 ```
 
 **Secrets never reach the browser or the repo.** The Gemini key is fetched from Secret Manager at
@@ -194,7 +194,7 @@ cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
 npm test                      # 283 unit tests, no infrastructure needed
-npm run test:rules            # 57 emulator tests: 50 rules + 7 end-to-end egress
+npm run test:rules            # 59 emulator tests: 50 rules + 9 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
 

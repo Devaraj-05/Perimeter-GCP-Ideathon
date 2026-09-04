@@ -95,7 +95,7 @@ export const RedTeamConsole: React.FC<RedTeamConsoleProps> = ({ isOpen, onClose 
           <div>
             <h2 className="flex items-center gap-2 font-serif text-xl font-semibold text-[#2c2c24]">
               <Swords className="h-5 w-5 text-[#5a5a40]" />
-              Red Team
+              Attack it
             </h2>
             <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
               Real injection attacks, fired through the real pipeline. Pick one, see what it tries

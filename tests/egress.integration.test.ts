@@ -28,6 +28,7 @@ const BOB = 'bob-int';
 let createSandboxDestination: any;
 let getDestination: any;
 let recordSandboxDelivery: any;
+let listDeliveries: any;
 let executeTool: any;
 let decideProposal: any;
 let adminDb: any;
@@ -53,7 +54,7 @@ beforeAll(async () => {
   const { initializeApp, getApps } = await import('firebase-admin/app');
   if (!getApps().length) initializeApp({ projectId: 'perimeter-rules-test' });
 
-  ({ createSandboxDestination, getDestination, recordSandboxDelivery } = await import(
+  ({ createSandboxDestination, getDestination, recordSandboxDelivery, listDeliveries } = await import(
     '../server/destinations'
   ));
   ({ executeTool } = await import('../server/execute'));
@@ -173,6 +174,29 @@ describe('INV-5 egress path, end to end', () => {
     // And nothing was written, because execution never happened.
     const after = await getDestination(ALICE, dest.id);
     expect(after.deliveryCount).toBe(0);
+  });
+
+  it('reads back the evidence a user is shown', async () => {
+    // This is what makes the refusal visible. Until this path existed the
+    // delivery record was written and shown to nobody, so a held send and a
+    // successful send looked identical on screen.
+    const dest = await createSandboxDestination(ALICE, 'Evidence check');
+    await recordSandboxDelivery(ALICE, dest.id, 'first body');
+    await recordSandboxDelivery(ALICE, dest.id, 'second body that is longer');
+
+    const rows = await listDeliveries(ALICE, dest.id);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].bodySha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows.map((r: any) => r.preview)).toContain('first body');
+    expect(rows.find((r: any) => r.preview === 'first body').bodyLength).toBe(10);
+  });
+
+  it("does not read another user's evidence", async () => {
+    const bobDest = await createSandboxDestination(BOB, 'Bob evidence');
+    await recordSandboxDelivery(BOB, bobDest.id, "bob's private text");
+
+    // Same destination id, wrong uid: the path simply does not resolve.
+    expect(await listDeliveries(ALICE, bobDest.id)).toEqual([]);
   });
 
   it('enforces the destination cap', async () => {

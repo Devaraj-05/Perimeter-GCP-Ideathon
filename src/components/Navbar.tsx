@@ -87,11 +87,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   // Visible at desktop: the four surfaces the demo walks through.
+  //
+  // These labels are deliberately plain English rather than the subsystem names
+  // they had ("Sources", "Red Team", "Permissions", "Log"). Those were OUR
+  // vocabulary — they name the parts of the architecture, which is exactly what
+  // a first-time visitor has no model of. Someone who has never heard of prompt
+  // injection cannot infer that "Red Team" is the most interesting thing here,
+  // so they never click it, and the entire point of the product stays invisible.
+  //
+  // "Attack it" is the one that matters. It is a dare rather than a noun, and a
+  // dare is the only label a stranger reliably clicks.
   const primary: Item[] = [
-    { id: 'sources-btn', label: 'Sources', Icon: Github, onClick: onOpenSources },
-    { id: 'redteam-btn', label: 'Red Team', Icon: Swords, onClick: onOpenRedTeam, accent: true },
-    { id: 'permissions-btn', label: 'Permissions', Icon: KeyRound, onClick: onOpenPermissions },
-    { id: 'perimeter-log-btn', label: 'Log', Icon: ScrollText, onClick: onOpenLog },
+    { id: 'sources-btn', label: 'What it reads', Icon: Github, onClick: onOpenSources },
+    { id: 'redteam-btn', label: 'Attack it', Icon: Swords, onClick: onOpenRedTeam, accent: true },
+    { id: 'permissions-btn', label: 'What it can do', Icon: KeyRound, onClick: onOpenPermissions },
+    { id: 'perimeter-log-btn', label: 'What it refused', Icon: ScrollText, onClick: onOpenLog },
   ];
 
   // Behind the overflow: useful, but not on the critical path.

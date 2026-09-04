@@ -247,3 +247,19 @@ export async function createDestination(label: string): Promise<Destination> {
   });
   return destination;
 }
+
+export interface Delivery {
+  id: string;
+  destinationId: string;
+  bodySha256: string;
+  bodyLength: number;
+  preview: string;
+  at: string;
+}
+
+export async function listDeliveries(destinationId: string): Promise<Delivery[]> {
+  const { deliveries } = await apiFetch<{ deliveries: Delivery[] }>(
+    `/api/agent/destinations/${encodeURIComponent(destinationId)}/deliveries`,
+  );
+  return deliveries;
+}
