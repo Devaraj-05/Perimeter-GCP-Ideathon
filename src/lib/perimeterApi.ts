@@ -1,6 +1,5 @@
-import type { Match } from '../types';
 import { apiFetch } from './apiClient';
-import { Source, Artifact, IngestRunResult } from '../types';
+import { Source, Artifact, IngestRunResult, Match } from '../types';
 
 /**
  * Client for the ingest gateway. Note there is no "write artifact" call:
