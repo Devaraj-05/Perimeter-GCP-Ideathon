@@ -189,3 +189,40 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
   airlock is not a mode.
 - **C.5** Every new integration adds at least one corpus payload targeting its surface (this is
   §9.7 restated as a standing obligation).
+
+---
+
+## Amendment D — Location-aware entries (adopted 2026-09-04)
+
+Adopted **before** any location code was written, per §9. A journal entry may carry the place it
+was written. This works §9's checklist in order.
+
+**1. Data flows.** Browser geolocation (or a place name the user types) → our server → the Google
+Geocoding API → a place name stored on that user's own entry document. Coordinates are `USER`
+zone; the geocoding response is `DERIVED`.
+
+**2. New untrusted input?** Yes, in the weak sense: the geocoding response is text from outside
+this system. It is not attacker-controlled in any realistic scenario, but it is not ours either,
+so it is treated as external-origin data — rendered through the INV-9 renderer like every other
+string this application did not author. The cost of being consistent here is one import.
+
+**3. New egress path?** No. The request goes to a fixed Google host that no user input can
+change, so this is not egress-class and needs no capability grant or destination id. If a future
+change ever lets a user influence that host, this clause is void and §9.3 applies in full.
+
+**4. New secret?** Yes. `MAPS_API_KEY`, from Secret Manager, pinned by version, with a scoped IAM
+binding on that one secret. It is resolved by the same code path as the Gemini key rather than a
+second copy of it.
+
+**5. New Firestore paths?** No new collection. New optional fields on `users/{uid}/entries/{id}`,
+which is already owner-scoped and covered by existing rules and tests.
+
+**6. New invariant.**
+
+- **INV-12** The Maps key is server-side only. It is never embedded in the client bundle, never
+  returned by an API, and never placed in a URL the browser requests. Any map imagery is proxied
+  same-origin so the key stays on the server *and* the narrowed `img-src` from the INV-9 backstop
+  is not widened to accommodate a feature.
+
+**7. Corpus payload.** A place name carrying an injection attempt is added to the corpus, so the
+claim that the geocoding response is treated as data is tested rather than asserted.
