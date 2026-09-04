@@ -21,6 +21,8 @@ import {
   Github,
   ShieldAlert,
   Swords,
+  MapPin,
+  X,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -31,6 +33,7 @@ import {
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
+import { resolveLocation } from '../lib/perimeterApi';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 
@@ -132,6 +135,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [mode, setMode] = useState<ReflectionMode>(entry.mode || 'companion');
   const [turns, setTurns] = useState<TurnMessage[]>(entry.turns || []);
   const [summary, setSummary] = useState<string | undefined>(entry.summary);
+  const [location, setLocation] = useState(entry.location);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -156,6 +162,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setContent(entry.content || '');
     setCategory(entry.category || 'Personal');
     setMood(entry.mood || 'Reflective');
+    setLocation(entry.location);
+    setLocationError(null);
     setMode(entry.mode || 'companion');
     setTurns(entry.turns || []);
     setSummary(entry.summary);
@@ -232,6 +240,58 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     }
   };
 
+  /**
+   * Attaches the place this entry was written (Amendment D).
+   *
+   * Geolocation is denied far more often than it is granted, so a denial is a
+   * normal outcome and offers the typed fallback rather than an error. Saving
+   * never depends on this succeeding.
+   */
+  const attachLocation = async () => {
+    setLocationError(null);
+    setLocating(true);
+    try {
+      const coords = await new Promise<GeolocationPosition | null>((resolve) => {
+        if (!('geolocation' in navigator)) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(pos),
+          () => resolve(null),
+          { timeout: 8000, maximumAge: 300_000 },
+        );
+      });
+
+      if (!coords) {
+        setLocationError('Location unavailable. Type a place name instead.');
+        return;
+      }
+
+      const resolved = await resolveLocation({
+        lat: coords.coords.latitude,
+        lng: coords.coords.longitude,
+      });
+      setLocation(resolved);
+      setHasUnsavedChanges(true);
+    } catch (err: any) {
+      setLocationError(err?.message || 'Could not resolve that location.');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const attachTypedPlace = async (query: string) => {
+    if (!query.trim()) return;
+    setLocationError(null);
+    setLocating(true);
+    try {
+      setLocation(await resolveLocation({ query }));
+      setHasUnsavedChanges(true);
+    } catch (err: any) {
+      setLocationError(err?.message || 'Could not find that place.');
+    } finally {
+      setLocating(false);
+    }
+  };
+
   // Helper to compile current entry object
   const getCurrentEntryObject = (): JournalEntry => ({
     ...entry,
@@ -245,6 +305,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     insights,
     tags,
     sentiment,
+    location,
     updatedAt: new Date().toISOString(),
   });
 
@@ -427,7 +488,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const handleExportMarkdown = () => {
     const lines = [
       `# ${title || 'Journal Reflection'}`,
-      `**Date:** ${new Date(entry.createdAt).toLocaleDateString()} | **Category:** ${category} | **Mood:** ${mood}`,
+      `**Date:** ${new Date(entry.createdAt).toLocaleDateString()} | **Category:** ${category} | **Mood:** ${mood}` +
+        (location ? ` | **Place:** ${location.placeName}` : ''),
       '',
       `## Journal Entry`,
       content || '_No initial text written._',
@@ -591,6 +653,57 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Location (Amendment D).
+              The place name is DERIVED — it came from the Geocoding API, not
+              from us — so it renders through UntrustedText like any other
+              external-origin string, not as a bare interpolation. */}
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-[#8a8a75]" />
+            {location ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e0d3] bg-white px-2 py-1">
+                <UntrustedText
+                  text={location.placeName}
+                  className="text-xs text-[#434338]"
+                  placeholder="Unnamed place"
+                />
+                <button
+                  onClick={() => {
+                    setLocation(undefined);
+                    setHasUnsavedChanges(true);
+                  }}
+                  title="Remove location"
+                  className="cursor-pointer text-[#8a8a75] hover:text-[#2c2c24]"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ) : (
+              <button
+                id="add-location-btn"
+                onClick={() => void attachLocation()}
+                disabled={locating}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-xs font-medium text-[#434338] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+              >
+                {locating ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
+                {locating ? 'Locating…' : 'Add location'}
+              </button>
+            )}
+          </div>
+
+          {locationError && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-[#8a5a40]">
+              {locationError}
+              <input
+                type="text"
+                placeholder="Type a place…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void attachTypedPlace((e.target as HTMLInputElement).value);
+                }}
+                className="rounded border border-[#e5e0d3] bg-white px-2 py-0.5 text-[11px] text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+              />
+            </span>
+          )}
 
           {sentiment && (
             <span className="ml-auto rounded-full bg-[#f3efe6] border border-[#e5e0d3] px-2.5 py-0.5 text-[11px] font-medium text-[#5a5a40]">

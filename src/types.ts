@@ -25,6 +25,18 @@ export interface JournalEntry {
   tags?: string[];
   sentiment?: string;
   turns: TurnMessage[];
+  /**
+   * Where the entry was written (Amendment D). Optional: geolocation is denied
+   * often, and a journal must never depend on it to save.
+   *
+   * placeName is DERIVED — it came from the Geocoding API, not from us — so it
+   * renders through the INV-9 renderer like any other external-origin string.
+   */
+  location?: {
+    placeName: string;
+    lat: number;
+    lng: number;
+  };
   createdAt: string;
   updatedAt: string;
 }

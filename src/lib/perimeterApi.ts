@@ -60,3 +60,27 @@ export async function ingestLink(url: string): Promise<LinkIngestResult> {
     body: JSON.stringify({ url }),
   });
 }
+
+// --- Location (Amendment D) ---
+
+export interface ResolvedLocation {
+  placeName: string;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Resolves coordinates or a typed place name to a place.
+ *
+ * The Maps key stays on the server (INV-12), which is why this is a round trip
+ * rather than a browser SDK call.
+ */
+export async function resolveLocation(
+  input: { lat: number; lng: number } | { query: string },
+): Promise<ResolvedLocation> {
+  const { location } = await apiFetch<{ location: ResolvedLocation }>('/api/location/resolve', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return location;
+}

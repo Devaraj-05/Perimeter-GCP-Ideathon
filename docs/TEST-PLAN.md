@@ -70,7 +70,7 @@ Left to right:
 
 | Element | What it does |
 |---|---|
-| **Fire the whole corpus** | Runs all 17 payloads (12 authored P01-P12, 5 published T01-T05); shows N/17 blocked |
+| **Fire the whole corpus** | Runs all 18 payloads (13 authored P01-P13, 5 published T01-T05); shows N/18 blocked |
 | Per-payload **Fire** | Runs one; expands to show each defensive stage's result |
 | Chevron | Expands the payload to show the attack text and the expected block |
 
@@ -201,7 +201,7 @@ Expected: **Blocked**, with the same stage rows a catalogued payload produces, a
 rate limit, not a failure.
 
 Steps: Attack it → **Fire the whole corpus**.
-Expected: **17/17 blocked** (12 authored + 5 third-party). Zero leaked. Check that the T-series rows show their published source and whether the body is verbatim or reconstructed. (On the free Gemini tier, if a payload shows "error" from a rate limit, wait a minute and re-fire it — the structural block already happened.)
+Expected: **18/18 blocked** (12 authored + 5 third-party). Zero leaked. Check that the T-series rows show their published source and whether the body is verbatim or reconstructed. (On the free Gemini tier, if a payload shows "error" from a rate limit, wait a minute and re-fire it — the structural block already happened.)
 
 **TC-D2 — Inspect a direct-override attack**
 Steps: Expand **P01** → **Fire**.
@@ -329,7 +329,7 @@ Run these in sequence for the video. Every step should succeed on the first try.
 2. Write an entry, Reflect, ask a follow-up. *(TC-B1, TC-B2)*
 3. Sources → save a real article → "Saved: clean". *(TC-C1)*
 4. Sources → paste the metadata URL → **refused, INV-11**. *(TC-C2)*
-5. Attack it → Fire the whole corpus → **17/17 blocked**. *(TC-D1)*
+5. Attack it → Fire the whole corpus → **18/18 blocked**. *(TC-D1)*
 6. Expand P01 → "Reader holds no tools". *(TC-D2)*
 7. Permissions → grant, use a tool, revoke, watch it refuse. *(TC-E3, TC-E4)*
 8. Log → Verify chain → "intact". *(TC-F3)*
@@ -343,7 +343,7 @@ If all eight pass on the live URL, the submission demo is solid.
 These back the manual cases and run without a browser:
 
 ```bash
-npm test            # 288 unit tests (airlock, broker, SSRF, detection, INV guards)
+npm test            # 313 unit tests (airlock, broker, SSRF, detection, INV guards)
 npm run test:rules  # 50 Firestore rules tests including cross-user and tamper cases
-npm run replay      # two corpus tables: authored 12/12, third-party 5/5
+npm run replay      # two corpus tables: authored 13/13, third-party 5/5
 ```
