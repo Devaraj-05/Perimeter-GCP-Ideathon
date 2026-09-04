@@ -270,3 +270,40 @@ dashboard that reads private journals would contradict the product it is reporti
 
 **7. Corpus payload.** A document instructing the assistant to grant itself administrative
 privileges is added to the corpus.
+
+---
+
+## Amendment F — Attaching untrusted content from the chat (adopted 2026-09-04)
+
+Adopted **before** any attachment code was written, per §9. Until now untrusted content entered
+only through a separate panel. It may now be attached directly in the chat composer, which is
+where a user actually is when they have something suspicious in hand.
+
+**1. Data flows.** Text a user pastes, or a URL they add, from the composer → the existing ingest
+path → an `UNTRUSTED` segment and an artifact. Identical to a fetched page in every respect.
+
+**2. New untrusted input?** Yes, and it is the point. It routes through the Reader like everything
+else. There is no shortcut for content that arrived by paste rather than by fetch — a note is not
+more trustworthy because a human typed it in, since the whole scenario is a human pasting
+something an attacker wrote.
+
+**3. New egress path?** No.
+
+**4. New secret?** No.
+
+**5. New Firestore paths?** None. Reuses `users/{uid}/artifacts` and its existing rules and tests.
+
+**6. New invariant.**
+
+- **INV-14** Content attached in the chat is `UNTRUSTED` from the moment of attachment. Nothing
+  the user says afterwards, and nothing the model infers, can re-classify it. There is no "trust
+  this one" affordance, because a user who could grant trust to a document is a user an attacker
+  can talk into granting it.
+
+**A note on why attachments do not weaken the airlock.** Attaching content sets grounding, and
+grounding already switches the conversation onto the agent path where the Reader holds no tools
+and `assertNoUntrusted` guards the Planner. This amendment adds an entry point, not a code path.
+Any change that made attachments bypass the Reader would breach INV-1 and is forbidden.
+
+**7. Corpus payload.** A pasted note impersonating an earlier conversation turn is added to the
+corpus.
