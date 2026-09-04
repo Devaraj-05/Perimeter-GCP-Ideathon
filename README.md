@@ -77,6 +77,10 @@ not a citation, and is not counted as one.
 
 #### Why the detection number is published as a miss
 
+The console also takes **an attack you write yourself**, run through the same code path and
+recorded in the same log. A fixed corpus invites one fair objection — *these are the seventeen
+they made sure to handle* — and the answer to it should be a text box, not a paragraph.
+
 **Pattern-based detection (L1) caught only 6 of the 12 authored payloads — and that gap is the
 point.** The pattern layer misses half of them; the boundary holds anyway, because it does not
 depend on detection. A submission claiming 17/17 *detection* would be misrepresenting how this
@@ -193,7 +197,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 283 unit tests, no infrastructure needed
+npm test                      # 288 unit tests, no infrastructure needed
 npm run test:rules            # 59 emulator tests: 50 rules + 9 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

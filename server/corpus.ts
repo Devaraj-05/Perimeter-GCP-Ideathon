@@ -25,7 +25,16 @@ export type AttackClass =
   | 'destination_substitution'
   | 'capability_social_engineering'
   | 'ssrf'
-  | 'cross_user_probe';
+  | 'cross_user_probe'
+  /**
+   * Text a user typed into the console themselves.
+   *
+   * It has no declared class because nobody classified it, and the runner
+   * deliberately does NOT guess one — an attack of unknown type gets the
+   * stages that genuinely apply (detection, the toolless Reader) and no
+   * class-specific claim invented on its behalf.
+   */
+  | 'custom';
 
 export interface CorpusPayload {
   id: string;

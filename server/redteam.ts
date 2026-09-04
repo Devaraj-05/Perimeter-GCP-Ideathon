@@ -7,6 +7,7 @@ import { buildReaderRequest, assertReaderHasNoTools } from './reader';
 import { assertPublicHttpUrl, isBlockedAddress } from './fetchurl';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
+import { checkRateLimit } from './ratelimit';
 import { decideProposal } from './broker';
 import { TOOL_REGISTRY } from './tools';
 
@@ -332,6 +333,69 @@ redteamRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response
     res.json({ result });
   } catch (err: any) {
     console.error('[redteam] run failed:', err?.message);
+    res.status(500).json({ error: 'The run failed. Please retry.' });
+  }
+});
+
+/**
+ * Fires text the user typed themselves.
+ *
+ * This exists to answer the only real objection to a fixed corpus: "how do I
+ * know these seventeen aren't just the ones you made sure to handle?" Here the
+ * attacker writes the attack. It runs through the same runPayload() as every
+ * catalogued payload — same detection, same toolless Reader, same logging — so
+ * there is no separate, friendlier path for text we have not seen.
+ *
+ * Two guards, because this endpoint spends Gemini quota on demand:
+ *  - its own rate-limit bucket, so hammering it cannot drain the chat budget
+ *  - a length cap, since the Reader call is billed by input
+ */
+redteamRouter.post('/run-custom', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const limit = checkRateLimit(`redteam-custom:${uid}`, Number(process.env.REDTEAM_RATE_LIMIT_PER_HOUR) || 20);
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      return res.status(429).json({
+        error: `You have fired a lot of attacks. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s).`,
+      });
+    }
+
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const body = typeof data.body === 'string' ? data.body.trim() : '';
+    if (!body) return res.status(400).json({ error: 'Write an attack first.' });
+    if (body.length > 4000) {
+      return res.status(400).json({ error: 'Keep it under 4000 characters.' });
+    }
+
+    const payload: CorpusPayload = {
+      id: 'CUSTOM',
+      class: 'custom',
+      title: 'Your attack',
+      body,
+      intent: 'Written by you in the console.',
+      expectedBlock:
+        'Whatever it asks for, it is read by a model with no tools bound. There is nothing for it to call.',
+      invariant: 'INV-1',
+      provenance: 'authored',
+    };
+
+    const result = await runPayload(payload);
+
+    await logEvent(uid, {
+      kind: 'redteam',
+      decision: result.outcome === 'blocked' ? 'deny' : 'allow',
+      reason: `redteam:custom:${result.outcome}`,
+      invariant: 'INV-1',
+      // The attack text itself is NOT copied into the log. logEvent hashes long
+      // strings, and storing a second full copy of user-supplied content in the
+      // audit trail buys nothing.
+      detail: { class: 'custom', length: body.length },
+    });
+
+    res.json({ result });
+  } catch (err: any) {
+    console.error('[redteam] custom run failed:', err?.message);
     res.status(500).json({ error: 'The run failed. Please retry.' });
   }
 });

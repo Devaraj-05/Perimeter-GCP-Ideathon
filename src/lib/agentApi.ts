@@ -217,6 +217,19 @@ export async function runPayload(payloadId: string): Promise<RunResult> {
   return result;
 }
 
+/**
+ * Fires text the user wrote. Same pipeline, same stages, same log entry as a
+ * catalogued payload — the point is that there is no gentler path for input we
+ * did not choose.
+ */
+export async function runCustomAttack(body: string): Promise<RunResult> {
+  const { result } = await apiFetch<{ result: RunResult }>('/api/redteam/run-custom', {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+  return result;
+}
+
 export async function runCorpus(): Promise<{ summary: CorpusSummary; results: RunResult[] }> {
   return apiFetch<{ summary: CorpusSummary; results: RunResult[] }>('/api/redteam/run-all', {
     method: 'POST',
