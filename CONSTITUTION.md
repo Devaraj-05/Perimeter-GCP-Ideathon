@@ -226,3 +226,47 @@ which is already owner-scoped and covered by existing rules and tests.
 
 **7. Corpus payload.** A place name carrying an injection attempt is added to the corpus, so the
 claim that the geocoding response is treated as data is tested rather than asserted.
+
+---
+
+## Amendment E — Roles and administrative scope (adopted 2026-09-04)
+
+Adopted **before** any RBAC code was written, per §9.
+
+**Why custom claims, and not the document lookup our own directives offer.**
+`CUSTOM_INSTRUCTIONS.md` §3 permits RBAC via `get(/databases/$(db)/documents/users/$(uid)).data.role`.
+In *this* codebase that would be a privilege-escalation hole: `firestore.rules` grants
+`allow write: if isOwner(userId)` on `users/{userId}` so the profile can sync, which means the
+user governed by a `role` field could set it. Self-promotion to administrator in one client
+write.
+
+A Firebase **custom claim** is signed into the ID token by the Admin SDK and cannot be altered by
+the client. That is the difference between a permission and a suggestion.
+
+**1. Data flows.** A claim set out-of-band by an operator → the ID token → `requireAdmin`. No new
+user content is read anywhere in this feature.
+
+**2. New untrusted input?** No.
+
+**3. New egress path?** No.
+
+**4. New secret?** No. Claims are set with existing Admin credentials.
+
+**5. New Firestore paths?** One: `metrics/global`, holding **counters only**. Default-deny with an
+admin-only read and no client write, plus rules tests written first.
+
+**6. New invariant.**
+
+- **INV-13** A role is read only from a verified Firebase custom claim. Never from a Firestore
+  document, a request body, a header, a query string, or model output. There is no HTTP route
+  that grants a role — an endpoint that mints administrators is the thing being defended against,
+  so the grant is a local script run with Admin credentials.
+
+**Administrative scope is deliberately narrow.** An admin sees aggregate counters — how many
+attacks were fired, how many were blocked, the distribution by class. An admin does **not** see
+another user's entries, sources, destinations, or perimeter log, and no code path exists to. INV-3
+stands unchanged and unweakened: there is still no cross-user read in this application. A security
+dashboard that reads private journals would contradict the product it is reporting on.
+
+**7. Corpus payload.** A document instructing the assistant to grant itself administrative
+privileges is added to the corpus.
