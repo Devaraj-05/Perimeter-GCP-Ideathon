@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { requireAuth, AuthedRequest, adminDb } from './auth';
 import { fetchOpenIssues, isValidRepoRef, IngestError } from './github';
-import { detectL1, fuseVerdict } from './detect';
+import { detectL1, fuseVerdict, Match } from './detect';
 import { classifyL2 } from './classify';
 import { safeFetch } from './fetchurl';
 import { createSegment, SourceType } from './segments';
@@ -282,6 +282,8 @@ export interface IngestedArtifact {
   title: string;
   verdict: string;
   signals: string[];
+  /** Where each signal fired, so the caller can show evidence rather than a badge. */
+  matches: Match[];
   bytes: number;
 }
 
@@ -343,6 +345,11 @@ export async function ingestUntrustedText(
       l1Score: l1.score,
       l2Score: l2.score,
       signals: l1.signals,
+      // Stored, not merely returned. Evidence that lives only in the ingest
+      // response dies on reload, and the user would have to re-upload the file
+      // to see why it was flagged. Safe to store because excerpts are capped at
+      // 200 chars and the document at 100 matches, upstream in detect.ts.
+      matches: l1.matches,
       categories: l2.categories,
       verdict,
       classifierError: l2.error ?? null,
@@ -353,7 +360,15 @@ export async function ingestUntrustedText(
     }),
   );
 
-  return { artifactId, segmentId: segment.id, title, verdict, signals: l1.signals, bytes };
+  return {
+    artifactId,
+    segmentId: segment.id,
+    title,
+    verdict,
+    signals: l1.signals,
+    matches: l1.matches,
+    bytes,
+  };
 }
 
 ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response) => {

@@ -91,3 +91,24 @@ export interface IngestRunResult {
   written: number;
   verdicts: Record<string, number>;
 }
+
+/**
+ * Where a detection signal fired in a piece of untrusted content.
+ *
+ * Mirrors Match in server/detect.ts. The client does not import from server/,
+ * so this is a hand-kept copy; `signal` is widened to string here because the
+ * Signal union lives server-side and the UI only ever renders it.
+ *
+ * `excerpt` is attacker-authored text. It renders through UntrustedText and
+ * never any other way (INV-9).
+ */
+export interface Match {
+  signal: string;
+  start: number;
+  end: number;
+  /** 1-based. */
+  line: number;
+  excerpt: string;
+  /** True when the matched characters are invisible and shown as code points. */
+  hidden: boolean;
+}
