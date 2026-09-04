@@ -29,6 +29,7 @@ import {
   FileUp,
   Mail,
   Plus,
+  Globe,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -47,6 +48,7 @@ import {
   gmailConnectUrl,
   gmailIngest,
 } from '../lib/perimeterApi';
+import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 
@@ -153,6 +155,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   // themselves live server-side and drive grounding.
   const [attachMenu, setAttachMenu] = useState<null | 'note' | 'link'>(null);
   const [plusOpen, setPlusOpen] = useState(false);
+  /**
+   * When on, links in a message YOU type are fetched and read.
+   *
+   * Off by default: fetching is an outbound request made on your behalf, and
+   * that should be something you switch on deliberately rather than a
+   * behaviour you discover.
+   */
+  const [webSearch, setWebSearch] = useState(false);
   const [attachDraft, setAttachDraft] = useState('');
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -561,12 +571,39 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setTurns(updatedTurns);
       setHasUnsavedChanges(true);
 
+      // Web search — links in YOUR message only.
+      //
+      // extractUrls is deliberately never applied to a turn, an artifact or an
+      // attachment. A link inside untrusted content is an attacker choosing
+      // what our server requests, and following one would hand them a fetch
+      // primitive aimed wherever they like.
+      let extraGrounding: string[] = [];
+      if (webSearch) {
+        for (const url of extractUrls(followUpText)) {
+          try {
+            const r = await ingestLink(url);
+            extraGrounding.push(r.artifactId);
+            setAttachments((prev) => [
+              ...prev,
+              { id: r.artifactId, title: r.url ?? url, verdict: r.verdict },
+            ]);
+          } catch (err: any) {
+            // A refused link is information, not a failure: say so and carry
+            // on answering the question that was asked.
+            setAttachError(err?.message || `Could not read ${url}`);
+          }
+        }
+        if (extraGrounding.length > 0) onAttached?.();
+      }
+
       const response = await reflectGrounded({
         content: content.trim(),
         mode,
         category,
         turns: updatedTurns,
-        groundingArtifactIds,
+        // Newly fetched ids are merged here rather than waiting for the parent
+        // to refresh: the prop would still be stale on this turn.
+        groundingArtifactIds: [...groundingArtifactIds, ...extraGrounding],
       });
       setLastTurnEvents(response.threatEvents);
       setLastTurnTainted(response.turnTaint);
@@ -1320,6 +1357,20 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             )}
 
             {/* Follow-up input box */}
+            {!webSearch && mentionsUrl(followUpInput) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#5a5a40]">
+                <Globe className="h-3.5 w-3.5 shrink-0" />
+                <span>That link will be ignored. Turn on Web to fetch and read it.</span>
+                <button
+                  type="button"
+                  onClick={() => setWebSearch(true)}
+                  className="cursor-pointer font-medium underline"
+                >
+                  Enable web search
+                </button>
+              </div>
+            )}
+
             <form
               onSubmit={handleSendFollowUp}
               className="mt-4 pt-3 border-t border-[#f0ede6] flex items-center gap-2"
@@ -1416,6 +1467,26 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   </>
                 )}
               </div>
+
+              <button
+                type="button"
+                id="web-search-toggle"
+                onClick={() => setWebSearch((v) => !v)}
+                title={
+                  webSearch
+                    ? 'Web search on — links you type are fetched and read'
+                    : 'Web search off — links you type are ignored'
+                }
+                aria-pressed={webSearch}
+                className={`inline-flex h-[42px] shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium transition-colors ${
+                  webSearch
+                    ? 'border-[#5a5a40] bg-[#5a5a40] text-white'
+                    : 'border-[#e5e0d3] bg-white text-[#8a8a75] hover:bg-[#f3efe6]'
+                }`}
+              >
+                <Globe className="h-4 w-4" />
+                <span className="hidden sm:inline">Web</span>
+              </button>
 
               <input
                 id="followup-input"
