@@ -76,9 +76,11 @@ describe('extraction is applied ONLY to what the user typed', () => {
     const calls = EDITOR.match(/extractUrls\(([^)]*)\)/g) ?? [];
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {
-      // followUpText / followUpInput are the composer. Anything else — an
-      // artifact body, a turn, an attachment preview — is attacker-reachable.
-      expect(call).toMatch(/extractUrls\((followUpText|followUpInput)\)/);
+      // The allowlist is explicit and each name means "the user authored this":
+      // followUpText/followUpInput are the composer, pastedByUser is what they
+      // pasted into it. Anything else — an artifact body, a turn, an attachment
+      // preview — is attacker-reachable and must never be scanned for links.
+      expect(call).toMatch(/extractUrls\((followUpText|followUpInput|pastedByUser)\)/);
     }
   });
 

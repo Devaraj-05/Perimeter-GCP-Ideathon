@@ -163,6 +163,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * behaviour you discover.
    */
   const [webSearch, setWebSearch] = useState(false);
+
+  /**
+   * When you paste something large or a link into the chat, we offer to run it
+   * through the perimeter instead of trusting it.
+   *
+   * This is the honest resolution of "why can't I just paste?". You can — but
+   * pasted text defaults to trusted (it goes to the tool-holding Planner), and
+   * a poisoned email pasted into chat would sail straight past the perimeter.
+   * So on a paste that looks like outside content, we ask. One tap re-routes it
+   * to the Reader as UNTRUSTED; ignore it and it stays your own words.
+   */
+  const [pasteOffer, setPasteOffer] = useState<{ kind: 'link' | 'note'; text: string } | null>(null);
   const [attachDraft, setAttachDraft] = useState('');
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -389,6 +401,53 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       onAttached?.();
     } catch (err: any) {
       setAttachError(err?.message || 'Could not reach your mailbox.');
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  /**
+   * Decides whether a paste looks like something from outside worth checking.
+   * A short question typed-then-pasted should not nag; a URL or a big block
+   * should offer the boundary.
+   */
+  const onComposerPaste = (clipboard: string) => {
+    // Named for what it is. urls.test.ts asserts extractUrls is only ever
+    // called on user-authored input, and a call site called `text` tells a
+    // reviewer nothing about whose text it is.
+    const pastedByUser = clipboard.trim();
+    if (!pastedByUser) return;
+    const urls = extractUrls(pastedByUser);
+    if (urls.length === 1 && pastedByUser.length <= urls[0].length + 4) {
+      setPasteOffer({ kind: 'link', text: urls[0] });
+    } else if (pastedByUser.length >= 240) {
+      setPasteOffer({ kind: 'note', text: pastedByUser });
+    }
+  };
+
+  /** Re-routes the pasted content through the perimeter and clears it from the box. */
+  const acceptPasteOffer = async () => {
+    if (!pasteOffer) return;
+    const offer = pasteOffer;
+    setPasteOffer(null);
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      const r =
+        offer.kind === 'link' ? await ingestLink(offer.text) : await ingestNote(offer.text);
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: r.artifactId,
+          title: offer.kind === 'link' ? (r as any).url ?? offer.text : (r as any).title ?? 'Pasted text',
+          verdict: r.verdict,
+        },
+      ]);
+      // It is an attachment now, not a chat message: take it out of the box.
+      setFollowUpInput((prev) => prev.split(offer.text).join('').trim());
+      onAttached?.();
+    } catch (err: any) {
+      setAttachError(err?.message || 'Could not check that.');
     } finally {
       setAttaching(false);
     }
@@ -1246,6 +1305,32 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             )}
 
             {/* Follow-up input box */}
+            {pasteOffer && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#5a5a40]">
+                <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {pasteOffer.kind === 'link'
+                    ? 'You pasted a link. Did someone send it to you?'
+                    : 'You pasted a lot of text. Did it come from somewhere else?'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void acceptPasteOffer()}
+                  disabled={attaching}
+                  className="cursor-pointer rounded border border-rose-300 bg-rose-50 px-2 py-0.5 font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50"
+                >
+                  Check it as hostile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPasteOffer(null)}
+                  className="cursor-pointer text-[#8a8a75] underline"
+                >
+                  No, it&rsquo;s mine
+                </button>
+              </div>
+            )}
+
             {!webSearch && mentionsUrl(followUpInput) && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#5a5a40]">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
@@ -1306,20 +1391,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                         From outside &mdash; treated as hostile
                       </p>
                       {[
-                        {
-                          id: 'menu-note',
-                          Icon: ClipboardPaste,
-                          label: 'Something I received',
-                          hint: 'An email, a message, an excerpt',
-                          run: () => setAttachMenu('note'),
-                        },
-                        {
-                          id: 'menu-link',
-                          Icon: Link2,
-                          label: 'A page I was sent',
-                          hint: 'Fetched on the server, never by your browser',
-                          run: () => setAttachMenu('link'),
-                        },
                         {
                           id: 'menu-file',
                           Icon: FileUp,
@@ -1382,6 +1453,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 type="text"
                 value={followUpInput}
                 onChange={(e) => setFollowUpInput(e.target.value)}
+                onPaste={(e) => onComposerPaste(e.clipboardData.getData('text'))}
                 placeholder={turns.length === 0 ? "What is on your mind? Or add something with + and ask about it…" : "Ask a follow-up, or add another angle…"}
                 disabled={isGenerating}
                 className="flex-1 rounded-xl border border-[#e5e0d3] bg-[#f8f6f0] px-4 py-2.5 text-xs sm:text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:bg-white focus:border-[#5a5a40] focus:outline-hidden transition-colors"
