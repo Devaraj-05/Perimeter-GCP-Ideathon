@@ -351,3 +351,48 @@ poisoned text is supposed to end up.
 
 **7. Corpus payloads.** A PDF carrying hidden instruction text and an image carrying visible
 instruction text are added to the corpus.
+
+---
+
+## Amendment H — Gmail, third-party OAuth (adopted 2026-09-04)
+
+Adopted **before** any OAuth code was written, per §9. This is the most sensitive integration in
+the application: it holds a credential that grants read access to a user's mail.
+
+**1. Data flows.** An operator-configured OAuth client → a consent the user grants → a refresh
+token held by us → message bodies fetched on demand → `UNTRUSTED` text through the existing
+`ingestUntrustedText` path. Subject, sender and body are all attacker-controlled: anyone can send
+an email, which makes an inbox the single most reliable way to put chosen text in front of
+someone's assistant.
+
+**2. New untrusted input?** Yes, and it is the canonical one. It routes through the Reader.
+
+**3. New egress path?** No. Gmail is read-only (`gmail.readonly`) and we never send.
+
+**4. New secrets?** Two: the OAuth client secret, and a 32-byte key used to encrypt stored refresh
+tokens. Both from Secret Manager, pinned, with scoped IAM.
+
+**5. New Firestore paths?** `users/{uid}/private/{docId}`, which denies **read and write to the
+client**. Every other collection in this application permits an owner read; this one does not,
+because unlike a journal entry there is no legitimate reason for a browser to ever hold this
+value, and "the owner can read it" is how a token ends up in a debugger, a screenshot, or a
+support ticket. Rules tests are written first.
+
+**6. New invariants.**
+
+- **INV-16** A third-party OAuth token is encrypted at rest with a key from Secret Manager, is
+  never returned to any client, never logged, and never enters a model context. Its document is
+  unreadable by the client under any circumstances.
+- **INV-17** The OAuth callback establishes identity from a server-issued, single-use `state`
+  nonce bound to a uid, never from a uid supplied in the request. The callback is reached by a
+  browser redirect and carries no bearer token; trusting any identity claim in that request would
+  let anyone attach their inbox to someone else's account.
+
+**On running unverified.** `gmail.readonly` is a Google *restricted* scope. Production
+verification requires a security assessment and weeks of review, so this ships with the consent
+screen in **testing** mode: it works immediately for explicitly listed test users and shows an
+unverified-app warning. That limitation is stated plainly in the README rather than hidden — a
+submission that quietly implies Google has reviewed it would be exactly the kind of overclaim this
+project exists to argue against.
+
+**7. Corpus payload.** An email whose signature block carries instructions is added to the corpus.
