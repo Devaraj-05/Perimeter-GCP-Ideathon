@@ -32,6 +32,34 @@ export interface L1Result {
   score: number;
   /** Signals that alone justify a hostile verdict. */
   highConfidence: Signal[];
+  /** Where each signal fired. Evidence, not verdict — see Match. */
+  matches: Match[];
+}
+
+/**
+ * One place a signal fired.
+ *
+ * This exists because a verdict is not evidence. The application could tell a
+ * user their document was HOSTILE and could not show them a single character
+ * of why, because every check here was a boolean .test(). A red badge with no
+ * quotation asks the user to take our word for it, which is the opposite of
+ * what this application is for.
+ *
+ * Every field is derived from a regex match offset. No model produces any of
+ * it — asking the Reader to explain an attack would let a poisoned document
+ * write our security report.
+ */
+export interface Match {
+  signal: Signal;
+  /** Character offsets into the scanned text. */
+  start: number;
+  end: number;
+  /** 1-based line number of `start`, for display. */
+  line: number;
+  /** The match plus surrounding context. Capped — Constitution §7. */
+  excerpt: string;
+  /** True when the matched characters render as nothing and must be escaped. */
+  hidden: boolean;
 }
 
 /**
@@ -133,6 +161,110 @@ function findOffDomainUrls(text: string, allowedHosts: string[]): boolean {
   return false;
 }
 
+const MAX_MATCHES_PER_SIGNAL = 20;
+const MAX_MATCHES_PER_DOCUMENT = 100;
+const EXCERPT_CONTEXT = 80;
+const EXCERPT_CAP = 200;
+
+/** Signals whose matched characters are invisible when rendered. */
+const HIDDEN_SIGNALS = new Set<Signal>(['hidden_unicode', 'bidi_override']);
+
+/**
+ * Written with explicit escapes rather than literal characters, unlike the
+ * detection patterns above. A character class whose contents are themselves
+ * invisible cannot be reviewed by the next person to read this file.
+ */
+const INVISIBLE = /[​-‍⁠﻿­‪-‮⁦-⁩]/g;
+
+function lineOf(text: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index && i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) line++;
+  }
+  return line;
+}
+
+/**
+ * Renders invisible characters as code points.
+ *
+ * An excerpt of a zero-width payload is otherwise byte-for-byte
+ * indistinguishable from ordinary text on screen, which makes it useless as
+ * evidence: the user sees "harmlesstext" and no reason for the warning.
+ */
+function escapeInvisible(value: string): string {
+  return value.replace(
+    INVISIBLE,
+    (c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`,
+  );
+}
+
+function excerptAround(text: string, start: number, end: number, hidden: boolean): string {
+  const from = Math.max(0, start - EXCERPT_CONTEXT);
+  const to = Math.min(text.length, end + EXCERPT_CONTEXT);
+  const slice = text.slice(from, to);
+  return (hidden ? escapeInvisible(slice) : slice).slice(0, EXCERPT_CAP);
+}
+
+/**
+ * Collects every match of one pattern.
+ *
+ * The globalised clone is built per call and deliberately never hoisted to
+ * module scope. A global RegExp carries mutable lastIndex, so a shared one
+ * would resume mid-document on the next call and silently skip matches on
+ * every second scan — a detector that works only on odd-numbered documents.
+ */
+function sweep(text: string, pattern: RegExp, signal: Signal): Match[] {
+  const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+  const scanner = new RegExp(pattern.source, flags);
+  const hidden = HIDDEN_SIGNALS.has(signal);
+  const out: Match[] = [];
+
+  let m: RegExpExecArray | null;
+  while (out.length < MAX_MATCHES_PER_SIGNAL && (m = scanner.exec(text)) !== null) {
+    // A pattern able to match the empty string would never advance lastIndex.
+    if (m[0].length === 0) {
+      scanner.lastIndex++;
+      continue;
+    }
+    const start = m.index;
+    const end = start + m[0].length;
+    out.push({
+      signal,
+      start,
+      end,
+      line: lineOf(text, start),
+      excerpt: excerptAround(text, start, end, hidden),
+      hidden,
+    });
+  }
+  return out;
+}
+
+/** Same rule as findOffDomainUrls, but records where each offending URL sits. */
+function offDomainUrlMatches(text: string, allowedHosts: string[]): Match[] {
+  const allowed = allowedHosts.map((h) => h.toLowerCase().replace(/^www./, ''));
+  const scanner = new RegExp(URL_PATTERN.source, URL_PATTERN.flags);
+  const out: Match[] = [];
+
+  let m: RegExpExecArray | null;
+  while (out.length < MAX_MATCHES_PER_SIGNAL && (m = scanner.exec(text)) !== null) {
+    const host = hostOf(m[0]);
+    if (!host) continue;
+    if (allowed.some((a) => host === a || host.endsWith(`.${a}`))) continue;
+    const start = m.index;
+    const end = start + m[0].length;
+    out.push({
+      signal: 'offdomain_url',
+      start,
+      end,
+      line: lineOf(text, start),
+      excerpt: excerptAround(text, start, end, false),
+      hidden: false,
+    });
+  }
+  return out;
+}
+
 export interface L1Options {
   /** Hosts considered native to the artifact's own source. */
   allowedHosts?: string[];
@@ -146,7 +278,7 @@ export interface L1Options {
 export function detectL1(text: unknown, options: L1Options = {}): L1Result {
   const input = typeof text === 'string' ? text : '';
   if (!input) {
-    return { signals: [], score: 0, highConfidence: [] };
+    return { signals: [], score: 0, highConfidence: [], matches: [] };
   }
 
   const allowedHosts = options.allowedHosts ?? ['github.com', 'githubusercontent.com'];
@@ -170,7 +302,37 @@ export function detectL1(text: unknown, options: L1Options = {}): L1Result {
   // any single weak signal reaching the hostile threshold on its own.
   const score = signals.reduce((acc, s) => acc + (1 - acc) * SIGNAL_WEIGHTS[s], 0);
 
-  return { signals, score: Math.min(1, Number(score.toFixed(4))), highConfidence };
+  // Additive, and deliberately a SECOND pass rather than a refactor of the
+  // boolean sweep above.
+  //
+  // Deriving signals from matches.length > 0 would be tidier and would also
+  // make a verdict regression possible in the one file that decides whether a
+  // write is blocked. The duplicated work is the price of the guarantee that
+  // adding evidence cannot change a decision.
+  const matches: Match[] = [
+    ...sweep(input, INSTRUCTION_OVERRIDE, 'instruction_override'),
+    ...sweep(input, IMPERATIVE_TO_AGENT, 'imperative_to_agent'),
+    ...sweep(input, TOOL_INVOCATION, 'tool_invocation_request'),
+    ...sweep(input, CONCEALMENT, 'concealment_request'),
+    // Both shapes report under the one signal they share.
+    ...sweep(input, FAKE_SYSTEM_ROLE, 'fake_system_role'),
+    ...sweep(input, FAKE_SYSTEM_DIRECTIVE, 'fake_system_role'),
+    ...sweep(input, HIDDEN_UNICODE, 'hidden_unicode'),
+    ...sweep(input, BIDI_OVERRIDE, 'bidi_override'),
+    ...sweep(input, HTML_COMMENT, 'html_comment'),
+    ...sweep(input, OVERSIZED_BASE64, 'oversized_base64'),
+    ...sweep(input, MARKDOWN_IMAGE_EXFIL, 'markdown_image_exfil'),
+    ...offDomainUrlMatches(input, allowedHosts),
+  ]
+    .sort((x, y) => x.start - y.start)
+    .slice(0, MAX_MATCHES_PER_DOCUMENT);
+
+  return {
+    signals,
+    score: Math.min(1, Number(score.toFixed(4))),
+    highConfidence,
+    matches,
+  };
 }
 
 export const L2_HOSTILE_THRESHOLD = 0.7;
