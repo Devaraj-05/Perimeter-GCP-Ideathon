@@ -12,6 +12,7 @@ import {
   listDeliveries,
 } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
+import { listSources } from '../lib/perimeterApi';
 
 /**
  * The Permissions screen — INV-4, made visible.
@@ -123,18 +124,33 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
     setBusy(tool);
     setError(null);
     try {
-      let scoped = resource;
-
-      // Egress is scoped to a REAL destination id, because that is what
-      // resourceOf() computes at decision time. A grant against a placeholder
-      // would look valid in this list and then never match, which is a worse
-      // failure than refusing outright. Create one on first grant.
+      // A grant must carry the SAME resource string the broker computes at
+      // decision time (broker.ts resourceOf). Anything else produces a
+      // capability that looks active in this list and is denied on every use
+      // for capability_scope_mismatch — worse than refusing outright, because
+      // the failure surfaces as a broken security model rather than a missing
+      // permission.
+      //
+      // Two tools are scoped per-object and must be resolved here:
       if (tool === 'send_digest') {
         const existing = destinations[0] ?? (await createDestination('Sandbox destination'));
-        scoped = `destination:${existing.id}`;
+        await grantCapability({ tool, resource: `destination:${existing.id}`, hours: 24 });
+      } else if (tool === 'summarise_source') {
+        // resourceOf returns `source:<sourceId>`, so one grant per connected
+        // source. That is least privilege rather than a shortcut: a grant for
+        // one source does not silently cover a source added later.
+        const sources = await listSources();
+        if (sources.length === 0) {
+          setError('Connect a source under "What it reads" first — there is nothing to allow yet.');
+          return;
+        }
+        for (const src of sources) {
+          await grantCapability({ tool, resource: `source:${src.id}`, hours: 24 });
+        }
+      } else {
+        await grantCapability({ tool, resource, hours: 24 });
       }
 
-      await grantCapability({ tool, resource: scoped, hours: 24 });
       await load();
     } catch (err: any) {
       setError(err?.message || 'Could not grant that permission.');
@@ -161,6 +177,10 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
   const live = caps.filter(isLive);
   const past = caps.filter((c) => !isLive(c));
   const liveFor = (tool: string) => live.find((c) => c.tool === tool);
+
+  /** How many distinct objects the live grants for a tool actually cover. */
+  const scopeCount = (tool: string) =>
+    new Set(live.filter((c) => c.tool === tool).map((c) => c.resource)).size;
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
@@ -230,6 +250,18 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                         <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-900">
                           <Clock className="h-3 w-3" />
                           {remaining(active.expiresAt)}
+                        </span>
+                      )}
+                      {/* Per-object grants cover the objects that existed when
+                          you granted them, because the broker matches on the
+                          exact resource string. Saying only "Active" would be a
+                          softer claim than the broker will honour — a source
+                          connected later is NOT covered, and the user should
+                          learn that here rather than from a refusal. */}
+                      {active && g.tool === 'summarise_source' && (
+                        <span className="rounded border border-[#e5e0d3] bg-[#f3efe6] px-1.5 py-0.5 text-[10px] text-[#5a5a40]">
+                          {scopeCount(g.tool)} source{scopeCount(g.tool) === 1 ? '' : 's'} · re-allow
+                          after adding one
                         </span>
                       )}
                     </div>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decideProposal, resourceOf, missingArgument, explainReason } from './broker';
 import { isLive, Capability } from './capabilities';
+import { TOOL_REGISTRY } from './tools';
 
 /**
  * INV-4 (no tool without a live grant) and INV-5 (tainted egress needs fresh
@@ -314,5 +315,75 @@ describe('explainReason', () => {
       expect(sentence).not.toBe(code);
       expect(sentence.length).toBeGreaterThan(20);
     }
+  });
+});
+
+/**
+ * Grant-time resource contract.
+ *
+ * This block exists because the same bug shipped twice. The Permissions panel
+ * builds a capability's `resource` string, and the broker independently
+ * computes one via resourceOf() at decision time. If they disagree, the grant
+ * appears ACTIVE in the UI and is denied on every single use for
+ * capability_scope_mismatch — a failure that reads as a broken security model
+ * rather than a missing permission, which is far worse than a plain refusal.
+ *
+ * It happened to send_digest (granted `destination:SANDBOX`, computed
+ * `destination:<realId>`) and then, unnoticed, to summarise_source (granted
+ * `entries:own`, computed `source:<sourceId>`).
+ *
+ * These tests pin resourceOf's shape per tool. If someone changes it, or adds
+ * a tool whose resource depends on its arguments, this fails and says so — and
+ * the fix is to resolve that resource at grant time in PermissionsPanel.tsx,
+ * the way send_digest and summarise_source already do.
+ */
+describe('resourceOf — the contract the Permissions panel must match', () => {
+  /** Tools whose resource depends on their arguments. */
+  const PER_OBJECT: Record<string, { args: Record<string, unknown>; expected: string }> = {
+    send_digest: { args: { destinationId: 'd1', body: 'x' }, expected: 'destination:d1' },
+    summarise_source: { args: { sourceId: 's1' }, expected: 'source:s1' },
+  };
+
+  /** Tools that share the one static resource the UI may hardcode. */
+  const STATIC_TOOLS = ['search_artifacts', 'create_note'];
+
+  for (const [tool, { args, expected }] of Object.entries(PER_OBJECT)) {
+    it(`${tool} is scoped per object and MUST be resolved at grant time`, () => {
+      expect(resourceOf({ tool, args })).toBe(expected);
+      // The give-away: it must NOT be the static resource the panel would
+      // otherwise hardcode.
+      expect(resourceOf({ tool, args })).not.toBe('entries:own');
+    });
+  }
+
+  for (const tool of STATIC_TOOLS) {
+    it(`${tool} uses the static resource the panel grants`, () => {
+      expect(resourceOf({ tool, args: {} })).toBe('entries:own');
+    });
+  }
+
+  it('every registered tool is classified above', () => {
+    // Forces a decision when a tool is added, rather than letting it default
+    // to 'entries:own' and quietly mismatching a per-object grant.
+    const known = new Set([...Object.keys(PER_OBJECT), ...STATIC_TOOLS]);
+    for (const name of Object.keys(TOOL_REGISTRY)) {
+      expect(known.has(name), `${name} is not classified in this test`).toBe(true);
+    }
+  });
+
+  it('a grant built with the wrong resource is denied, not silently allowed', () => {
+    // The exact live bug, pinned.
+    const d = decideProposal({
+      proposal: { tool: 'summarise_source', args: { sourceId: 'src_abc' } },
+      capability: {
+        id: 'c', tool: 'summarise_source', resource: 'entries:own',
+        grantedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        oneShot: false, usedAt: null, revokedAt: null,
+      } as any,
+      turnTaint: false,
+    });
+    expect(d.allow).toBe(false);
+    expect((d as any).reason).toContain('capability_scope_mismatch');
   });
 });
