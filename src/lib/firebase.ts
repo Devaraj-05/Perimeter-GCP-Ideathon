@@ -163,3 +163,24 @@ export function subscribeToPerimeterLog(
     return () => undefined;
   }
 }
+
+/**
+ * Whether this user's token carries the admin custom claim (Amendment E).
+ *
+ * Read from the ID token result, not from a Firestore document: `users/{uid}`
+ * is owner-writable so the profile can sync, which means a role stored there
+ * would be self-grantable. The claim is signed by Firebase.
+ *
+ * This only decides whether to SHOW the entry point. The server re-checks the
+ * claim on every request via requireAdmin — a user who forces this to true in
+ * a debugger gets a panel that returns 403.
+ */
+export async function hasAdminClaim(user: User): Promise<boolean> {
+  try {
+    const token = await user.getIdTokenResult();
+    return token.claims?.role === 'admin';
+  } catch (err: any) {
+    console.warn('[auth] could not read claims:', err?.message);
+    return false;
+  }
+}

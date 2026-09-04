@@ -27,6 +27,21 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    // Aggregate security telemetry — Amendment E.
+    //
+    // Counters only: how many attacks were fired, how many held, the tally by
+    // class. No uids, no journal text, no payload bodies, so an admin read
+    // discloses nothing about any individual. INV-3 is unweakened — there is
+    // still no cross-user read of user content anywhere in this application.
+    //
+    // The role comes from request.auth.token, which Firebase signs. It is NOT
+    // read from users/{uid}, because that document is owner-writable so the
+    // profile can sync — a role stored there would be self-grantable.
+    match /metrics/{docId} {
+      allow read: if request.auth != null && request.auth.token.role == 'admin';
+      allow write: if false;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId);

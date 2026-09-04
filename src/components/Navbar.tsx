@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import {
   Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert,
-  KeyRound, ScrollText, Swords, MoreHorizontal, Menu, X,
+  KeyRound, ScrollText, Swords, MoreHorizontal, Menu, X, Gauge,
 } from 'lucide-react';
 
 /**
@@ -27,6 +27,9 @@ interface NavbarProps {
   onOpenPermissions: () => void;
   onOpenLog: () => void;
   onOpenRedTeam: () => void;
+  /** Amendment E: shown only when the verified token carries role=admin. */
+  isAdmin?: boolean;
+  onOpenAdmin?: () => void;
   onSignOut: () => void;
 }
 
@@ -50,6 +53,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenPermissions,
   onOpenLog,
   onOpenRedTeam,
+  isAdmin = false,
+  onOpenAdmin,
   onSignOut,
 }) => {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -109,6 +114,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'insights-btn', label: 'Insights', Icon: BarChart3, onClick: onOpenInsights },
     { id: 'threat-feed-btn', label: 'Activity', Icon: ShieldAlert, onClick: onOpenThreatFeed },
     { id: 'security-btn', label: 'How this is secured', Icon: ShieldCheck, onClick: onOpenSecurity },
+    // Hiding this is a convenience, not the control: requireAdmin re-checks the
+    // claim on every request, so forcing it visible in a debugger yields a 403.
+    ...(isAdmin && onOpenAdmin
+      ? [{ id: 'admin-btn', label: 'Fleet security', Icon: Gauge, onClick: onOpenAdmin }]
+      : []),
   ];
 
   const ghost =

@@ -94,6 +94,11 @@ beforeEach(async () => {
       prevHash: 'genesis',
       decision: 'deny',
     });
+    await setDoc(doc(db, 'metrics/global'), {
+      totalRuns: 7,
+      blocked: 7,
+      leaked: 0,
+    });
     await setDoc(doc(db, `users/${ALICE}/redteam_runs/rt1`), {
       payloadId: 'P02',
       outcome: 'blocked',
@@ -104,6 +109,10 @@ beforeEach(async () => {
 const alice = () => testEnv.authenticatedContext(ALICE).firestore();
 const bob = () => testEnv.authenticatedContext(BOB).firestore();
 const anon = () => testEnv.unauthenticatedContext().firestore();
+/** A signed-in user carrying the admin custom claim (Amendment E, INV-13). */
+const adminCtx = () => testEnv.authenticatedContext('admin-uid', { role: 'admin' }).firestore();
+/** Signed in, claiming admin in a field the client controls rather than a claim. */
+const fakeAdmin = () => testEnv.authenticatedContext('faker-uid', { role: 'user' }).firestore();
 
 // ---------------------------------------------------------------
 // Cross-user isolation - the headline claim
@@ -413,5 +422,38 @@ describe('HOSTILE: falsifying red team results', () => {
         outcome: 'blocked',
       }),
     );
+  });
+});
+
+describe('HOSTILE: aggregate metrics and the admin role (INV-13)', () => {
+  it('an ordinary signed-in user cannot read metrics', async () => {
+    await assertFails(getDoc(doc(alice(), 'metrics/global')));
+  });
+
+  it('an anonymous visitor cannot read metrics', async () => {
+    await assertFails(getDoc(doc(anon(), 'metrics/global')));
+  });
+
+  it('a user whose claim says role=user cannot read metrics', async () => {
+    // The claim is present and signed, but it does not say admin.
+    await assertFails(getDoc(doc(fakeAdmin(), 'metrics/global')));
+  });
+
+  it('an admin custom claim can read metrics', async () => {
+    await assertSucceeds(getDoc(doc(adminCtx(), 'metrics/global')));
+  });
+
+  it('not even an admin can write metrics', async () => {
+    // Counters are server-mediated. A client able to write them could
+    // manufacture a clean security record.
+    await assertFails(setDoc(doc(adminCtx(), 'metrics/global'), { totalRuns: 0, blocked: 0 }));
+  });
+
+  it("an admin still cannot read another user's journal", async () => {
+    // The point of Amendment E: administrative scope is counters, never
+    // content. INV-3 is unweakened.
+    await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/entries/e1`)));
+    await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/perimeter_events/pe1`)));
+    await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/destinations/dest_1`)));
   });
 });

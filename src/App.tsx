@@ -3,6 +3,7 @@ import { User } from 'firebase/auth';
 import {
   auth,
   subscribeToAuth,
+  hasAdminClaim,
   signInWithGoogle,
   logOut,
   syncUserProfile,
@@ -22,6 +23,7 @@ import { ThreatFeed } from './components/ThreatFeed';
 import { PermissionsPanel } from './components/PermissionsPanel';
 import { PerimeterLogPanel } from './components/PerimeterLogPanel';
 import { RedTeamConsole } from './components/RedTeamConsole';
+import { AdminPanel } from './components/AdminPanel';
 import { listArtifacts } from './lib/perimeterApi';
 
 export default function App() {
@@ -48,6 +50,8 @@ export default function App() {
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isRedTeamOpen, setIsRedTeamOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   // Artifact ids available to ground reflections. Empty until the user
   // connects a source, which is what keeps the plain journal path in play.
   const [groundingArtifactIds, setGroundingArtifactIds] = useState<string[]>([]);
@@ -121,9 +125,13 @@ export default function App() {
       setAuthLoading(false);
       if (currentUser) {
         await syncUserProfile(currentUser);
+        // Amendment E: the claim decides whether the entry point is shown.
+        // The server re-checks it on every request regardless.
+        setIsAdmin(await hasAdminClaim(currentUser));
         await loadUserEntries(currentUser);
         await loadGroundingArtifacts();
       } else {
+        setIsAdmin(false);
         setEntries([]);
         setActiveEntry(null);
         setGroundingArtifactIds([]);
@@ -284,6 +292,8 @@ export default function App() {
         onOpenPermissions={() => setIsPermissionsOpen(true)}
         onOpenLog={() => setIsLogOpen(true)}
         onOpenRedTeam={() => setIsRedTeamOpen(true)}
+        isAdmin={isAdmin}
+        onOpenAdmin={() => setIsAdminOpen(true)}
         onSignOut={handleSignOut}
       />
 
@@ -357,6 +367,8 @@ export default function App() {
         isOpen={isLogOpen}
         onClose={() => setIsLogOpen(false)}
       />
+      <AdminPanel isOpen={isAdminOpen} onClose={() => setIsAdminOpen(false)} />
+
       <RedTeamConsole
         isOpen={isRedTeamOpen}
         onClose={() => setIsRedTeamOpen(false)}

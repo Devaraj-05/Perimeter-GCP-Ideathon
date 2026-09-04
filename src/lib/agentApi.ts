@@ -276,3 +276,19 @@ export async function listDeliveries(destinationId: string): Promise<Delivery[]>
   );
   return deliveries;
 }
+
+// --- Aggregate metrics (Amendment E) ---
+
+export interface GlobalMetrics {
+  totalRuns: number;
+  blocked: number;
+  leaked: number;
+  byClass: Record<string, number>;
+  updatedAt: string;
+}
+
+/** Admin-only. Returns 403 for everyone else; callers should hide the entry point. */
+export async function fetchMetrics(): Promise<GlobalMetrics> {
+  const { metrics } = await apiFetch<{ metrics: GlobalMetrics }>('/api/redteam/metrics');
+  return metrics;
+}

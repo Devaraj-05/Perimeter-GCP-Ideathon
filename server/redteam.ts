@@ -8,6 +8,8 @@ import { assertPublicHttpUrl, isBlockedAddress } from './fetchurl';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
 import { checkRateLimit } from './ratelimit';
+import { recordRedteamRun, readMetrics } from './metrics';
+import { requireAdmin } from './auth';
 import { decideProposal } from './broker';
 import { TOOL_REGISTRY } from './tools';
 
@@ -322,6 +324,8 @@ redteamRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response
         createdAt: new Date().toISOString(),
       });
 
+    await recordRedteamRun(result.outcome, payload.class);
+
     await logEvent(uid, {
       kind: 'redteam',
       decision: result.outcome === 'blocked' ? 'deny' : 'allow',
@@ -382,6 +386,8 @@ redteamRouter.post('/run-custom', requireAuth, async (req: AuthedRequest, res: R
 
     const result = await runPayload(payload);
 
+    await recordRedteamRun(result.outcome, 'custom');
+
     await logEvent(uid, {
       kind: 'redteam',
       decision: result.outcome === 'blocked' ? 'deny' : 'allow',
@@ -409,6 +415,8 @@ redteamRouter.post('/run-all', requireAuth, async (req: AuthedRequest, res: Resp
       results.push(await runPayload(payload));
     }
 
+    for (const r of results) await recordRedteamRun(r.outcome, r.class);
+
     const summary = {
       attempted: results.length,
       blocked: results.filter((r) => r.outcome === 'blocked').length,
@@ -427,5 +435,18 @@ redteamRouter.post('/run-all', requireAuth, async (req: AuthedRequest, res: Resp
   } catch (err: any) {
     console.error('[redteam] run-all failed:', err?.message);
     res.status(500).json({ error: 'The corpus run failed. Please retry.' });
+  }
+});
+
+/**
+ * Aggregate telemetry — Amendment E. Behind requireAuth *then* requireAdmin so
+ * the role is read from the verified token requireAuth already decoded.
+ */
+redteamRouter.get('/metrics', requireAuth, requireAdmin, async (_req: AuthedRequest, res: Response) => {
+  try {
+    res.json({ metrics: await readMetrics() });
+  } catch (err: any) {
+    console.error('[metrics] read failed:', err?.message);
+    res.status(500).json({ error: 'Could not load metrics. Please retry.' });
   }
 });
