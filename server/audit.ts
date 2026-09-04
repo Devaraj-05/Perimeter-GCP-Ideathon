@@ -1,5 +1,6 @@
 import { adminDb } from './auth';
-import { Decision, Reason } from './policy';
+// Type-only: policy.ts is superseded and must not be reachable at runtime.
+import type { Decision, Reason } from './policy';
 import { SideEffect } from './tools';
 
 /**

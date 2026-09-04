@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { requireAuth, AuthedRequest, adminDb } from './auth';
 import { getAI, MODEL_FALLBACK_LADDER, isRecoverable } from './gemini';
-import { ContextArtifact } from './assemble';
+// Type-only: assemble.ts is superseded and must not be reachable at runtime.
+import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
 import { buildPlannerRequest, computePlannerTaint, extractProposals } from './planner';
 import { Segment, PerimeterViolation } from './segments';

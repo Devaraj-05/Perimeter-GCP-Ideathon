@@ -227,6 +227,13 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   on the log, so this is a defence-in-depth gap rather than a reachable one.
 - **Verification reads one page.** Past that the UI says how many events it actually checked
   instead of claiming the whole chain.
+- **`npm audit` reports a critical, and it is in the test tooling.** Run
+  `npm audit --omit=dev` and the count is **0 critical, 0 high, 11 moderate**. The high and
+  the critical both come from `firebase-tools`, the devDependency that runs the Firestore
+  emulator for `npm run test:rules`. It is never installed into the container: the Cloud Run
+  image is built from `dependencies` only. Said out loud because a security submission that
+  makes a reviewer discover this themselves has already lost the argument.
+
 - **Gmail runs unverified.** `gmail.readonly` is a Google *restricted* scope; production
   verification needs a security assessment and weeks of review. The consent screen is in
   **testing** mode, so it works only for explicitly listed test users and shows Google's
@@ -244,7 +251,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 428 unit tests, no infrastructure needed
+npm test                      # 439 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

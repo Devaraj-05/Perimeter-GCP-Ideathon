@@ -84,14 +84,25 @@ describe('INV-5 egress path, end to end', () => {
     expect(dest.kind).toBe('sandbox');
     expect(dest.deliveryCount).toBe(0);
 
-    // The broker must ALLOW on a clean turn with a matching grant, or the
-    // demo's second half ("then it sends") never happens.
-    const decision = decideProposal({
-      proposal: { tool: 'send_digest', args: { destinationId: dest.id, body: 'week in review' } },
-      capability: liveGrant('send_digest', `destination:${dest.id}`),
-      turnTaint: false,
-    });
-    expect(decision.allow, `broker denied a clean, granted egress: ${JSON.stringify(decision)}`)
+    // send_digest is write-class, so a matching grant on a clean turn is still
+    // held for a human click (S2). Assert that first — it is the gate this test
+    // used to walk straight past — then confirm and continue, because what this
+    // test is actually about is the execution path after approval.
+    const proposal = {
+      tool: 'send_digest',
+      args: { destinationId: dest.id, body: 'week in review' },
+    };
+    const capability = liveGrant('send_digest', `destination:${dest.id}`);
+
+    const held = decideProposal({ proposal, capability, turnTaint: false });
+    expect(held.allow).toBe(false);
+    expect((held as any).needsConfirmation).toBe(true);
+    expect((held as any).reason).toContain('write_requires_confirmation');
+
+    // What /api/agent/approve does: re-decide with the human's click recorded,
+    // which suppresses the confirmation branches and nothing else.
+    const decision = decideProposal({ proposal, capability, turnTaint: false, confirmed: true });
+    expect(decision.allow, `broker denied a confirmed, granted egress: ${JSON.stringify(decision)}`)
       .toBe(true);
 
     const result = await executeTool(ALICE, 'send_digest', {
