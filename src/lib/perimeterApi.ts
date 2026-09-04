@@ -86,6 +86,47 @@ export async function ingestNote(text: string, label?: string): Promise<NoteInge
   });
 }
 
+// --- Files (Amendment G) ---
+
+export interface FileIngestResult {
+  artifactId: string;
+  segmentId: string;
+  title: string;
+  kind: 'pdf' | 'image';
+  verdict: 'clean' | 'suspicious' | 'hostile';
+  signals: string[];
+  bytes: number;
+}
+
+/** 5MB, matching the server. Checked here too so a huge file fails instantly. */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Uploads a PDF or image and stores the text found in it as UNTRUSTED.
+ *
+ * The file itself is never stored anywhere (INV-15) — the server transcribes it
+ * and drops the bytes. What comes back is a verdict on the text that was in it.
+ */
+export async function ingestFile(file: File): Promise<FileIngestResult> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error('That file is too large. The limit is 5MB.');
+  }
+
+  const buf = await file.arrayBuffer();
+  // Chunked so a multi-megabyte file does not blow the argument limit of
+  // String.fromCharCode via a single spread.
+  const view = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < view.length; i += 0x8000) {
+    binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
+  }
+
+  return apiFetch<FileIngestResult>('/api/ingest/file', {
+    method: 'POST',
+    body: JSON.stringify({ data: btoa(binary), filename: file.name }),
+  });
+}
+
 // --- Location (Amendment D) ---
 
 export interface ResolvedLocation {

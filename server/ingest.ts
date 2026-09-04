@@ -8,6 +8,7 @@ import { createSegment, SourceType } from './segments';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
 import { checkRateLimit } from './ratelimit';
+import { extractTextFromFile, ExtractError, MAX_FILE_BYTES } from './extract';
 
 /**
  * Amendment A.5 - Ingestion endpoints.
@@ -483,5 +484,100 @@ ingestRouter.post('/note', requireAuth, async (req: AuthedRequest, res: Response
   } catch (err: any) {
     console.error('[ingest] note failed:', err?.message);
     res.status(500).json({ error: 'Could not save that note. Please retry.' });
+  }
+});
+
+/**
+ * Ingests an uploaded file — Amendment G, INV-15.
+ *
+ * Bytes in, text out, bytes gone. Nothing binary is stored, so there is no
+ * blob store to secure and nothing to leak. The declared MIME type is ignored
+ * entirely; the real type comes from the leading bytes.
+ */
+ingestRouter.post('/file', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const limit = checkRateLimit(`file:${uid}`, Number(process.env.FILE_RATE_LIMIT_PER_HOUR) || 20);
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      return res.status(429).json({
+        error: `Too many uploads. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s).`,
+      });
+    }
+
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const b64 = typeof data.data === 'string' ? data.data : '';
+    const filename = typeof data.filename === 'string' ? data.filename.trim().slice(0, 120) : '';
+
+    if (!b64) return res.status(400).json({ error: 'No file received.' });
+
+    // Reject on the encoded length before decoding, so an oversized upload
+    // never becomes an oversized Buffer.
+    if (b64.length > Math.ceil((MAX_FILE_BYTES * 4) / 3) + 1024) {
+      return res.status(400).json({ error: 'That file is too large. The limit is 5MB.' });
+    }
+
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(b64, 'base64');
+    } catch {
+      return res.status(400).json({ error: 'That file could not be read.' });
+    }
+
+    let extracted;
+    try {
+      extracted = await extractTextFromFile(bytes);
+    } catch (err: any) {
+      if (err instanceof ExtractError) {
+        const messages: Record<string, [number, string]> = {
+          empty_file: [400, 'That file is empty.'],
+          file_too_large: [400, 'That file is too large. The limit is 5MB.'],
+          unsupported_file_type: [400, 'Only PDF, PNG, JPEG, GIF and WebP files are supported.'],
+          no_text_found: [422, 'No readable text was found in that file.'],
+          transcription_failed: [502, 'Could not read that file. Please retry.'],
+        };
+        const [status, message] = messages[err.code] ?? [502, 'Could not read that file.'];
+        return res.status(status).json({ error: message, code: err.code });
+      }
+      throw err;
+    }
+
+    const result = await ingestUntrustedText(uid, {
+      text: extracted.text,
+      sourceType: extracted.kind === 'image' ? 'image' : 'file',
+      sourceRef: filename || `uploaded ${extracted.kind}`,
+      title: filename || `Uploaded ${extracted.kind} — ${new Date().toLocaleString()}`,
+      sourceId: `uploaded_${extracted.kind}s`,
+      author: extracted.kind,
+      idPrefix: extracted.kind,
+    });
+
+    await logEvent(uid, {
+      kind: 'ingest',
+      zone: 'UNTRUSTED',
+      decision: 'allow',
+      reason: `uploaded:${result.verdict}`,
+      // Byte count and type only. The file itself was never stored and its
+      // text already lives on the artifact.
+      detail: {
+        fileKind: extracted.kind,
+        uploadedBytes: bytes.length,
+        signals: result.signals,
+        verdict: result.verdict,
+      },
+    });
+
+    res.status(201).json({
+      artifactId: result.artifactId,
+      segmentId: result.segmentId,
+      title: result.title,
+      kind: extracted.kind,
+      verdict: result.verdict,
+      signals: result.signals,
+      bytes: result.bytes,
+    });
+  } catch (err: any) {
+    console.error('[ingest] file failed:', err?.message);
+    res.status(500).json({ error: 'Could not read that file. Please retry.' });
   }
 });

@@ -26,6 +26,7 @@ import {
   Paperclip,
   Link2,
   ClipboardPaste,
+  FileUp,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -36,7 +37,7 @@ import {
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
-import { resolveLocation, ingestNote, ingestLink } from '../lib/perimeterApi';
+import { resolveLocation, ingestNote, ingestLink, ingestFile } from '../lib/perimeterApi';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 
@@ -321,6 +322,34 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * so a user can see that something they pasted was flagged hostile BEFORE
    * they ask a question about it.
    */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Uploads a PDF or image (Amendment G).
+   *
+   * The bytes are transcribed server-side and discarded; only the text found
+   * in the file is kept. An instruction hidden in an image is invisible to
+   * every text filter we have, so the verdict on that chip is often the first
+   * time anyone sees it.
+   */
+  const submitFile = async (file: File) => {
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      const r = await ingestFile(file);
+      setAttachments((prev) => [
+        ...prev,
+        { id: r.artifactId, title: r.title, verdict: r.verdict },
+      ]);
+      onAttached?.();
+    } catch (err: any) {
+      setAttachError(err?.message || 'Could not read that file.');
+    } finally {
+      setAttaching(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const submitAttachment = async () => {
     const value = attachDraft.trim();
     if (!value || !attachMenu) return;
@@ -1259,6 +1288,30 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6]"
               >
                 <Link2 className="h-4 w-4" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void submitFile(f);
+                }}
+              />
+              <button
+                type="button"
+                id="attach-file-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={attaching}
+                title="Upload a PDF or image"
+                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+              >
+                {attaching ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileUp className="h-4 w-4" />
+                )}
               </button>
               <input
                 id="followup-input"
