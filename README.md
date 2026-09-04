@@ -267,13 +267,20 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   carries a warning saying so, because a silent downgrade hides a real configuration fault
   behind a thinner set of results.
 
-- **A repository scan needs `GITHUB_TOKEN` to finish.** Unauthenticated, the GitHub API allows
-  60 requests an hour, which cannot walk the tree of any real repository. Measured: scanning this
-  project's own repo without a token read **50 of 121 files** before the budget ran out, then
-  stopped and said so rather than failing. With the token it allows 5,000. Caps are 500 files,
-  256 KB per file, 5 MB total and 60 seconds; whichever trips first ends the scan and is named in
-  the coverage line. Blobs are fetched eight at a time — enough to be quick, not enough to trip
-  GitHub's separate concurrency throttle.
+- **A repository scan reads the whole repo in one request, so `GITHUB_TOKEN` is optional.** The
+  scanner downloads the archive rather than fetching a blob per file. Measured on this project's
+  own repository with the API budget deliberately at **0 of 60**: **122 of 122 eligible files in
+  1.5 seconds**, complete and untruncated. The per-file path it replaced managed 50 of 121 before
+  the same budget ran out. A token still helps for very large repositories, where the archive
+  exceeds the 40 MB download ceiling and the scan falls back to fetching files individually —
+  eight at a time, capped at 500 files, 256 KB each, 5 MB total and 60 seconds, with whichever
+  cap trips named in the coverage line.
+
+- **The archive is read in memory and never written anywhere.** The tar parser reads regular
+  files and skips everything else; a symlink in an archive is a request to read somewhere else,
+  and it is ignored rather than followed. No path from a repository ever becomes a path on this
+  server. A header claiming more data than the archive holds ends the read rather than seeking
+  past the buffer — tested, because an archive is content anyone can publish.
 
 - **The scan drops `offdomain_url` findings.** That signal asks whether a link points away from
   a source's own domain — a real question about a fetched web page, a meaningless one about a
@@ -299,7 +306,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 486 unit tests, no infrastructure needed
+npm test                      # 501 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

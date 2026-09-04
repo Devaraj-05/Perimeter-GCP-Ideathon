@@ -1,8 +1,10 @@
 import { detectL1, Match } from './detect';
+import { readTarGz } from './tarball';
 import {
   fetchDefaultBranch,
   fetchTree,
   fetchBlobText,
+  fetchTarball,
   githubAuthWarning,
   resetGithubAuthWarning,
   IngestError,
@@ -42,6 +44,14 @@ export const WALL_CLOCK_MS = 60_000;
  * rate limiting costs every user of the deployment, not just this one.
  */
 export const CONCURRENCY = 8;
+
+/**
+ * Compressed ceiling for the one-request path.
+ *
+ * Above this the archive stops being cheaper than fetching the files that
+ * actually matter, so the scan falls back to per-blob fetching and its caps.
+ */
+export const MAX_ARCHIVE_BYTES = 40_000_000;
 
 /**
  * Signals that carry no information in a repository.
@@ -231,6 +241,82 @@ export async function scanRepository(
   const tree = await fetchTree(repoRef, defaultBranch);
 
   const eligible = prioritise(tree.filter(isScannable));
+
+  // One request for the whole repository, when that is possible.
+  //
+  // Fetching a blob per file cost 121 requests for this project's own repo and
+  // spent GitHub's 60-per-hour anonymous budget before reaching halfway. The
+  // archive is the same content in a single download, which is the difference
+  // between "scanned 50 of 121" and a complete answer.
+  //
+  // The per-blob path below stays as the fallback: a repository too large to
+  // download whole is exactly the case where reading the prioritised files and
+  // stopping is the right behaviour.
+  try {
+    const archive = await fetchTarball(repoRef, defaultBranch, MAX_ARCHIVE_BYTES);
+    const wanted = new Map(eligible.slice(0, MAX_FILES).map((e, i) => [e.path, i]));
+    // The predicate matters: without it the byte cap is spent on lockfiles
+    // and binaries this loop is about to skip, and the scan reports itself
+    // truncated after reading content nobody was ever going to look at.
+    const { entries, truncated } = readTarGz(
+      archive,
+      MAX_TOTAL_BYTES,
+      MAX_BLOB_BYTES,
+      (path) => wanted.has(path),
+    );
+
+    const hits = new Map<number, RepoFinding>();
+    let scanned = 0;
+    let bytes = 0;
+
+    for (const entry of entries) {
+      const index = wanted.get(entry.path);
+      // The tree already decided what is worth reading — binaries, lockfiles
+      // and vendored directories are filtered there, and the archive must not
+      // become a second, looser answer to the same question.
+      if (index === undefined) continue;
+
+      scanned++;
+      bytes += entry.bytes;
+
+      const { matches } = detectL1(entry.text, {
+        allowedHosts: ['github.com', 'githubusercontent.com'],
+      });
+      const signal = matches.filter((m) => !NOISE_IN_REPOSITORIES.has(m.signal));
+      if (signal.length > 0) hits.set(index, { path: entry.path, matches: signal });
+    }
+
+    const stopped: StopReason = truncated
+      ? 'max_bytes'
+      : eligible.length > MAX_FILES
+        ? 'max_files'
+        : 'complete';
+
+    onProgress?.({ scanned, total: wanted.size, path: '', findings: hits.size });
+
+    return {
+      repo: repoRef,
+      defaultBranch,
+      filesScanned: scanned,
+      filesTotal: eligible.length,
+      bytesScanned: bytes,
+      stoppedBy: stopped,
+      coverage: summariseCoverage({
+        filesScanned: scanned,
+        filesTotal: eligible.length,
+        stoppedBy: stopped,
+      }),
+      warnings: [githubAuthWarning()].filter((w): w is string => typeof w === 'string'),
+      findings: [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f),
+    };
+  } catch (err) {
+    // Too large, or the archive endpoint refused. Fall through to per-blob
+    // fetching, which is slower and capped but always available.
+    console.warn(
+      '[reposcan] archive path unavailable, falling back to per-file fetch:',
+      err instanceof Error ? err.message : 'unknown',
+    );
+  }
 
   const found = new Map<number, RepoFinding>();
   let filesScanned = 0;

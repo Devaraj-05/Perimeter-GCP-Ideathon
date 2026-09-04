@@ -191,10 +191,18 @@ function usableToken(): string | undefined {
   const raw = process.env.GITHUB_TOKEN?.trim();
   if (!raw) return undefined;
 
+  // An unfamiliar prefix is a warning, never a refusal.
+  //
+  // The first version of this check declined to send anything that did not
+  // match a known prefix, which blocked tokens that are perfectly valid:
+  // GitHub issued 40-character hex tokens for years before the ghp_ era, and
+  // App installations mint formats this list will never keep up with. The
+  // authority on whether a credential works is GitHub, not a list in this
+  // file — and a token GitHub rejects already degrades to anonymous, so
+  // sending an unfamiliar one costs a single request and nothing else.
   if (!looksLikeGitHubToken(raw)) {
     tokenWarning =
-      'GITHUB_TOKEN does not look like a GitHub token (it should start with ghp_ or github_pat_), so it was not sent. Scanning anonymously at 60 requests an hour.';
-    return undefined;
+      'GITHUB_TOKEN does not match a familiar GitHub prefix (ghp_, github_pat_, gho_, ghu_, ghs_, ghr_). It was sent anyway — if GitHub rejects it the scan continues anonymously.';
   }
   if (tokenRejected) {
     tokenWarning =
@@ -400,4 +408,123 @@ export async function fetchBlobText(
   }
 
   return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+}
+
+/**
+ * The host GitHub redirects archive downloads to.
+ *
+ * Allowlisted separately and used by exactly one function. api.github.com
+ * answers /tarball with a 302 to codeload, so a scan that refuses every
+ * redirect cannot download an archive at all — and downloading the archive is
+ * what turns 121 requests into one.
+ */
+const ARCHIVE_HOST = 'codeload.github.com';
+
+function assertArchiveHost(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new IngestError('Refusing to follow a malformed archive redirect.', false);
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new IngestError('Refusing a non-HTTPS archive redirect.', false);
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host !== ARCHIVE_HOST && host !== ALLOWED_HOST) {
+    throw new IngestError(`Refusing an archive redirect to ${host}.`, false);
+  }
+}
+
+/**
+ * Downloads a repository as one gzipped tarball.
+ *
+ * One request instead of one per file. Scanning this project's own repository
+ * cost 121 blob fetches and exhausted GitHub's anonymous hourly budget before
+ * reaching the halfway mark; the same repository is a single 392 KB download.
+ *
+ * Exactly one redirect is followed, and the destination is re-validated
+ * against the archive host before it is fetched — the same rule the rest of
+ * this file applies, extended by precisely one hostname rather than relaxed.
+ *
+ * The size cap is enforced while streaming. Content-Length is supplied by the
+ * other end, so a cap checked before the read is a cap we were told about.
+ */
+export async function fetchTarball(
+  repoRef: string,
+  branch: string,
+  maxBytes: number,
+): Promise<Buffer> {
+  const [owner, name] = ownerAndName(repoRef);
+  let url = `https://${ALLOWED_HOST}/repos/${owner}/${name}/tarball/${encodeURIComponent(branch)}`;
+  assertAllowedHost(url);
+
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'perimeter-ingest',
+  };
+  const token = usableToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res: Response | null = null;
+
+  for (let hop = 0; hop < 2; hop++) {
+    try {
+      res = await fetch(url, {
+        redirect: 'manual',
+        headers,
+        signal: AbortSignal.timeout(60_000),
+      });
+    } catch (err: any) {
+      if (err?.name === 'TimeoutError') {
+        throw new IngestError('The repository archive took too long to download.', true);
+      }
+      throw new IngestError('Could not reach GitHub.', true);
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) throw new IngestError('GitHub redirected without a destination.', true);
+      url = new URL(location, url).toString();
+      assertArchiveHost(url);
+      // The credential is not carried across hosts: codeload serves public
+      // archives anonymously, and a token in a redirect is a token somewhere
+      // it was never scoped for.
+      delete headers.Authorization;
+      continue;
+    }
+    break;
+  }
+
+  if (!res) throw new IngestError('Could not reach GitHub.', true);
+
+  if (res.status === 404) {
+    throw new IngestError('Repository or branch not found, or it is private.', false);
+  }
+  if (!res.ok) {
+    throw new IngestError(`GitHub returned ${res.status} for the archive.`, res.status >= 500);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new IngestError('GitHub returned an empty archive.', true);
+
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new IngestError(
+        'That repository is larger than this scanner will download. Scanning file by file instead.',
+        true,
+      );
+    }
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
 }
