@@ -343,7 +343,7 @@ If all eight pass on the live URL, the submission demo is solid.
 These back the manual cases and run without a browser:
 
 ```bash
-npm test            # 396 unit tests (airlock, broker, SSRF, detection, INV guards)
+npm test            # 398 unit tests (airlock, broker, SSRF, detection, INV guards)
 npm run test:rules  # 66 Firestore rules tests including cross-user and tamper cases
 npm run replay      # two corpus tables: authored 18/18, third-party 5/5
 ```

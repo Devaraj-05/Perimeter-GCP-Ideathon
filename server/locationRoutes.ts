@@ -50,6 +50,7 @@ locationRouter.post('/resolve', requireAuth, async (req: AuthedRequest, res: Res
     if (err instanceof LocationError) {
       // Typed, safe to show. 400 for input problems, 502 for the provider.
       const userFacing: Record<string, [number, string]> = {
+        maps_not_configured: [503, 'Location lookup is not configured on this deployment.'],
         invalid_coordinates: [400, 'Those coordinates are not valid.'],
         invalid_query: [400, 'Enter a place name.'],
         place_not_found: [404, 'No place matched that.'],

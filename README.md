@@ -215,7 +215,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 396 unit tests, no infrastructure needed
+npm test                      # 398 unit tests, no infrastructure needed
 npm run test:rules            # 75 emulator tests: 66 rules + 9 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

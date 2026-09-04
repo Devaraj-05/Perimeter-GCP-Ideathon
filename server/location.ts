@@ -51,7 +51,18 @@ function assertCoords(lat: number, lng: number): void {
 }
 
 async function callGeocoder(params: Record<string, string>): Promise<any> {
-  const key = await getMapsKey();
+  // A missing secret is a DEPLOYMENT problem, not a lookup failure. Letting
+  // resolveSecret's generic Error escape produced a 500 and the message
+  // "Location lookup failed. Please retry." — which sends an operator hunting
+  // for a bug in the geocoder when the real answer is that MAPS_KEY_SECRET was
+  // never set. Typed here so the route can say so (and match how Gmail reports
+  // the same situation).
+  let key: string;
+  try {
+    key = await getMapsKey();
+  } catch {
+    throw new LocationError('maps_not_configured');
+  }
 
   // URLSearchParams, not string concatenation: a place name containing & or #
   // would otherwise smuggle parameters into the request.

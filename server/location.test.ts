@@ -63,6 +63,31 @@ describe('coordinate validation happens before any network call', () => {
   });
 });
 
+describe('a missing secret reports a configuration problem, not a lookup failure', () => {
+  it('throws maps_not_configured when neither env var is set', async () => {
+    // Previously resolveSecret's generic Error escaped and the route answered
+    // 500 "Location lookup failed", sending an operator hunting for a bug in
+    // the geocoder when MAPS_KEY_SECRET had simply never been set.
+    __resetSecretCache();
+    delete process.env.MAPS_API_KEY;
+    delete process.env.MAPS_KEY_SECRET;
+
+    const spy = vi.fn();
+    vi.stubGlobal('fetch', spy);
+
+    const err = await resolveCoordinates(17.4, 78.4).catch((e) => e);
+    expect(err).toBeInstanceOf(LocationError);
+    expect(err.code).toBe('maps_not_configured');
+    // And it never attempted the call.
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('the config error carries no secret name a client could use', () => {
+    const err = new LocationError('maps_not_configured');
+    expect(err.message).not.toMatch(/SECRET|projects\//);
+  });
+});
+
 describe('INV-12 / INV-8 — the key never reaches an error', () => {
   it('a network failure does not carry the key', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
