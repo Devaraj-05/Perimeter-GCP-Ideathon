@@ -87,7 +87,7 @@ describe('size and emptiness are checked before any model call', () => {
 });
 
 describe('the transcriber is Reader-class: it holds no tools', () => {
-  const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const EXTRACT = strip(readFileSync(join(process.cwd(), 'server', 'extract.ts'), 'utf8'));
   const GEMINI = strip(readFileSync(join(process.cwd(), 'server', 'gemini.ts'), 'utf8'));
 

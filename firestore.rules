@@ -27,6 +27,17 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    // In-flight OAuth consents — Amendment H, INV-17.
+    //
+    // Each document maps a single-use nonce to the uid that started a consent.
+    // A client able to READ one could complete someone else's consent; a client
+    // able to WRITE one could bind their own inbox to another uid. Denied by
+    // omission already, but stated explicitly so a future recursive wildcard
+    // cannot quietly open it.
+    match /oauth_states/{nonce} {
+      allow read, write: if false;
+    }
+
     // Aggregate security telemetry — Amendment E.
     //
     // Counters only: how many attacks were fired, how many held, the tally by
@@ -87,6 +98,21 @@ service cloud.firestore {
       match /capabilities/{capId} {
         allow read: if isOwner(userId);
         allow write: if false;
+      }
+
+      // Credential material — Amendment H, INV-16.
+      //
+      // The ONLY path in this file that denies the owner a read. Everywhere
+      // else an owner may read their own data, because it is their data. A
+      // stored OAuth refresh token is different: the browser has no legitimate
+      // use for it, and "the owner can read it" is how a credential ends up in
+      // a debugger, a screenshot, or a support ticket. The server holds it, the
+      // server uses it, nobody else sees it.
+      //
+      // It is also encrypted at rest, because these rules govern the client SDK
+      // only — the Admin SDK bypasses them entirely.
+      match /private/{docId} {
+        allow read, write: if false;
       }
 
       // Egress destinations. The model names an opaque id; the server resolves

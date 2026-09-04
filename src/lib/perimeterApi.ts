@@ -127,6 +127,38 @@ export async function ingestFile(file: File): Promise<FileIngestResult> {
   });
 }
 
+// --- Gmail (Amendment H) ---
+
+export interface GmailIngested {
+  artifactId: string;
+  title: string;
+  verdict: 'clean' | 'suspicious' | 'hostile';
+}
+
+export async function gmailStatus(): Promise<boolean> {
+  const { connected } = await apiFetch<{ connected: boolean }>('/api/gmail/status');
+  return connected;
+}
+
+/** Returns Google's consent URL. The browser navigates there; we never see the token. */
+export async function gmailConnectUrl(): Promise<string> {
+  const { url } = await apiFetch<{ url: string }>('/api/gmail/connect', { method: 'POST' });
+  return url;
+}
+
+export async function gmailDisconnect(): Promise<void> {
+  await apiFetch<{ ok: boolean }>('/api/gmail/disconnect', { method: 'POST' });
+}
+
+/** Pulls recent messages in as UNTRUSTED artifacts and returns their verdicts. */
+export async function gmailIngest(max = 5): Promise<GmailIngested[]> {
+  const { messages } = await apiFetch<{ messages: GmailIngested[] }>('/api/gmail/ingest', {
+    method: 'POST',
+    body: JSON.stringify({ max }),
+  });
+  return messages;
+}
+
 // --- Location (Amendment D) ---
 
 export interface ResolvedLocation {

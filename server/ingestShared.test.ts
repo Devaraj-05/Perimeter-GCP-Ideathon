@@ -17,7 +17,7 @@ import { join } from 'path';
  * violate a check about code.
  */
 const RAW = readFileSync(join(process.cwd(), 'server', 'ingest.ts'), 'utf8');
-const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('ingestUntrustedText is the only door', () => {
   it('exists and is exported', () => {

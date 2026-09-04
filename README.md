@@ -1,7 +1,8 @@
 # Perimeter
 
-**A personal Gemini journal that reads what you bring it — notes, web pages, PDFs, images,
-repositories — and shows you, live, every attempt that content makes to hijack its AI.**
+**A personal journal and brainstorming workspace that reads your untrusted world — emails, web
+pages, PDFs, images, notes you paste — and shows you, live, every attempt that world makes to
+hijack its AI.**
 
 Built for the Google Cloud Gen AI Academy (APAC) Cloud Run Build & Deploy challenge.
 Live: `https://perimeter-914890039877.asia-south1.run.app`
@@ -34,11 +35,11 @@ summary wrong. It assumes the model can be compromised and puts the enforceable 
 
 ## The result, measured honestly
 
-Twenty-two injection payloads run through the real defensive code (`npm run replay`), reported as
+Twenty-three injection payloads run through the real defensive code (`npm run replay`), reported as
 **two separate tables** — because a defence tested only against attacks its own author imagined
 proves very little, and averaging the two sets together would hide exactly that.
 
-#### Payloads we wrote (17)
+#### Payloads we wrote (18)
 
 | Payload | Class | Invariant | Architectural block | L1 detected |
 |---|---|---|---|---|
@@ -59,8 +60,9 @@ proves very little, and averaging the two sets together would hide exactly that.
 | P15 | fake transcript | INV-14 | ✅ airlock: Reader holds no tools | ✅ |
 | P16 | hidden in document | INV-15 | ✅ airlock: Reader holds no tools | — |
 | P17 | text in image | INV-15 | ✅ airlock: Reader holds no tools | ✅ |
+| P18 | email signature | INV-1 | ✅ airlock: Reader holds no tools | — |
 
-**Attempted: 17 · Reached execution: 0 · Architecturally blocked: 17/17 · L1 detected: 9/17.**
+**Attempted: 18 · Reached execution: 0 · Architecturally blocked: 18/18 · L1 detected: 9/18.**
 
 #### Payloads other people published (5)
 
@@ -86,9 +88,9 @@ The console also takes **an attack you write yourself**, run through the same co
 recorded in the same log. A fixed corpus invites one fair objection — *these are the seventeen
 they made sure to handle* — and the answer to it should be a text box, not a paragraph.
 
-**Pattern-based detection (L1) caught only 9 of the 17 authored payloads — and that gap is the
+**Pattern-based detection (L1) caught only 9 of the 18 authored payloads — and that gap is the
 point.** The pattern layer misses nearly half of them; the boundary holds anyway, because it does not
-depend on detection. A submission claiming 22/22 *detection* would be misrepresenting how this
+depend on detection. A submission claiming 23/23 *detection* would be misrepresenting how this
 works. The honest number is more credible, and the architecture is what earns it.
 
 ---
@@ -116,7 +118,7 @@ flowchart LR
 - **The Perimeter Log** is append-only and hash-chained; the client cannot write to it, and the
   chain can be verified in-app.
 
-Fifteen numbered invariants (`CONSTITUTION.md` §2) are referenced by the code, the tests, and the
+Seventeen numbered invariants (`CONSTITUTION.md` §2) are referenced by the code, the tests, and the
 log. Each is mechanically checkable.
 
 ---
@@ -127,7 +129,7 @@ log. Each is mechanically checkable.
 |---|---|
 | **Firebase Auth** | Google Sign-In only; no password handling. Every `/api/*` route verifies the ID token with the Admin SDK (`server/auth.ts`). |
 | **Multi-turn Gemini** | Journal reflections with five modes and full conversation history (`server/conversation.ts`). |
-| **Isolated Firestore** | All data under `users/{uid}/`; default-deny rules; **56 adversarial rules tests** including owner-side tampering. |
+| **Isolated Firestore** | All data under `users/{uid}/`; default-deny rules; **66 adversarial rules tests** including owner-side tampering. |
 | **Secret Manager** | Gemini key fetched via SDK from a pinned version, under a service account scoped to one secret (`server/secrets.ts`). |
 
 ---
@@ -141,7 +143,7 @@ to an authorisation decision: a client able to edit them could authorise itself.
 denies `create` as well as update and delete, so history cannot be fabricated either.
 
 ```
-npm run test:rules    # 65 tests against the Firestore emulator
+npm run test:rules    # 75 tests against the Firestore emulator
 ```
 
 **Roles are custom claims, not documents.** `users/{uid}` is owner-writable so the profile can
@@ -196,6 +198,11 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   on the log, so this is a defence-in-depth gap rather than a reachable one.
 - **Verification reads one page.** Past that the UI says how many events it actually checked
   instead of claiming the whole chain.
+- **Gmail runs unverified.** `gmail.readonly` is a Google *restricted* scope; production
+  verification needs a security assessment and weeks of review. The consent screen is in
+  **testing** mode, so it works only for explicitly listed test users and shows Google's
+  "unverified app" warning. Stated here rather than glossed over — a submission implying Google
+  had reviewed it would be exactly the overclaim this project argues against.
 - **The SSRF guard does not pin the resolved IP**, so a DNS rebind between our lookup and Node's
   connect remains narrowly possible. Closing it needs a custom agent and breaks TLS SNI.
 
@@ -208,8 +215,8 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 362 unit tests, no infrastructure needed
-npm run test:rules            # 65 emulator tests: 56 rules + 9 end-to-end egress
+npm test                      # 396 unit tests, no infrastructure needed
+npm run test:rules            # 75 emulator tests: 66 rules + 9 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
 

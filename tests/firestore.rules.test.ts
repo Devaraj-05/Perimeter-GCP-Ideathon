@@ -94,6 +94,15 @@ beforeEach(async () => {
       prevHash: 'genesis',
       decision: 'deny',
     });
+    await setDoc(doc(db, `users/${ALICE}/private/gmail`), {
+      refreshToken: 'v1.aaa.bbb.ccc',
+      connectedAt: '2026-09-04T00:00:00.000Z',
+    });
+    await setDoc(doc(db, 'oauth_states/nonce-abc'), {
+      uid: ALICE,
+      createdAt: Date.now(),
+      used: false,
+    });
     await setDoc(doc(db, 'metrics/global'), {
       totalRuns: 7,
       blocked: 7,
@@ -455,5 +464,63 @@ describe('HOSTILE: aggregate metrics and the admin role (INV-13)', () => {
     await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/entries/e1`)));
     await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/perimeter_events/pe1`)));
     await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/destinations/dest_1`)));
+  });
+});
+
+describe('HOSTILE: stored OAuth credentials (INV-16)', () => {
+  it('the OWNER cannot read their own token', async () => {
+    // Deliberately stricter than every other collection here. A browser has no
+    // legitimate use for this value, and an owner read is how a credential
+    // reaches a screenshot or a support ticket.
+    await assertFails(getDoc(doc(alice(), `users/${ALICE}/private/gmail`)));
+  });
+
+  it('the owner cannot write it either', async () => {
+    await assertFails(
+      setDoc(doc(alice(), `users/${ALICE}/private/gmail`), { refreshToken: 'forged' }),
+    );
+  });
+
+  it('the owner cannot delete it to force a re-consent they control', async () => {
+    await assertFails(deleteDoc(doc(alice(), `users/${ALICE}/private/gmail`)));
+  });
+
+  it('another user cannot read it', async () => {
+    await assertFails(getDoc(doc(bob(), `users/${ALICE}/private/gmail`)));
+  });
+
+  it('an anonymous visitor cannot read it', async () => {
+    await assertFails(getDoc(doc(anon(), `users/${ALICE}/private/gmail`)));
+  });
+
+  it('an admin cannot read it', async () => {
+    // Administrative scope is aggregate counters. It has never included
+    // credentials and must not start now.
+    await assertFails(getDoc(doc(adminCtx(), `users/${ALICE}/private/gmail`)));
+  });
+
+  it('the deny covers any document under private/, not just the known one', async () => {
+    await assertFails(getDoc(doc(alice(), `users/${ALICE}/private/anything-else`)));
+    await assertFails(setDoc(doc(alice(), `users/${ALICE}/private/new`), { x: 1 }));
+  });
+});
+
+describe('HOSTILE: in-flight OAuth consents (INV-17)', () => {
+  it('nobody can read a pending consent', async () => {
+    // Reading the nonce is enough to complete someone else's consent.
+    await assertFails(getDoc(doc(alice(), 'oauth_states/nonce-abc')));
+    await assertFails(getDoc(doc(bob(), 'oauth_states/nonce-abc')));
+    await assertFails(getDoc(doc(anon(), 'oauth_states/nonce-abc')));
+    await assertFails(getDoc(doc(adminCtx(), 'oauth_states/nonce-abc')));
+  });
+
+  it('nobody can mint one binding an inbox to another uid', async () => {
+    await assertFails(
+      setDoc(doc(bob(), 'oauth_states/forged'), { uid: ALICE, createdAt: Date.now() }),
+    );
+  });
+
+  it('nobody can repoint an existing consent at themselves', async () => {
+    await assertFails(updateDoc(doc(bob(), 'oauth_states/nonce-abc'), { uid: BOB }));
   });
 });

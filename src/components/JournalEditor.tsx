@@ -27,6 +27,7 @@ import {
   Link2,
   ClipboardPaste,
   FileUp,
+  Mail,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -37,7 +38,15 @@ import {
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
-import { resolveLocation, ingestNote, ingestLink, ingestFile } from '../lib/perimeterApi';
+import {
+  resolveLocation,
+  ingestNote,
+  ingestLink,
+  ingestFile,
+  gmailStatus,
+  gmailConnectUrl,
+  gmailIngest,
+} from '../lib/perimeterApi';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 
@@ -347,6 +356,42 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     } finally {
       setAttaching(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  /**
+   * Connects a mailbox, or reads from a connected one (Amendment H).
+   *
+   * Status is checked on click rather than on mount: most sessions never touch
+   * email, and an extra request on every page load to answer a question nobody
+   * asked is a poor trade.
+   */
+  const handleMail = async () => {
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      if (!(await gmailStatus())) {
+        // The consent happens on Google's domain. We never see the password,
+        // and the token never reaches this browser (INV-16).
+        window.open(await gmailConnectUrl(), '_blank', 'noopener,noreferrer');
+        setAttachError('Finish connecting in the new tab, then press this again.');
+        return;
+      }
+
+      const messages = await gmailIngest(5);
+      if (messages.length === 0) {
+        setAttachError('No recent messages found.');
+        return;
+      }
+      setAttachments((prev) => [
+        ...prev,
+        ...messages.map((m) => ({ id: m.artifactId, title: m.title, verdict: m.verdict })),
+      ]);
+      onAttached?.();
+    } catch (err: any) {
+      setAttachError(err?.message || 'Could not reach your mailbox.');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -1299,6 +1344,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   if (f) void submitFile(f);
                 }}
               />
+              <button
+                type="button"
+                id="attach-mail-btn"
+                onClick={() => void handleMail()}
+                disabled={attaching}
+                title="Connect a mailbox, or read recent messages"
+                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+              >
+                <Mail className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 id="attach-file-btn"

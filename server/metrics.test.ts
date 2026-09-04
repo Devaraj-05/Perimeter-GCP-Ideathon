@@ -23,7 +23,7 @@ const RAW = readFileSync(join(process.cwd(), 'server', 'metrics.ts'), 'utf8');
  * for *describing* the property it upholds. The claim being tested is about
  * what the code can write, so prose must not participate.
  */
-const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('the metrics document cannot carry personal data', () => {
   it('never writes a uid', () => {

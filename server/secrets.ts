@@ -135,6 +135,31 @@ export async function getMapsKey(): Promise<string> {
   return resolveSecret('maps', 'MAPS_KEY_SECRET', 'MAPS_API_KEY', 'Maps key');
 }
 
+/**
+ * The key that encrypts stored OAuth refresh tokens — Amendment H, INV-16.
+ *
+ * Separate from every other secret and bound by its own IAM grant, so that
+ * database access alone is not sufficient to use what is in the database.
+ */
+export async function getOAuthEncryptionKey(): Promise<string> {
+  return resolveSecret(
+    'oauth-enc',
+    'GOOGLE_OAUTH_ENC_KEY_SECRET',
+    'GOOGLE_OAUTH_ENC_KEY',
+    'OAuth encryption key',
+  );
+}
+
+/** The Google OAuth client secret. Never reaches a client. */
+export async function getGoogleClientSecret(): Promise<string> {
+  return resolveSecret(
+    'google-client-secret',
+    'GOOGLE_CLIENT_SECRET_SECRET',
+    'GOOGLE_CLIENT_SECRET',
+    'Google OAuth client secret',
+  );
+}
+
 /** Diagnostics for /api/health. Reports the path taken, never the value. */
 export function secretStatus(): { configured: boolean; via: string | null } {
   const gemini = cache.get('gemini');
