@@ -49,6 +49,8 @@ function explain(reason: string, invariant: string | null): string {
     capability_expired: 'Refused. That permission had expired.',
     capability_revoked: 'Refused. You had revoked that permission.',
     capability_already_used: 'Refused. That was a one-time permission, already used.',
+    write_requires_confirmation:
+      'Held. The assistant wanted to write to your journal and is waiting for your click.',
     tainted_egress_payload:
       'Held. This would send content derived from an external document out of the app.',
     rate_limited: 'Refused. That action hit its hourly limit.',

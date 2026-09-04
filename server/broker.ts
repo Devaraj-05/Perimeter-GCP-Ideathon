@@ -37,6 +37,19 @@ export interface BrokerInput {
   /** Invocations already used this window, per tool. */
   usage?: Record<string, number>;
   now?: number;
+  /**
+   * True only on the /approve path, where a human has already been shown this
+   * exact proposal and clicked.
+   *
+   * It suppresses the two branches that ASK for a confirmation, and nothing
+   * else. Every deny check still runs, which is the whole point of re-deciding
+   * at execution time instead of trusting the verdict recorded at enqueue.
+   *
+   * This replaces passing turnTaint: false from the approval route to mean
+   * "already confirmed". Overloading the taint flag to suppress a check made
+   * the audit record of that call claim the turn was clean when it was not.
+   */
+  confirmed?: boolean;
 }
 
 /** Tools whose effect leaves the system. Subject to INV-5. */
@@ -99,6 +112,7 @@ export function missingArgument(proposal: Proposal): string | null {
  */
 export function decideProposal(input: BrokerInput): Decision {
   const { proposal, capability, turnTaint } = input;
+  const confirmed = input.confirmed === true;
   const now = input.now ?? Date.now();
 
   // Fail closed on anything unreadable (Constitution §8).
@@ -138,12 +152,29 @@ export function decideProposal(input: BrokerInput): Decision {
 
   // INV-5. Tainted data heading outward always needs a fresh yes, regardless
   // of what standing grant exists.
-  if (EGRESS_TOOLS.has(proposal.tool) && turnTaint === true) {
+  if (EGRESS_TOOLS.has(proposal.tool) && turnTaint === true && !confirmed) {
     return deny(`tainted_egress_payload:${proposal.tool}`, 'INV-5', true);
   }
 
   if (isRateLimited(spec.name, spec.rateLimitPerHour, input.usage)) {
     return deny(`rate_limited:${proposal.tool}`, 'INV-4');
+  }
+
+  // S2 — every write-class invocation needs a fresh human click, whatever
+  // standing grant exists. A grant says the user is willing to let this tool
+  // run at all; it is not the user agreeing to THIS note, with THIS text, now.
+  //
+  // This gate lived in server/policy.ts and was tested there. When the broker
+  // replaced that engine it kept the tainted-egress confirmation and dropped
+  // this one, and policy.ts became unreachable — so create_note executed
+  // silently on a standing grant while problem-statement.md S2, the README
+  // diagram and AUDIT.md all said writes awaited a click.
+  //
+  // Deliberately last: a missing grant, a scope mismatch, an expired grant, a
+  // tainted egress payload and a rate limit are all more specific reasons and
+  // are reported instead. Confirmation is what is left when nothing refuses.
+  if (spec.sideEffect === 'write' && !confirmed) {
+    return deny(`write_requires_confirmation:${proposal.tool}`, 'INV-4', true);
   }
 
   return { allow: true, capabilityId: capability.id, reason: 'capability_matched', invariant: null };
@@ -185,6 +216,8 @@ export function explainReason(reason: string): string {
       return 'Blocked: you revoked that permission.';
     case 'capability_already_used':
       return 'Blocked: that was a one-time permission and it has already been used.';
+    case 'write_requires_confirmation':
+      return 'Held: this would write to your journal. Confirm it first.';
     case 'tainted_egress_payload':
       return 'Held: this would send content derived from an external document out of the app. Confirm exactly what is being sent first.';
     case 'rate_limited':

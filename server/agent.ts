@@ -78,6 +78,9 @@ async function loadContext(uid: string, artifactIds: string[]): Promise<ContextA
       title: e.title || 'Untitled entry',
       body: e.content || '',
       trust: 'first_party',
+      // A note the agent wrote is not something the user wrote. Its text can
+      // be derived from an external document, so it carries taint forward.
+      agentAuthored: e.createdBy === 'agent',
     });
   });
 
@@ -257,13 +260,26 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       }
     }
 
-    // First-party entries become the Planner history. Nothing untrusted here.
+    // First-party entries become the Planner history.
+    //
+    // Taint is NOT hardcoded false here. create_note is the one tool that
+    // writes into entries, and its title and body come from the Planner —
+    // which had the Reader's observations of an external document in its
+    // context. A poisoned document could therefore produce a note, and on the
+    // NEXT turn that note loaded as first-party, untainted and unfenced, in a
+    // tool-holding context. computePlannerTaint would then see no
+    // observations and no tainted history, report turnTaint === false, and
+    // INV-5's hold on tainted egress could not fire.
+    //
+    // That is an artifact promoted from untrusted to trusted across a turn
+    // boundary, which is exactly what S3 forbids. Agent-authored entries stay
+    // tainted for as long as they exist.
     const history: Segment[] = firstParty.map((c) => ({
       id: c.id,
       zone: 'USER' as const,
       text: c.title + '\n\n' + c.body,
-      taint: false,
-      sourceType: 'typed' as const,
+      taint: c.agentAuthored === true,
+      sourceType: c.agentAuthored === true ? ('reader' as const) : ('typed' as const),
       sourceRef: null,
       derivedFrom: null,
       createdAt: new Date().toISOString(),
@@ -509,9 +525,13 @@ agentRouter.post('/approve', requireAuth, async (req: AuthedRequest, res: Respon
     const recheck = decideProposal({
       proposal,
       capability,
-      // A confirmation is the human overriding INV-5 for this exact payload,
-      // so taint is cleared only here, only now, and only for this call.
-      turnTaint: false,
+      // The turn's real taint, recorded when the call was enqueued. It used to
+      // be passed as false here to suppress the INV-5 hold, which made the
+      // audit record of an approved call assert the turn was clean when it was
+      // not. confirmed: true now does the suppressing, and it suppresses only
+      // the branches that ask for a click — every deny check still runs.
+      turnTaint: call.turnTaint === true,
+      confirmed: true,
       usage: await loadUsage(uid),
     });
 

@@ -1,3 +1,32 @@
+/**
+ * SUPERSEDED BY THE BROKER — read this before believing anything below.
+ *
+ * `decide()` is the PRE-M4 policy engine and is on no live code path. Only the
+ * `Decision` and `Reason` types are still imported, by server/audit.ts;
+ * `grep -rn "from './policy'" server/ src/` shows that and this file's test.
+ *
+ * This file mattered more than it looks. It held the ONLY
+ * `write_requires_confirmation` gate in the repository — the control behind
+ * problem-statement.md S2 ("100% of write-class tool invocations require
+ * explicit human confirmation ... no configuration path bypasses this") and
+ * behind the README diagram's "write -> await your click".
+ *
+ * When server/broker.ts replaced this engine it carried over the tainted-egress
+ * confirmation and dropped the write confirmation, and nothing imported
+ * `decide()` any more. policy.test.ts kept passing against a function that no
+ * longer ran, so create_note executed silently on a standing grant while every
+ * document in the repo said it awaited a click. The gate now lives in
+ * decideProposal() in server/broker.ts, with its own tests.
+ *
+ * The lesson is the one AUDIT.md keeps arriving at: a passing test on an
+ * unreachable function is not evidence about the running system. Kept and
+ * labelled rather than deleted so the regression stays legible next to the
+ * claim it broke.
+ *
+ * Do not reintroduce a caller. There is exactly one policy engine and it is
+ * the broker.
+ */
+
 import { getToolSpec, SideEffect } from './tools';
 
 /**

@@ -40,10 +40,52 @@ describe('INV-4 — deny by default', () => {
     expect((d as any).invariant).toBe('INV-4');
   });
 
-  it('allows when a live grant matches', () => {
+  it('holds a live-granted write for a human click (S2)', () => {
+    // A matching grant clears every deny in the chain. It does not clear the
+    // confirmation: a grant is the user allowing this tool to run at all, not
+    // the user approving this particular note.
     const d = decideProposal({ proposal: NOTE, capability: cap(), turnTaint: false, now: NOW });
+    expect(d.allow).toBe(false);
+    expect((d as any).needsConfirmation).toBe(true);
+    expect((d as any).reason).toContain('write_requires_confirmation');
+  });
+
+  it('allows once a live grant matches and the human has confirmed', () => {
+    const d = decideProposal({
+      proposal: NOTE,
+      capability: cap(),
+      turnTaint: false,
+      confirmed: true,
+      now: NOW,
+    });
     expect(d.allow).toBe(true);
     expect((d as any).capabilityId).toBe('cap_1');
+  });
+
+  it('a confirmation does not substitute for a grant', () => {
+    // confirmed suppresses the two branches that ask for a click. It must not
+    // suppress a deny, or /approve would become a way to run an ungranted tool.
+    const d = decideProposal({
+      proposal: NOTE,
+      capability: null,
+      turnTaint: false,
+      confirmed: true,
+      now: NOW,
+    });
+    expect(d.allow).toBe(false);
+    expect((d as any).reason).toContain('no_capability_grant');
+  });
+
+  it('a confirmation does not revive a revoked grant', () => {
+    const d = decideProposal({
+      proposal: NOTE,
+      capability: cap({ revokedAt: new Date(NOW - 1000).toISOString() }),
+      turnTaint: false,
+      confirmed: true,
+      now: NOW,
+    });
+    expect(d.allow).toBe(false);
+    expect((d as any).reason).toContain('capability_revoked');
   });
 
   it('denies a tool the model invented', () => {
@@ -134,10 +176,13 @@ describe('INV-4 — grant lifetime', () => {
   });
 
   it('allows an unused one-shot grant', () => {
+    // confirmed: true so this tests grant LIFETIME rather than re-testing the
+    // write gate, which has its own cases above.
     const d = decideProposal({
       proposal: NOTE,
       capability: cap({ oneShot: true }),
       turnTaint: false,
+      confirmed: true,
       now: NOW,
     });
     expect(d.allow).toBe(true);
@@ -186,8 +231,35 @@ describe('INV-5 — tainted egress', () => {
 
   it('allows the same egress call on a clean turn', () => {
     expect(
-      decideProposal({ proposal: digest, capability: digestCap, turnTaint: false, now: NOW }).allow,
+      decideProposal({
+        proposal: digest,
+        capability: digestCap,
+        turnTaint: false,
+        confirmed: true,
+        now: NOW,
+      }).allow,
     ).toBe(true);
+  });
+
+  it('holds a tainted egress call even when the human already confirmed a write', () => {
+    // confirmed is set by /approve, where the human saw this exact payload.
+    // It clears the hold for THAT call and nothing else — but the audit record
+    // must still carry the turn's real taint, which is why turnTaint is passed
+    // honestly rather than as false.
+    const d = decideProposal({
+      proposal: digest,
+      capability: digestCap,
+      turnTaint: true,
+      confirmed: true,
+      now: NOW,
+    });
+    expect(d.allow).toBe(true);
+  });
+
+  it('holds a tainted egress call when nobody has confirmed', () => {
+    const d = decideProposal({ proposal: digest, capability: digestCap, turnTaint: true, now: NOW });
+    expect(d.allow).toBe(false);
+    expect((d as any).invariant).toBe('INV-5');
   });
 
   it('taint does not block non-egress tools — reading is not the objective', () => {
@@ -216,10 +288,26 @@ describe('rate limiting', () => {
         proposal: NOTE,
         capability: cap(),
         turnTaint: false,
+        confirmed: true,
         usage: { create_note: 19 },
         now: NOW,
       }).allow,
     ).toBe(true);
+  });
+
+  it('a rate limit outranks a confirmation request', () => {
+    // Ordering matters: a refusal the user cannot fix by clicking must not be
+    // presented as a click they can make.
+    const d = decideProposal({
+      proposal: NOTE,
+      capability: cap(),
+      turnTaint: false,
+      usage: { create_note: 20 },
+      now: NOW,
+    });
+    expect(d.allow).toBe(false);
+    expect((d as any).reason).toContain('rate_limited');
+    expect((d as any).needsConfirmation).toBeUndefined();
   });
 
   it('denies on unreadable usage rather than assuming zero', () => {

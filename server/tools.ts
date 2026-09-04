@@ -86,7 +86,10 @@ export const TOOL_REGISTRY: Readonly<Record<string, ToolSpec>> = Object.freeze({
   create_note: {
     name: 'create_note',
     description: "Create a note in the user's private journal.",
-    // The only write-class tool. Everything about B.3 exists for this row.
+    // Write-class, like send_digest above: both need a human click (S2).
+    // What is specific to this row is that it writes into users/{uid}/entries,
+    // the collection loadContext() treats as first-party — so its output is
+    // marked createdBy: 'agent' and carries taint forward. See agent.ts.
     sideEffect: 'write',
     rateLimitPerHour: 20,
     parameters: {

@@ -41,6 +41,14 @@ export interface ContextArtifact {
   sourceRef?: string;
   verdict?: 'clean' | 'suspicious' | 'hostile';
   externalId?: string;
+  /**
+   * True when this entry was written by the agent (create_note) rather than
+   * typed by the user. createNote() has always recorded createdBy: 'agent'
+   * "so it is never mistaken later for something the user wrote themselves" —
+   * and until this field existed, the only consumer that mattered never read
+   * it. See loadContext() in agent.ts.
+   */
+  agentAuthored?: boolean;
 }
 
 export interface AssembledContext {

@@ -10,9 +10,15 @@ import { Request, Response, NextFunction } from 'express';
  * a demo is worse than no CSP at all. The connect-src and frame-src below are
  * sized to exactly those origins and no wider.
  *
- * Set CSP_DISABLED=1 to ship everything except the CSP, as an escape hatch if a
- * policy problem surfaces during judging and there is no time to debug it. The
- * other headers are zero-risk and always on.
+ * There is deliberately NO flag that turns the CSP off. An earlier build carried
+ * CSP_DISABLED=1 as an escape hatch "if a policy problem surfaces during judging and
+ * there is no time to debug it". But the CSP is the second layer under INV-9 — the one
+ * the README cites when it says the markdown beacon has two independent defences — and a
+ * supported way to switch off a documented defence is exactly what Amendment C.4 was
+ * withdrawn for. The perimeter is not a mode, and neither is the backstop under it.
+ *
+ * If this policy ever breaks sign-in, fix the policy. headers.test.ts describes the shape
+ * it has to keep.
  */
 
 /**
@@ -86,9 +92,7 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
   // Cloud Run terminates TLS; tell browsers to stay on HTTPS.
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
-  if (process.env.CSP_DISABLED !== '1') {
-    res.setHeader('Content-Security-Policy', CSP);
-  }
+  res.setHeader('Content-Security-Policy', CSP);
 
   next();
 }

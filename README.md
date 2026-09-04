@@ -244,7 +244,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 419 unit tests, no infrastructure needed
+npm test                      # 428 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
@@ -274,6 +274,45 @@ gcloud run deploy perimeter \
 # Rules
 firebase deploy --only firestore:rules
 ```
+
+That deploy is enough for everything the security argument rests on: the journal,
+multi-turn chat, the airlock, the broker, the approval queue, the Perimeter Log and the
+Red Team console. The three integrations below are **optional** and each fails only when
+you use it — a missing secret is reported as a config error, not a silent wrong answer.
+
+```bash
+# Optional — Amendment D, location on an entry (INV-12).
+gcloud secrets create MAPS_API_KEY --replication-policy=automatic
+echo -n "YOUR_MAPS_KEY" | gcloud secrets versions add MAPS_API_KEY --data-file=-
+gcloud secrets add-iam-policy-binding MAPS_API_KEY   --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
+#   ...then add to --set-env-vars:
+#   MAPS_KEY_SECRET=projects/PROJECT_ID/secrets/MAPS_API_KEY/versions/1
+
+# Optional — Amendment H, read-only Gmail over OAuth (INV-16, INV-17).
+# Two secrets: the OAuth client secret, and a 32-byte key that encrypts stored
+# refresh tokens. They are separate so database access alone cannot use what is
+# in the database.
+openssl rand -base64 32 | tr -d '
+' |   gcloud secrets create GOOGLE_OAUTH_ENC_KEY --data-file=- --replication-policy=automatic
+gcloud secrets create GOOGLE_CLIENT_SECRET --replication-policy=automatic
+echo -n "YOUR_OAUTH_CLIENT_SECRET" |   gcloud secrets versions add GOOGLE_CLIENT_SECRET --data-file=-
+for S_NAME in GOOGLE_OAUTH_ENC_KEY GOOGLE_CLIENT_SECRET; do
+  gcloud secrets add-iam-policy-binding "$S_NAME"     --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
+done
+#   ...then add to --set-env-vars:
+#   GOOGLE_OAUTH_ENC_KEY_SECRET=projects/PROJECT_ID/secrets/GOOGLE_OAUTH_ENC_KEY/versions/1
+#   GOOGLE_CLIENT_SECRET_SECRET=projects/PROJECT_ID/secrets/GOOGLE_CLIENT_SECRET/versions/1
+#   GOOGLE_CLIENT_ID=<your OAuth client id>
+#   GOOGLE_OAUTH_REDIRECT=https://<your-run-domain>/api/gmail/callback
+
+# Optional — GitHub issue ingestion. Injected by value rather than by path, so
+# it is the one credential this app does not fetch through the Secret Manager
+# SDK. See CONSTITUTION.md §5.
+gcloud run services update perimeter --region asia-south1   --set-secrets=GITHUB_TOKEN=GITHUB_TOKEN:1
+```
+
+Scheduled ingestion needs `SCHEDULER_AUDIENCE` and `SCHEDULER_SERVICE_ACCOUNT`; that
+setup is in [`docs/scheduler-setup.md`](docs/scheduler-setup.md).
 
 Then add the Cloud Run domain to Firebase → Authentication → Authorized domains, or Google
 Sign-In fails on the live site. Scheduled ingestion setup is in
