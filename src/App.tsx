@@ -323,6 +323,7 @@ export default function App() {
               lastSavedAt={lastSavedAt}
               isFirstRun={entries.length === 0}
               onOpenRedTeam={() => setIsRedTeamOpen(true)}
+              onAttached={() => void loadGroundingArtifacts()}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6 text-[#8a8a75]">

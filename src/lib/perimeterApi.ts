@@ -61,6 +61,31 @@ export async function ingestLink(url: string): Promise<LinkIngestResult> {
   });
 }
 
+// --- Pasted notes (Amendment F) ---
+
+export interface NoteIngestResult {
+  artifactId: string;
+  segmentId: string;
+  title: string;
+  verdict: 'clean' | 'suspicious' | 'hostile';
+  signals: string[];
+  bytes: number;
+}
+
+/**
+ * Stores pasted text as UNTRUSTED.
+ *
+ * Identical treatment to a fetched page — INV-14. Text a person pasted is not
+ * more trustworthy than text we fetched, because the whole scenario is a person
+ * pasting something someone else wrote.
+ */
+export async function ingestNote(text: string, label?: string): Promise<NoteIngestResult> {
+  return apiFetch<NoteIngestResult>('/api/ingest/note', {
+    method: 'POST',
+    body: JSON.stringify({ text, label }),
+  });
+}
+
 // --- Location (Amendment D) ---
 
 export interface ResolvedLocation {

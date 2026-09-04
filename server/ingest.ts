@@ -4,9 +4,10 @@ import { fetchOpenIssues, isValidRepoRef, IngestError } from './github';
 import { detectL1, fuseVerdict } from './detect';
 import { classifyL2 } from './classify';
 import { safeFetch } from './fetchurl';
-import { createSegment } from './segments';
+import { createSegment, SourceType } from './segments';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
+import { checkRateLimit } from './ratelimit';
 
 /**
  * Amendment A.5 - Ingestion endpoints.
@@ -256,6 +257,104 @@ ingestRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response)
  * The fetched text is NOT summarised here. It becomes an untrusted segment and
  * only the Reader ever sees it, which is the whole airlock.
  */
+
+/**
+ * The one path by which anything untrusted becomes an artifact — Amendment F.
+ *
+ * Extracted from the /link handler so that notes, files and email all screen,
+ * segment and store identically to a fetched web page. The alternative was a
+ * second copy of this per input type, which is how one of them eventually ends
+ * up skipping classifyL2 or forgetting `zone: 'UNTRUSTED'` and nobody notices.
+ *
+ * Callers supply only text. Producing that text from a PDF, an image or an
+ * inbox is the caller's problem; everything after it is identical here.
+ *
+ * INV-14: the zone is hardcoded. There is no parameter that makes content
+ * arrive as anything other than UNTRUSTED.
+ */
+/** Matches the artifact `body` cap, so nothing is silently truncated later. */
+const MAX_NOTE_CHARS = 20_000;
+
+export interface IngestedArtifact {
+  artifactId: string;
+  segmentId: string;
+  title: string;
+  verdict: string;
+  signals: string[];
+  bytes: number;
+}
+
+export async function ingestUntrustedText(
+  uid: string,
+  input: {
+    text: string;
+    /**
+     * Recorded on the segment. Uses the existing SourceType union rather than a
+     * free string so a typo cannot create a zone-adjacent field nobody queries.
+     */
+    sourceType: SourceType;
+    /** Where it came from: a URL, a filename, a message id. */
+    sourceRef: string;
+    /** Shown in the UI. Falls back to sourceRef. */
+    title?: string;
+    /** Grouping id for the sources panel. */
+    sourceId?: string;
+    author?: string;
+    /** Hosts whose presence in the text is expected rather than suspicious. */
+    allowedHosts?: string[];
+    /** Prefix for the artifact document id. */
+    idPrefix?: string;
+    truncated?: boolean;
+  },
+): Promise<IngestedArtifact> {
+  const combined = input.text;
+
+  // Screening. L1 and L2 are defence in depth here - the boundary is that this
+  // text only ever reaches the Reader, which holds no tools.
+  const l1 = detectL1(combined, input.allowedHosts ? { allowedHosts: input.allowedHosts } : undefined);
+  const l2 = await classifyL2(combined);
+  const verdict = fuseVerdict(l1, l2.score);
+
+  const segment = await createSegment(uid, {
+    zone: 'UNTRUSTED',
+    text: combined,
+    sourceType: input.sourceType,
+    sourceRef: input.sourceRef,
+  });
+
+  const title = input.title || input.sourceRef;
+  const artifactId = `${input.idPrefix ?? input.sourceType}__${segment.id}`;
+  const bytes = Buffer.byteLength(combined, 'utf8');
+
+  await artifactsRef(uid).doc(artifactId).set(
+    clean({
+      id: artifactId,
+      segmentId: segment.id,
+      sourceId: input.sourceId ?? `pasted_${input.sourceType}s`,
+      sourceRef: input.sourceRef,
+      externalId: segment.id,
+      title,
+      body: combined.slice(0, 20_000),
+      author: input.author ?? input.sourceType,
+      url: input.sourceType === 'url' ? input.sourceRef : null,
+      trust: 'untrusted',
+      threatScore: Math.max(l1.score, l2.score ?? 0),
+      l1Score: l1.score,
+      l2Score: l2.score,
+      signals: l1.signals,
+      categories: l2.categories,
+      verdict,
+      classifierError: l2.error ?? null,
+      fetchedAt: new Date().toISOString(),
+      externalUpdatedAt: new Date().toISOString(),
+      bytes,
+      truncated: input.truncated ?? false,
+    }),
+  );
+
+  return { artifactId, segmentId: segment.id, title, verdict, signals: l1.signals, bytes };
+}
+
 ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
@@ -283,66 +382,106 @@ ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response
       throw err;
     }
 
-    // Screening. L1 and L2 are defence in depth here - the boundary is that
-    // this text only ever reaches the Reader, which holds no tools.
-    const combined = page.text;
-    const l1 = detectL1(combined, { allowedHosts: [new URL(page.finalUrl).hostname] });
-    const l2 = await classifyL2(combined);
-    const verdict = fuseVerdict(l1, l2.score);
-
-    const segment = await createSegment(uid, {
-      zone: 'UNTRUSTED',
-      text: combined,
+    const result = await ingestUntrustedText(uid, {
+      text: page.text,
       sourceType: 'url',
       sourceRef: page.finalUrl,
+      sourceId: 'pasted_links',
+      author: 'web',
+      allowedHosts: [new URL(page.finalUrl).hostname],
+      idPrefix: 'link',
+      truncated: page.truncated,
     });
-
-    const artifactId = `link__${segment.id}`;
-    await artifactsRef(uid).doc(artifactId).set(
-      clean({
-        id: artifactId,
-        segmentId: segment.id,
-        sourceId: 'pasted_links',
-        sourceRef: page.finalUrl,
-        externalId: segment.id,
-        title: page.finalUrl,
-        body: combined.slice(0, 20_000),
-        author: 'web',
-        url: page.finalUrl,
-        trust: 'untrusted',
-        threatScore: Math.max(l1.score, l2.score ?? 0),
-        l1Score: l1.score,
-        l2Score: l2.score,
-        signals: l1.signals,
-        categories: l2.categories,
-        verdict,
-        classifierError: l2.error ?? null,
-        fetchedAt: new Date().toISOString(),
-        externalUpdatedAt: new Date().toISOString(),
-        bytes: page.bytes,
-        truncated: page.truncated,
-      }),
-    );
 
     await logEvent(uid, {
       kind: 'ingest',
       zone: 'UNTRUSTED',
       decision: 'allow',
-      reason: `fetched:${verdict}`,
-      detail: { url: page.finalUrl, bytes: page.bytes, signals: l1.signals, verdict },
+      reason: `fetched:${result.verdict}`,
+      detail: {
+        url: page.finalUrl,
+        bytes: page.bytes,
+        signals: result.signals,
+        verdict: result.verdict,
+      },
     });
 
     res.status(201).json({
-      artifactId,
-      segmentId: segment.id,
+      artifactId: result.artifactId,
+      segmentId: result.segmentId,
       url: page.finalUrl,
-      verdict,
-      signals: l1.signals,
+      verdict: result.verdict,
+      signals: result.signals,
       bytes: page.bytes,
       truncated: page.truncated,
     });
   } catch (err: any) {
     console.error('[ingest] link failed:', err?.message);
     res.status(500).json({ error: 'Could not read that link. Please retry.' });
+  }
+});
+
+/**
+ * Ingests text the user pasted — Amendment F.
+ *
+ * The natural way suspicious content actually arrives: someone copies an email
+ * body, a message, a document excerpt, and wants to know what is in it. There
+ * is deliberately no path that treats this as more trustworthy than a fetched
+ * page. A human pasting it says nothing about who wrote it, and the entire
+ * scenario is a human pasting something an attacker wrote.
+ */
+ingestRouter.post('/note', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const uid = req.uid!;
+  try {
+    const limit = checkRateLimit(`note:${uid}`, Number(process.env.NOTE_RATE_LIMIT_PER_HOUR) || 60);
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      return res.status(429).json({
+        error: `Too many notes. Try again in ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s).`,
+      });
+    }
+
+    const data = req.body && typeof req.body === 'object' ? req.body : {};
+    const text = typeof data.text === 'string' ? data.text.trim() : '';
+    const label = typeof data.label === 'string' ? data.label.trim().slice(0, 120) : '';
+
+    if (!text) return res.status(400).json({ error: 'Paste some text first.' });
+    if (text.length > MAX_NOTE_CHARS) {
+      return res.status(400).json({ error: `Notes are capped at ${MAX_NOTE_CHARS} characters.` });
+    }
+
+    // The label is the user's own words, so it is safe as a title, but it is
+    // still capped and never used to build a path or a query.
+    const result = await ingestUntrustedText(uid, {
+      text,
+      sourceType: 'paste',
+      sourceRef: 'pasted note',
+      title: label || `Pasted note — ${new Date().toLocaleString()}`,
+      sourceId: 'pasted_notes',
+      author: 'pasted',
+      idPrefix: 'note',
+    });
+
+    await logEvent(uid, {
+      kind: 'ingest',
+      zone: 'UNTRUSTED',
+      decision: 'allow',
+      reason: `pasted:${result.verdict}`,
+      // The note text itself is not copied into the log; logEvent hashes long
+      // strings and the artifact already holds the body.
+      detail: { bytes: result.bytes, signals: result.signals, verdict: result.verdict },
+    });
+
+    res.status(201).json({
+      artifactId: result.artifactId,
+      segmentId: result.segmentId,
+      title: result.title,
+      verdict: result.verdict,
+      signals: result.signals,
+      bytes: result.bytes,
+    });
+  } catch (err: any) {
+    console.error('[ingest] note failed:', err?.message);
+    res.status(500).json({ error: 'Could not save that note. Please retry.' });
   }
 });

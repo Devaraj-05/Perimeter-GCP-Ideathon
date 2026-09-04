@@ -23,6 +23,9 @@ import {
   Swords,
   MapPin,
   X,
+  Paperclip,
+  Link2,
+  ClipboardPaste,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -33,7 +36,7 @@ import {
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
 import { reflectGrounded } from '../lib/reflect';
-import { resolveLocation } from '../lib/perimeterApi';
+import { resolveLocation, ingestNote, ingestLink } from '../lib/perimeterApi';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 
@@ -56,6 +59,14 @@ interface JournalEditorProps {
    */
   isFirstRun?: boolean;
   onOpenRedTeam?: () => void;
+  /**
+   * Called after content is attached, so the app can refresh grounding.
+   *
+   * Attaching does not touch the airlock: it adds an artifact, grounding picks
+   * it up, and grounding already routes the turn through the toolless Reader
+   * (src/lib/reflect.ts). This is an entry point, not a code path.
+   */
+  onAttached?: () => void;
 }
 
 const CATEGORIES: CategoryType[] = [
@@ -126,6 +137,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   lastSavedAt,
   isFirstRun = false,
   onOpenRedTeam,
+  onAttached,
 }) => {
   // Local state initialized from entry
   const [title, setTitle] = useState(entry.title || '');
@@ -138,6 +150,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [location, setLocation] = useState(entry.location);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Attachments (Amendment F). Chips are local display state; the artifacts
+  // themselves live server-side and drive grounding.
+  const [attachMenu, setAttachMenu] = useState<null | 'note' | 'link'>(null);
+  const [attachDraft, setAttachDraft] = useState('');
+  const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<
+    { id: string; title: string; verdict: 'clean' | 'suspicious' | 'hostile' }[]
+  >([]);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -289,6 +311,44 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setLocationError(err?.message || 'Could not find that place.');
     } finally {
       setLocating(false);
+    }
+  };
+
+  /**
+   * Attaches pasted text or a link as UNTRUSTED content (Amendment F).
+   *
+   * The verdict comes back from the server's own screening; the chip shows it
+   * so a user can see that something they pasted was flagged hostile BEFORE
+   * they ask a question about it.
+   */
+  const submitAttachment = async () => {
+    const value = attachDraft.trim();
+    if (!value || !attachMenu) return;
+
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      const r =
+        attachMenu === 'link'
+          ? await ingestLink(value)
+          : await ingestNote(value);
+
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: r.artifactId,
+          title: attachMenu === 'link' ? (r as any).url ?? value : (r as any).title ?? 'Pasted note',
+          verdict: r.verdict,
+        },
+      ]);
+      setAttachDraft('');
+      setAttachMenu(null);
+      // Grounding is what actually routes the next turn through the airlock.
+      onAttached?.();
+    } catch (err: any) {
+      setAttachError(err?.message || 'Could not attach that.');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -1097,11 +1157,109 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               <div ref={turnsEndRef} />
             </div>
 
+            {/* Attachments (Amendment F).
+                Chips sit above the composer so a hostile verdict is visible
+                BEFORE the question is asked, not after the answer arrives. */}
+            {attachments.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {attachments.map((a) => (
+                  <span
+                    key={a.id}
+                    className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${
+                      a.verdict === 'hostile'
+                        ? 'border-rose-300 bg-rose-50 text-rose-900'
+                        : a.verdict === 'suspicious'
+                          ? 'border-amber-300 bg-amber-50 text-amber-900'
+                          : 'border-[#e5e0d3] bg-white text-[#434338]'
+                    }`}
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{a.title}</span>
+                    <span className="shrink-0 font-medium uppercase">{a.verdict}</span>
+                    <button
+                      onClick={() => setAttachments((p) => p.filter((x) => x.id !== a.id))}
+                      title="Remove from this view"
+                      className="shrink-0 cursor-pointer opacity-60 hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {attachMenu && (
+              <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">
+                <p className="text-[11px] font-medium text-[#2c2c24]">
+                  {attachMenu === 'link'
+                    ? 'Paste a web address. It is fetched on the server and treated as hostile.'
+                    : 'Paste anything — an email body, a message, a document excerpt. It is treated as hostile.'}
+                </p>
+                {attachMenu === 'link' ? (
+                  <input
+                    type="url"
+                    value={attachDraft}
+                    onChange={(e) => setAttachDraft(e.target.value)}
+                    placeholder="https://example.com/an-article-you-read"
+                    className="mt-2 w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+                  />
+                ) : (
+                  <textarea
+                    value={attachDraft}
+                    onChange={(e) => setAttachDraft(e.target.value)}
+                    rows={4}
+                    maxLength={20000}
+                    placeholder="Paste the text here…"
+                    className="mt-2 w-full resize-y rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+                  />
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => void submitAttachment()}
+                    disabled={attaching || !attachDraft.trim()}
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#484833] disabled:opacity-50"
+                  >
+                    {attaching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
+                    {attaching ? 'Reading…' : 'Attach'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAttachMenu(null);
+                      setAttachDraft('');
+                      setAttachError(null);
+                    }}
+                    className="cursor-pointer text-xs text-[#8a8a75] hover:text-[#2c2c24]"
+                  >
+                    Cancel
+                  </button>
+                  {attachError && <span className="text-[11px] text-rose-700">{attachError}</span>}
+                </div>
+              </div>
+            )}
+
             {/* Follow-up input box */}
             <form
               onSubmit={handleSendFollowUp}
               className="mt-4 pt-3 border-t border-[#f0ede6] flex items-center gap-2"
             >
+              <button
+                type="button"
+                id="attach-note-btn"
+                onClick={() => setAttachMenu(attachMenu === 'note' ? null : 'note')}
+                title="Paste text as untrusted content"
+                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6]"
+              >
+                <ClipboardPaste className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                id="attach-link-btn"
+                onClick={() => setAttachMenu(attachMenu === 'link' ? null : 'link')}
+                title="Add a web page"
+                className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white p-2.5 text-[#5a5a40] transition-colors hover:bg-[#f3efe6]"
+              >
+                <Link2 className="h-4 w-4" />
+              </button>
               <input
                 id="followup-input"
                 type="text"
