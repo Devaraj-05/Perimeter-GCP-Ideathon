@@ -307,3 +307,47 @@ Any change that made attachments bypass the Reader would breach INV-1 and is for
 
 **7. Corpus payload.** A pasted note impersonating an earlier conversation turn is added to the
 corpus.
+
+---
+
+## Amendment G — Files: PDFs and images (adopted 2026-09-04)
+
+Adopted **before** any upload code was written, per §9.
+
+**1. Data flows.** Uploaded bytes → a transcription call to Gemini → `UNTRUSTED` text → the
+existing `ingestUntrustedText` path. The bytes never reach the Planner, never reach Firestore, and
+never leave the request that carried them.
+
+**2. New untrusted input?** Two, and they are the most dangerous yet. **An instruction rendered as
+pixels is invisible to every text filter in this system.** L1 pattern matching sees nothing. L2
+classification sees nothing. Only the absence of tools on the model that reads it stands between
+an image and an action — which is the argument this project exists to make, in its purest form.
+
+**3. New egress path?** No.
+
+**4. New secret?** No.
+
+**5. New Firestore paths?** None. Reuses `users/{uid}/artifacts`.
+
+**6. New invariant.**
+
+- **INV-15** Uploaded bytes are never persisted. Only the text extracted from a file becomes an
+  artifact; the bytes are discarded within the request that carried them. There is no blob store,
+  no storage rule to get wrong, and nothing binary to leak. The real type is determined by
+  inspecting the file's leading bytes — a declared MIME type is attacker-controlled input and must
+  never select the parser.
+
+**On adding no dependency.** §3 forbids a new dependency without a stated reason. None is needed
+here: Gemini accepts PDF and image bytes directly as `inlineData`, and
+`generateContentWithFallback` already carries the mandated model ladder and sets no `tools` key,
+so transcription is a Reader-class call by construction. Adding a PDF parser would introduce a
+dependency *and* a second extraction path with no security benefit.
+
+**On the transcription call being injectable.** It is, and that is fine. A poisoned document can
+make the transcription wrong. It cannot make it privileged: the transcriber holds no tools, and
+its output is stored as `UNTRUSTED`, screened by L1 and L2, and fenced before any Reader sees it.
+A compromised transcription produces poisoned text in a quarantine, which is precisely where
+poisoned text is supposed to end up.
+
+**7. Corpus payloads.** A PDF carrying hidden instruction text and an image carrying visible
+instruction text are added to the corpus.
