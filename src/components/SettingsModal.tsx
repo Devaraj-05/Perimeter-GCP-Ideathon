@@ -21,7 +21,7 @@ const FACTS = [
   'Documents you attach — emails, web pages, PDFs, images — are sent to Google’s Gemini API to be read. That is how the product works, and it means the text leaves this server. It is not used to train models.',
   'Connected Gmail and GitHub tokens are encrypted before storage and never leave the server. They are excluded even from your own export, because an export is a file and the token inside one would still be live.',
   'Nothing you write is shared with other users. There is no sharing feature, so there is no setting to get wrong.',
-  'There is no retention limit yet. Everything you have ever ingested is still here until you delete it, and saying otherwise would be untrue.',
+  'Your journal entries are kept until you delete them — a timer never removes your own writing. Ingested sources (emails, pages, PDFs, scanned repositories) age out on this deployment’s retention window, or are kept indefinitely if none is set. Either way, deleting your account removes everything.',
 ];
 
 export const SettingsModal: React.FC<{

@@ -57,6 +57,7 @@ const SIGNAL_COPY: Record<string, string> = {
   oversized_base64: 'A long encoded blob, large enough to conceal a payload.',
   markdown_image_exfil: 'A markdown image whose URL could carry your data out.',
   offdomain_url: 'Links pointing somewhere other than this source’s own domain.',
+  mixed_script_word: 'A word that mixes alphabets — a Cyrillic letter disguised as a Latin one, so “ignore” slips past every check spelled with a look-alike.',
 };
 
 export function InjectionReport({

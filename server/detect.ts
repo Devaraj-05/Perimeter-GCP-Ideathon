@@ -22,7 +22,8 @@ export type Signal =
   | 'oversized_base64'
   | 'markdown_image_exfil'
   | 'offdomain_url'
-  | 'fake_system_role';
+  | 'fake_system_role'
+  | 'mixed_script_word';
 
 export type Verdict = 'clean' | 'suspicious' | 'hostile';
 
@@ -88,6 +89,7 @@ const SIGNAL_WEIGHTS: Record<Signal, number> = {
   html_comment: 0.25,
   oversized_base64: 0.25,
   offdomain_url: 0.15,
+  mixed_script_word: 0.5,
 };
 
 /** "ignore previous instructions", "disregard all prior directions", etc. */
@@ -298,6 +300,26 @@ export interface L1Options {
 }
 
 /**
+ * A word that welds Latin letters to Cyrillic ones — a homoglyph attack.
+ *
+ * "іgnore all previous instructions" never matches INSTRUCTION_OVERRIDE, because
+ * the leading character is Cyrillic і, not Latin i — the two are pixel-identical
+ * and semantically unrelated. Every pattern in this file reads Latin; a
+ * substituted look-alike walks straight past all of them.
+ *
+ * The signature is not "contains Cyrillic" — a document may legitimately quote
+ * Russian. It is Cyrillic and Latin ADJACENT inside one word, with no space
+ * between, which is what a look-alike substitution produces and what ordinary
+ * bilingual text never does. Deliberately Cyrillic-only: Greek shares
+ * characters with maths and units (πr, 5μm) and would cost false positives
+ * for a smaller class of attack.
+ *
+ * A signal, not a verdict — it says "this is deceptively encoded", and the
+ * override it was hiding may still be caught once a reader sees the quote.
+ */
+const MIXED_SCRIPT_WORD = /[A-Za-z][Ѐ-ӿ]|[Ѐ-ӿ][A-Za-z]/;
+
+/**
  * Runs every deterministic check over a single piece of untrusted text.
  * Never throws: detection failing open on malformed input would be worse than
  * a false positive.
@@ -322,6 +344,7 @@ export function detectL1(text: unknown, options: L1Options = {}): L1Result {
   if (OVERSIZED_BASE64.test(input)) signals.push('oversized_base64');
   if (MARKDOWN_IMAGE_EXFIL.test(input)) signals.push('markdown_image_exfil');
   if (findOffDomainUrls(input, allowedHosts)) signals.push('offdomain_url');
+  if (MIXED_SCRIPT_WORD.test(input)) signals.push('mixed_script_word');
 
   const highConfidence = signals.filter((s) => HIGH_CONFIDENCE.has(s));
 
@@ -349,6 +372,7 @@ export function detectL1(text: unknown, options: L1Options = {}): L1Result {
     ...sweep(input, HTML_COMMENT, 'html_comment'),
     ...sweep(input, OVERSIZED_BASE64, 'oversized_base64'),
     ...sweep(input, MARKDOWN_IMAGE_EXFIL, 'markdown_image_exfil'),
+    ...sweep(input, MIXED_SCRIPT_WORD, 'mixed_script_word'),
     ...offDomainUrlMatches(input, allowedHosts),
   ]
     .sort((x, y) => x.start - y.start)

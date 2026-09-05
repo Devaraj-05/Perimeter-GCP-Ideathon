@@ -28,6 +28,7 @@ const SIGNAL_COPY: Record<string, string> = {
   bidi_override: 'text-direction characters that can disguise content',
   html_comment: 'content hidden in an HTML comment',
   offdomain_url: 'a link pointing off-domain',
+  mixed_script_word: 'a word mixing alphabets to imitate ordinary text',
   imperative_to_agent: 'an instruction addressed to an AI reader',
   oversized_base64: 'a large encoded blob',
 };

@@ -28,10 +28,13 @@ describe('the privacy statement says the uncomfortable parts', () => {
     expect(html()).toMatch(/sent to Google/i);
   });
 
-  it('admits there is no retention limit yet', () => {
-    // True today. Claiming a policy that does not exist would be the one lie
-    // that matters here.
-    expect(html()).toMatch(/no retention limit/i);
+  it('states the retention policy honestly: entries kept, sources age out', () => {
+    // Amendment O. The guarantee — a timer never removes the user's own
+    // writing — is true regardless of the configured window, and that is what
+    // the statement promises.
+    const out = html();
+    expect(out).toMatch(/kept until you delete them/i);
+    expect(out).toMatch(/age out/i);
   });
 
   it('explains why tokens are excluded from the user’s own export', () => {

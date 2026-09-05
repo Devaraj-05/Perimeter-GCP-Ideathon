@@ -1,6 +1,7 @@
 import { adminDb } from './auth';
 import { getToolSpec } from './tools';
 import { getDestination, recordSandboxDelivery } from './destinations';
+import { embedText, cosineSimilarity } from './gemini';
 
 /**
  * Tool Executor - Amendment B.2.
@@ -45,22 +46,47 @@ async function searchArtifacts(uid: string, query: string): Promise<ExecutionRes
     .orderBy('fetchedAt', 'desc')
     .limit(SEARCH_WINDOW)
     .get();
-  const needle = query.toLowerCase().slice(0, 200);
+  const docs = snap.docs.map((d) => d.data() as any);
 
-  const matches = snap.docs
-    .map((d) => d.data() as any)
-    .filter(
-      (a) =>
-        String(a.title || '').toLowerCase().includes(needle) ||
-        String(a.body || '').toLowerCase().includes(needle),
-    )
-    .slice(0, 10)
-    .map((a) => ({
-      title: a.title,
-      source: a.sourceRef,
-      externalId: a.externalId,
-      verdict: a.verdict,
-    }));
+  // Amendment P, INV-25. Rank by MEANING when embeddings are available, which
+  // finds related writing rather than only exact words. Ranking selects which
+  // untrusted artifacts are candidates; it makes none of them trusted, and the
+  // result is the same shape the substring path returned.
+  const queryVector = await embedText(query);
+
+  let ranked: any[];
+  if (queryVector) {
+    ranked = docs
+      .map((a) => ({
+        a,
+        score: Array.isArray(a.embedding) ? cosineSimilarity(queryVector, a.embedding) : -1,
+      }))
+      // A weak match is worse than an honest "nothing relevant": below this
+      // the results are noise, and returning noise to a brainstorm is how a
+      // tool teaches a user to ignore it.
+      .filter((r) => r.score >= 0.35)
+      .sort((x, y) => y.score - x.score)
+      .slice(0, 10)
+      .map((r) => r.a);
+  } else {
+    // Embedding unavailable — fall back to the substring scan rather than
+    // returning nothing. A degraded search still finds exact words.
+    const needle = query.toLowerCase().slice(0, 200);
+    ranked = docs
+      .filter(
+        (a) =>
+          String(a.title || '').toLowerCase().includes(needle) ||
+          String(a.body || '').toLowerCase().includes(needle),
+      )
+      .slice(0, 10);
+  }
+
+  const matches = ranked.map((a) => ({
+    title: a.title,
+    source: a.sourceRef,
+    externalId: a.externalId,
+    verdict: a.verdict,
+  }));
 
   return { ok: true, result: { matches, count: matches.length } };
 }

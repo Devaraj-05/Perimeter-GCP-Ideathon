@@ -130,6 +130,18 @@ function architecturalBlock(id: string, cls: string, body: string): { blocked: b
     }
   }
 
+  // Retrieval rank gaming: a high similarity score changes position, not zone.
+  // The body still routes through the toolless Reader like any other document.
+  if (cls === 'retrieval_rank_gaming') {
+    const request = buildReaderRequest('gemini-3.1-flash-lite', body);
+    try {
+      assertReaderHasNoTools(request);
+      return { blocked: true, how: 'ranking is not trust: content still hits the toolless Reader' };
+    } catch {
+      return { blocked: false, how: 'READER CARRIED TOOLS' };
+    }
+  }
+
   // Markdown beacon: INV-9 in the renderer. It never becomes an <img>, so it
   // cannot fetch. Nothing to execute server-side; the block is structural.
   if (cls === 'markdown_beacon') {

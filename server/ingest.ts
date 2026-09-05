@@ -10,6 +10,8 @@ import { PerimeterViolation } from './segments';
 import { checkRateLimitShared } from './ratelimit';
 import { extractTextFromFile, ExtractError, MAX_FILE_BYTES } from './extract';
 import { scanRepository } from './reposcan';
+import { embedText } from './gemini';
+import { artifactExpiry } from './retention';
 
 /**
  * Amendment A.5 - Ingestion endpoints.
@@ -330,6 +332,13 @@ export async function ingestUntrustedText(
   const artifactId = `${input.idPrefix ?? input.sourceType}__${segment.id}`;
   const bytes = Buffer.byteLength(combined, 'utf8');
 
+  // Amendment P. Ranked on TITLE plus body so a search for what a document is
+  // about matches even when the body is long and diffuse. null on failure —
+  // ingest never blocks on the ability to rank a document later.
+  const embedding = await embedText(`${title}
+
+${combined}`);
+
   await artifactsRef(uid).doc(artifactId).set(
     clean({
       id: artifactId,
@@ -356,6 +365,13 @@ export async function ingestUntrustedText(
       classifierError: l2.error ?? null,
       fetchedAt: new Date().toISOString(),
       externalUpdatedAt: new Date().toISOString(),
+      // Amendment O. Artifacts age out; null when retention is unconfigured,
+      // which means "kept" and is what the privacy statement says by default.
+      expiresAt: artifactExpiry(),
+      // Amendment P, INV-25. A vector derived from untrusted text, stored so
+      // search can RANK by meaning. Still untrusted, still just numbers; null
+      // when the embedding call failed, and search falls back to substring.
+      embedding,
       bytes,
       truncated: input.truncated ?? false,
     }),

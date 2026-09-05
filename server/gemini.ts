@@ -376,6 +376,71 @@ export function describeModelFailure(err: unknown): ModelFailure {
   };
 }
 
+/**
+ * The embedding model — Amendment P.
+ *
+ * Separate from the §6 chat ladder, which governs generateContent and not this
+ * endpoint. Overridable, with a documented default, and it is not licence to
+ * swap it casually: a stored embedding is only comparable to others made by
+ * the same model, so changing this makes old vectors unrankable against new
+ * queries until they are recomputed.
+ */
+export function embeddingModel(): string {
+  return process.env.GEMINI_EMBED_MODEL?.trim() || 'text-embedding-004';
+}
+
+/**
+ * A vector for a piece of text — Amendment P, INV-25.
+ *
+ * The vector is DERIVED from possibly-untrusted text and stays untrusted, but
+ * it is a list of numbers: it carries no instruction, is never rendered, and
+ * is only ever compared to another vector. Computing it changes nothing about
+ * the provenance of the text it came from.
+ *
+ * Returns null rather than throwing on failure. An embedding is a ranking
+ * aid; if it cannot be produced, ingest must still succeed and search must
+ * fall back to substring, because losing the ability to RANK a document is not
+ * a reason to lose the document.
+ */
+export async function embedText(text: string): Promise<number[] | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const ai = await getAI();
+    const res: any = await withDeadline(
+      ai.models.embedContent({
+        model: embeddingModel(),
+        // Bounded: the endpoint has an input cap, and the first 8k characters
+        // carry the gist for ranking. This is not the airlock — the whole
+        // document still reaches the Reader elsewhere.
+        contents: trimmed.slice(0, 8_000),
+      }),
+      'embedding',
+      MODEL_ATTEMPT_TIMEOUT_MS,
+    );
+    const values = res?.embeddings?.[0]?.values;
+    return Array.isArray(values) && values.length > 0 ? (values as number[]) : null;
+  } catch (err: any) {
+    console.warn('[embed] failed, ranking will fall back to substring:', err?.message);
+    return null;
+  }
+}
+
+/** Cosine similarity of two equal-length vectors. 1 is identical, 0 unrelated. */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length === 0 || a.length !== b.length) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
 export interface FallbackOptions {
   systemInstruction?: string;
   temperature?: number;

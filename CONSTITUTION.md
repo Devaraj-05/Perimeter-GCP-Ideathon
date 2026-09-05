@@ -60,6 +60,10 @@ constitution.
   Amendment N.
 - **INV-23** Deletion is ordered so a partial failure leaves an account recoverable, not orphaned:
   data first, Auth record last, third-party grants revoked before either. See Amendment N.
+- **INV-24** Retention deletes artifacts, never entries; scoped to expired documents only. See
+  Amendment O.
+- **INV-25** An embedding does not launder provenance — ranking selects untrusted candidates, it
+  does not make them trusted. See Amendment P.
 
 ## §3 Secure coding standards
 
@@ -700,3 +704,91 @@ nothing on its own. The export says so in the file rather than letting a reader 
 **7. Corpus payload.** Yes — a document instructing the assistant to export the user's data to an
 address, and a second instructing it to delete the journal. Both must fail for the same structural
 reason rather than a refusal: there is no tool to call.
+
+---
+
+## Amendment O — Retention (adopted 2026-09-06)
+
+Adopted **before** the retention code was written, per §9. Ingested external content ages out;
+the user's own journal does not.
+
+**Why the asymmetry.** An entry is something the user wrote and may want in ten years — deleting
+it on a timer would be a betrayal, not a feature. An artifact is the opposite: a copy of an email,
+a web page, a scanned repository, kept only so a recent conversation could ground on it. Holding
+those forever is the liability Settings admitted to ("no retention limit yet"); it is also the
+larger share of what this system stores about a person's untrusted world. So artifacts expire and
+entries are kept, and the privacy statement says exactly that rather than a comfortable average.
+
+**1. Data flows.** No new inbound flow. A scheduled job, authenticated as the existing scheduler
+service account (Amendment C's `requireScheduler`), deletes artifacts and their segments whose
+`expiresAt` has passed, for every user. Nothing new is read into a model.
+
+**2. New untrusted input?** No.
+
+**3. New egress path?** No.
+
+**4. New secret?** No — reuses the scheduler's OIDC identity.
+
+**5. New Firestore paths?** No new collection. One field, `expiresAt`, on
+`users/{uid}/artifacts/{id}`, stamped at ingest.
+
+**6. New invariant.**
+
+> **INV-24** — Retention deletes artifacts, never entries. The sweep is scoped to the `artifacts`
+> and `segments` collections and to documents whose `expiresAt` is in the past; it has no branch
+> that can touch `entries`. A user's own writing is removed only by that user, through account
+> deletion or a per-entry delete — never by a timer. The window is a deployment setting
+> (`ARTIFACT_RETENTION_DAYS`); when unset, nothing expires and the privacy statement says so.
+
+**7. Corpus payload.** None. Retention changes when data is removed, not what any model reads or
+what any tool does.
+
+---
+
+## Amendment P — Semantic retrieval, through the airlock (adopted 2026-09-06)
+
+Adopted **before** the retrieval code was written, per §9. `search_artifacts` may rank by meaning
+rather than by substring.
+
+**Why it needs an amendment at all.** Retrieval is the seam where a security model most often
+quietly fails: "it is just search" is how untrusted content ends up in a privileged context
+without anyone deciding it should. This amendment states the boundary so the feature cannot drift
+across it later.
+
+**1. Data flows.** At ingest, an embedding of the artifact text is computed by the Gemini
+embedding endpoint and stored on the artifact as an array of floats. At search time, the query is
+embedded and ranked against those vectors by cosine similarity, in process. The ranked result is
+the same shape `search_artifacts` already returns.
+
+**2. New untrusted input?** No new SOURCE, and this is the clause that matters. An embedding is
+DERIVED from untrusted text, and it stays untrusted — but it is a vector of numbers, not a span of
+text, so it carries no instruction a model could follow. It is never rendered, never placed in a
+prompt, and never compared to anything but another embedding. The artifact it points at remains
+untrusted and, if its content ever reaches a model, does so through the Reader exactly as an
+attached artifact does today.
+
+**3. New egress path?** Yes, and it is a fixed Google endpoint no user input can influence — the
+embedding API on `generativelanguage.googleapis.com`, the same host the model calls already use.
+Not egress-class, by the same reasoning as the model calls themselves.
+
+**4. New secret?** No — the existing Gemini key.
+
+**5. New Firestore paths?** No new collection. One field, `embedding`, on an artifact.
+
+**6. New invariant.**
+
+> **INV-25** — An embedding does not launder provenance. Computing, storing or matching an
+> embedding of untrusted text never changes the zone or the taint of the artifact it was derived
+> from. Retrieval selects which untrusted artifacts are candidates; it does not make any of them
+> trusted, and a turn that grounds on a retrieved artifact is tainted exactly as one that grounds
+> on an attached artifact is. Ranking is not a trust decision.
+
+**On what this does and does not buy.** It replaces a substring match, which found nothing unless
+the user typed the exact word, with a ranking that finds related writing. It does not add a
+retrieval-augmented generation loop: a tool result is shown to the user, not fed back to a model,
+so this surfaces better matches rather than synthesising over them. That limit is real and is
+recorded here rather than implied by the word "semantic".
+
+**7. Corpus payload.** A document whose text is engineered to rank highly for an innocuous query —
+so the claim that a well-ranked artifact is still untrusted, and still routes through the Reader,
+is tested rather than asserted.

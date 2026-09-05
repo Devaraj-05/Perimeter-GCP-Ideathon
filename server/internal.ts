@@ -3,6 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { adminDb } from './auth';
 import { runSourceIngest } from './ingest';
 import { writeAudit } from './audit';
+import { sweepExpired } from './retention';
 
 /**
  * Scheduled ingestion - Amendment A.5.
@@ -171,5 +172,26 @@ internalRouter.post('/ingest', requireScheduler, async (_req: Request, res: Resp
   } catch (err: any) {
     console.error('[internal] scheduled ingest failed:', err?.message);
     res.status(500).json({ ok: false, error: 'Scheduled ingest failed.', users, sources, failures });
+  }
+});
+
+/**
+ * Scheduled retention sweep — Amendment O, INV-24.
+ *
+ * Same OIDC-authenticated identity as the ingest job. A no-op when retention is
+ * unconfigured, so it is safe to schedule before a policy is chosen.
+ */
+internalRouter.post('/retention', requireScheduler, async (_req: Request, res: Response) => {
+  const started = Date.now();
+  try {
+    const report = await sweepExpired();
+    console.log(
+      `[internal] retention swept ${report.artifactsDeleted} artifacts, ` +
+        `${report.segmentsDeleted} segments across ${report.usersScanned} users`,
+    );
+    res.json({ ok: true, ...report, durationMs: Date.now() - started });
+  } catch (err: any) {
+    console.error('[internal] retention sweep failed:', err?.message);
+    res.status(500).json({ ok: false, error: 'Retention sweep failed.' });
   }
 });
