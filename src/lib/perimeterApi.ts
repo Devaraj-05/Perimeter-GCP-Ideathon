@@ -317,3 +317,21 @@ export async function scanRepository(
   if (!result) throw new Error('The scan ended without a result. Please retry.');
   return result;
 }
+
+/** Whether this user has connected a GitHub account — Amendment J. */
+export async function githubStatus(): Promise<{ connected: boolean }> {
+  return apiFetch<{ connected: boolean }>('/api/github/status');
+}
+
+/**
+ * Starts a consent. The credential never reaches the browser; only this URL
+ * does. It is exchanged server-side and sealed there (INV-16).
+ */
+export async function githubConnectUrl(): Promise<string> {
+  const { url } = await apiFetch<{ url: string }>('/api/github/connect', { method: 'POST' });
+  return url;
+}
+
+export async function githubDisconnect(): Promise<void> {
+  await apiFetch<{ ok: boolean }>('/api/github/disconnect', { method: 'POST' });
+}

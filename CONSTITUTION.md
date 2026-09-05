@@ -478,3 +478,69 @@ is a rendering instruction rather than a barrier.
 
 **7. Corpus payload.** A repository fixture whose `AGENTS.md` carries instruction text, so the
 claim that a poisoned agent-instruction file surfaces first is tested rather than asserted.
+
+---
+
+## Amendment J — GitHub connection and repository conversation (adopted 2026-09-05)
+
+Adopted **before** any connection code was written, per §9. Two things change: a user may
+connect their GitHub account, and repository content becomes discussable.
+
+**1. Data flows.** Two. *Connection:* an operator-configured OAuth client → a consent the user
+grants → an access token held by us, sealed → repository reads on demand. *Content:* repository
+files → `detectL1` (unchanged, model-free) → findings; and separately, a bounded selection of
+those files → `ingestUntrustedText` → `UNTRUSTED` artifacts → the Reader → the Planner.
+
+**2. New untrusted input?** Yes. It is now routed *through* the Reader rather than around it.
+
+**3. New egress path?** No. Every request goes to `api.github.com`, `codeload.github.com` or
+`github.com`, and no user input reaches the host component of any URL.
+
+**4. New secrets?** One: the GitHub OAuth client secret, from Secret Manager, pinned, with a
+scoped IAM binding. `GITHUB_CLIENT_ID` and `GITHUB_OAUTH_REDIRECT` are not secrets and are
+plain environment variables. The existing `GOOGLE_OAUTH_ENC_KEY` seals the stored token — one
+key for both providers, because a second key with the same lifetime and the same blast radius
+buys nothing.
+
+**5. New Firestore paths?** One document: `users/{uid}/private/github`. That collection already
+denies the client read and write, and its rules tests already cover the whole `private/` subtree.
+
+**6. Revised and new invariants.**
+
+- **INV-18 (revised)** Repository **detection** is deterministic and model-free. The scan that
+  finds, ranks and quotes injections runs no model, and `server/reposcan.ts`,
+  `server/containment.ts` and `server/triage.ts` remain asserted clean of model imports.
+
+  Repository **content** may additionally be discussed, and that discussion routes through the
+  airlock exactly as a fetched page or an uploaded PDF does: ingested as `UNTRUSTED`, read by a
+  model that holds no tools, never shown raw to the Planner. The set of files that becomes
+  discussable is bounded, and the bound is reported to the user.
+
+  *What is given up:* the scan is no longer the only thing in this application that touches a
+  repository. *What is kept:* nothing that decides whether a file contains an injection can be
+  argued with by that file.
+
+- **INV-19** The GitHub token is never used to modify a repository. Every GitHub URL this
+  application requests is matched against an allowlist of endpoint shapes before the request is
+  made. Exactly one call site uses a method other than `GET`: `DELETE
+  /applications/{client_id}/token`, which revokes our own grant at disconnect. It touches no
+  repository, and its purpose is to give up access rather than to use it.
+
+**A standing obligation on the INV-18 revision.** The connection ships first; the ingest that
+justifies the revision ships in the commit after it. Until that lands, this clause regulates a
+capability the application does not have — which is the failure C.4 was withdrawn for. The
+revision is therefore conditional: **if the ingest is not built, INV-18 reverts to its original
+wording and this paragraph records why**, in the manner of C.4 rather than by quiet deletion.
+The scan being model-free is not a claim to give up speculatively.
+
+**On the scope, recorded rather than argued away.** A classic OAuth App's `repo` scope grants
+read **and write** on every private repository the user can reach, and GitHub offers no
+read-only private alternative for OAuth Apps. The narrower option — a GitHub App with
+`Contents: Read-only` and per-repository selection — was considered and rejected in favour of
+reusing Amendment H's proven pattern. INV-19 bounds what *this code* does with the credential.
+It does not bound what the credential permits: anyone holding the sealed token and the
+encryption key has write access to those repositories. That is stated in the README's Honest
+Limits, next to the unverified Gmail scope.
+
+**7. Corpus payload.** A repository fixture whose `README.md` carries an injection addressed to
+a code-review assistant, added in the plan that implements the ingest.

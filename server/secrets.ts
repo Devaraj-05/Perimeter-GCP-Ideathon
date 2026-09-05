@@ -160,6 +160,16 @@ export async function getGoogleClientSecret(): Promise<string> {
   );
 }
 
+/** The GitHub OAuth client secret — Amendment J. Never reaches a client. */
+export async function getGitHubClientSecret(): Promise<string> {
+  return resolveSecret(
+    'github-client-secret',
+    'GITHUB_CLIENT_SECRET_SECRET',
+    'GITHUB_CLIENT_SECRET',
+    'GitHub OAuth client secret',
+  );
+}
+
 /** Diagnostics for /api/health. Reports the path taken, never the value. */
 export function secretStatus(): { configured: boolean; via: string | null } {
   const gemini = cache.get('gemini');

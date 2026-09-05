@@ -49,6 +49,8 @@ import {
   gmailConnectUrl,
   gmailIngest,
   scanRepository,
+  githubStatus,
+  githubConnectUrl,
   type RepoScanResult,
   type ScanProgress,
 } from '../lib/perimeterApi';
@@ -202,6 +204,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [repoResult, setRepoResult] = useState<RepoScanResult | null>(null);
   /** Live scan progress. A tree walk takes tens of seconds; a bare spinner reads as a hang. */
   const [repoProgress, setRepoProgress] = useState<ScanProgress | null>(null);
+  /** Whether this account has a GitHub connection — Amendment J. */
+  const [githubConnected, setGithubConnected] = useState(false);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -650,6 +654,27 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setErrorMsg(err?.message || 'Gemini reflection request failed.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    githubStatus()
+      .then((s) => setGithubConnected(s.connected))
+      .catch(() => setGithubConnected(false));
+  }, []);
+
+  /**
+   * Connects a GitHub account — Amendment J.
+   *
+   * Opens GitHub's own consent screen. The credential is exchanged server-side
+   * and sealed there; the browser never sees it (INV-16).
+   */
+  const connectGithub = async () => {
+    setAttachError(null);
+    try {
+      window.location.href = await githubConnectUrl();
+    } catch (err: any) {
+      setAttachError(err?.message ?? 'Could not start the GitHub connection.');
     }
   };
 
@@ -1665,9 +1690,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                         {
                           id: 'menu-repo',
                           Icon: Github,
-                          label: 'Scan a GitHub repository',
-                          hint: 'Finds injections. Does not summarise.',
-                          run: () => setRepoPrompt(true),
+                          label: githubConnected ? 'GitHub connected' : 'Connect GitHub',
+                          hint: githubConnected
+                            ? 'Paste a repository URL to scan it'
+                            : 'Read your repositories, including private ones',
+                          run: () =>
+                            githubConnected ? setRepoPrompt(true) : void connectGithub(),
                         },
                       ].map(({ id, Icon, label, hint, run }) => (
                         <button
