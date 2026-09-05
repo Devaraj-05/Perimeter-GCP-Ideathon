@@ -34,6 +34,7 @@ interface NavbarProps {
   isAdmin?: boolean;
   onOpenAdmin?: () => void;
   onSignOut: () => void;
+  onOpenSettings: () => void;
 }
 
 type Item = {
@@ -59,6 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdmin = false,
   onOpenAdmin,
   onSignOut,
+  onOpenSettings,
 }) => {
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -213,6 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <ProfileMenu
+                onOpenSettings={onOpenSettings}
                 user={user}
                 entryCount={entryCount}
                 modelLabel="Gemini 3.6 Flash"

@@ -25,6 +25,8 @@ interface HistorySidebarProps {
   onToggle: () => void;
   /** Older entries exist beyond the page that was loaded. */
   truncated?: boolean;
+  /** The first read is still in flight. */
+  loading?: boolean;
 }
 
 /** Which entry's row menu is open, if any. */
@@ -87,6 +89,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   isOpen,
   onToggle,
   truncated = false,
+  loading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [menu, setMenu] = useState<MenuState>(null);
@@ -244,7 +247,22 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
           {/* List of Entries */}
           <div className="flex-1 space-y-4 overflow-y-auto px-2 py-2">
-            {filteredEntries.length === 0 ? (
+            {loading ? (
+              /* A skeleton, not "No reflections yet".
+                 The empty message rendered for the whole first read, so every
+                 sign-in flashed "you have nothing" at a user who had eleven
+                 entries — which reads as data loss, not as loading. */
+              <div className="space-y-0.5" aria-hidden="true">
+                {[72, 58, 66, 45, 61, 52].map((w, i) => (
+                  <div key={i} className="px-2.5 py-2">
+                    <div
+                      className="h-3 animate-pulse rounded bg-[#ececec]"
+                      style={{ width: `${w}%`, animationDelay: `${i * 60}ms` }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : filteredEntries.length === 0 ? (
               <div className="px-4 py-10 text-center">
                 <p className="text-sm text-[#3f3f3f]">No reflections yet</p>
                 <p className="mt-1 text-xs text-[#6b6b6b]">

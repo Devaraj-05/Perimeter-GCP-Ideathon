@@ -1201,7 +1201,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           nothing to someone who has never heard of prompt injection. Shown only
           until the first entry is saved — this is onboarding, not chrome. */}
       {isFirstRun && (
-        <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-4">
+        <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-[#e5e5e5] bg-[#fafafa] p-4">
           <p className="font-serif text-base font-semibold text-[#1a1a1a]">
             This journal reads pages you point it at — and assumes they're hostile.
           </p>
@@ -1407,6 +1407,36 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 new chat opened with the input at the top of the screen, which
                 is the one place a chat input never is. */}
             <div className="flex flex-1 flex-col justify-end space-y-4">
+              {/* The empty conversation.
+                  A new reflection used to open on a large white void with a
+                  composer at the bottom and nothing else — on the one screen
+                  that should show what this product is for. This is not a
+                  marketing block: it names the three things the + button
+                  accepts and states what happens to them, because "what
+                  happens to them" IS the product. */}
+              {turns.length === 0 && !isGenerating && (
+                <div className="mx-auto max-w-md py-10 text-center">
+                  <p className="font-serif text-lg text-[#1a1a1a]">
+                    Bring in something from outside.
+                  </p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[#525252]">
+                    Paste a link, drop in a PDF or an image, or point it at a repository with the
+                    <span className="mx-1 inline-flex h-5 w-5 items-center justify-center rounded border border-[#e5e5e5] align-middle text-[#1a1a1a]">
+                      +
+                    </span>
+                    button below.
+                  </p>
+
+                  <div className="mt-6 border-t border-[#f0f0f0] pt-5">
+                    <p className="text-xs leading-relaxed text-[#6b6b6b]">
+                      Whatever you attach is read by a model that holds no tools. If the document
+                      tries to give orders — and they do — you will see the attempt quoted here,
+                      before the answer it was meant to change.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <ChatTranscript turns={turns} />
 
               {/* The provisional turn — Amendment L, INV-20.

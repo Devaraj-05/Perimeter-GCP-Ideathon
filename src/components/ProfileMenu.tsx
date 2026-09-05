@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LogOut, Check } from 'lucide-react';
+import { LogOut, Check, Settings } from 'lucide-react';
 import type { User } from 'firebase/auth';
 
 /**
@@ -23,7 +23,8 @@ export const ProfileMenu: React.FC<{
   entryCount: number;
   modelLabel?: string;
   onSignOut: () => void;
-}> = ({ user, entryCount, modelLabel, onSignOut }) => {
+  onOpenSettings: () => void;
+}> = ({ user, entryCount, modelLabel, onSignOut, onOpenSettings }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -97,6 +98,21 @@ export const ProfileMenu: React.FC<{
               </div>
             )}
           </div>
+
+          {/* Settings sits above sign-out because it is where a user goes to
+              export or delete their data, and burying that below the exit is
+              how a product signals it would rather you did not. */}
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+            className="flex w-full cursor-pointer items-center gap-2.5 border-b border-[#f0f0f0] px-4 py-3 text-left text-sm text-[#3f3f3f] transition-colors hover:bg-[#f7f7f8]"
+          >
+            <Settings className="h-4 w-4 shrink-0 text-[#1a1a1a]" />
+            Settings and your data
+          </button>
 
           <button
             role="menuitem"

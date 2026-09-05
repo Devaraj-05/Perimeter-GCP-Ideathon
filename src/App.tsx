@@ -22,6 +22,8 @@ import { JournalEditor } from './components/JournalEditor';
 import { HistorySidebar } from './components/HistorySidebar';
 import { InsightsModal } from './components/InsightsModal';
 import { SecurityModal } from './components/SecurityModal';
+import { SettingsModal } from './components/SettingsModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SourcesPanel } from './components/SourcesPanel';
 import { ThreatFeed } from './components/ThreatFeed';
 import { PermissionsPanel } from './components/PermissionsPanel';
@@ -53,6 +55,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSourcesOpen, setIsSourcesOpen] = useState(false);
   const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
@@ -352,6 +355,7 @@ export default function App() {
           onNewEntry={() => {}}
           onOpenInsights={() => {}}
           onOpenSecurity={() => setIsSecurityOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSources={() => {}}
           onOpenThreatFeed={() => {}}
           onOpenPermissions={() => {}}
@@ -385,6 +389,7 @@ export default function App() {
         onNewEntry={handleNewEntry}
         onOpenInsights={() => setIsInsightsOpen(true)}
         onOpenSecurity={() => setIsSecurityOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSources={() => setIsSourcesOpen(true)}
         onOpenThreatFeed={() => setIsThreatFeedOpen(true)}
         onOpenPermissions={() => setIsPermissionsOpen(true)}
@@ -397,7 +402,9 @@ export default function App() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* History Sidebar */}
+        <ErrorBoundary label="Your history">
         <HistorySidebar
+          loading={entriesLoading}
           truncated={entriesTruncated}
           entries={entries}
         onRenameEntry={handleRenameEntry}
@@ -408,10 +415,12 @@ export default function App() {
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen((prev) => !prev)}
         />
+        </ErrorBoundary>
 
         {/* Main Journal Editor */}
         <main className="flex-1 h-full overflow-hidden flex flex-col">
           {activeEntry ? (
+            <ErrorBoundary label="The editor">
             <JournalEditor
               groundingArtifactIds={groundingArtifactIds}
               key={activeEntry.id}
@@ -425,6 +434,7 @@ export default function App() {
               onOpenRedTeam={() => setIsRedTeamOpen(true)}
               onAttached={() => void loadGroundingArtifacts()}
             />
+            </ErrorBoundary>
           ) : (
             <div className="flex-1 flex items-center justify-center p-6 text-[#6b6b6b]">
               <div className="text-center space-y-2">
@@ -447,6 +457,19 @@ export default function App() {
         onClose={() => setIsInsightsOpen(false)}
         entries={entries}
       />
+      {/* Amendment N. onDeleted runs AFTER the server has confirmed the
+          account is gone: the local sign-out is cleanup, not the deletion, and
+          doing it first would leave a user believing they had deleted an
+          account that still existed. */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onDeleted={() => {
+          setIsSettingsOpen(false);
+          void handleSignOut();
+        }}
+      />
+
       <SecurityModal
         isOpen={isSecurityOpen}
         onClose={() => setIsSecurityOpen(false)}

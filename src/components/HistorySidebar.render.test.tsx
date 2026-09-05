@@ -31,7 +31,11 @@ const entry = (over: Partial<JournalEntry> = {}): JournalEntry =>
     ...over,
   }) as JournalEntry;
 
-const render = (entries: JournalEntry[], activeId: string | null = null) =>
+const render = (
+  entries: JournalEntry[],
+  activeId: string | null = null,
+  extra: { loading?: boolean; truncated?: boolean } = {},
+) =>
   renderToStaticMarkup(
     <HistorySidebar
       entries={entries}
@@ -42,6 +46,7 @@ const render = (entries: JournalEntry[], activeId: string | null = null) =>
       onRenameEntry={() => {}}
       isOpen
       onToggle={() => {}}
+      {...extra}
     />,
   );
 
@@ -207,5 +212,38 @@ describe('the mark', () => {
     const html = renderToStaticMarkup(<Logo />);
     expect(html).toContain('currentColor');
     expect(html).not.toMatch(/#[0-9a-f]{6}/i);
+  });
+});
+
+
+describe('loading and truncation are stated, not implied', () => {
+  it('shows a skeleton while the first read is in flight', () => {
+    // "No reflections yet" rendered for the whole first read, so every sign-in
+    // flashed "you have nothing" at a user with eleven entries — which reads
+    // as data loss, not as loading.
+    const html = render([], null, { loading: true });
+    expect(html).toContain('animate-pulse');
+    expect(html).not.toContain('No reflections yet');
+  });
+
+  it('the skeleton is hidden from assistive technology', () => {
+    // It carries no information; announcing six blank rows is noise.
+    expect(render([], null, { loading: true })).toContain('aria-hidden="true"');
+  });
+
+  it('shows the empty state once loading finishes with nothing', () => {
+    const html = render([], null, { loading: false });
+    expect(html).toContain('No reflections yet');
+    expect(html).not.toContain('animate-pulse');
+  });
+
+  it('says when older entries exist beyond the page', () => {
+    const html = render([entry({ title: 'One' })], null, { truncated: true });
+    expect(html).toMatch(/most recent 1 reflections/);
+    expect(html).toMatch(/still saved/i);
+  });
+
+  it('says nothing about truncation when the page held everything', () => {
+    expect(render([entry({ title: 'One' })])).not.toMatch(/most recent/);
   });
 });
