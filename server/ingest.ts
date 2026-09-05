@@ -429,6 +429,7 @@ ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response
       url: page.finalUrl,
       verdict: result.verdict,
       signals: result.signals,
+      matches: result.matches,
       bytes: page.bytes,
       truncated: page.truncated,
     });
@@ -495,6 +496,7 @@ ingestRouter.post('/note', requireAuth, async (req: AuthedRequest, res: Response
       title: result.title,
       verdict: result.verdict,
       signals: result.signals,
+      matches: result.matches,
       bytes: result.bytes,
     });
   } catch (err: any) {
@@ -590,6 +592,11 @@ ingestRouter.post('/file', requireAuth, async (req: AuthedRequest, res: Response
       kind: extracted.kind,
       verdict: result.verdict,
       signals: result.signals,
+      // The evidence, which this route alone was dropping. Without it a PDF
+      // came back verdict 'hostile' with an empty match list, and the report
+      // rendered "No injection attempts found" beside a HOSTILE chip — the
+      // product's central claim contradicting itself on screen.
+      matches: result.matches,
       bytes: result.bytes,
     });
   } catch (err: any) {
