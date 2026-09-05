@@ -272,6 +272,31 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   `tests/fixtures/` is a free demotion for anyone who wants it. And this adds no detection
   power: it re-ranks what the patterns already found.
 
+- **GitHub secret scanning reports two Google API keys, and both are public by design.** They
+  are Firebase **web** API keys, which identify a project rather than authorise anything: access
+  is decided by Firestore security rules and the Authorized Domains list, not by the key being
+  unknown. Google documents them as safe to ship in client code, and ours necessarily does —
+  it is in `dist/`, because the browser needs it to reach Firebase at all.
+
+  One is the current key. The other is the key of `gen-lang-client-0060098211`, the original AI
+  Studio project this application migrated away from; it survives in git history because the
+  config line changed. Neither is removed from the repository: deleting the current one breaks
+  the application, and rewriting history to erase a public-by-design value would break every
+  clone for no security benefit.
+
+  **Public is not the same as unrestricted, and that is the part worth acting on.** An
+  unrestricted Firebase web key can be used to create accounts in your Auth tenant and burn
+  Identity Toolkit quota. The current key is restricted by HTTP referrer to the Cloud Run domain
+  and localhost; the abandoned project's key should be deleted outright, because a live key on a
+  project nobody is watching is the worse of the two problems and it is not the one the alert
+  draws your eye to.
+
+  `server/inv8.test.ts` now scans **git history**, not only tracked files. Its own docstring
+  said a key survives in history after the file is deleted, and then it checked only the present
+  — which is exactly how these two alerts were a surprise. Known-public keys are allowlisted by
+  SHA-256 digest rather than by value, because writing a key into the file that exists to stop
+  keys being written would be its own joke.
+
 - **A connected GitHub account grants more than Perimeter uses.** GitHub’s `repo` scope is
   the narrowest OAuth scope that reads private repositories, and it also grants write. INV-19
   bounds what this application requests — five read-only endpoint shapes, checked before any URL
@@ -320,7 +345,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 608 unit tests, no infrastructure needed
+npm test                      # 610 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

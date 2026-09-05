@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
+import { createHash } from 'crypto';
 
 /**
  * INV-8 as an executable check — secrets are never committed.
@@ -42,6 +43,57 @@ function publicFirebaseKey(): string | null {
 
 const GOOGLE_KEY = /AIza[0-9A-Za-z_-]{30,}/g;
 
+/**
+ * Google API keys that have ever appeared in this history and are known to be
+ * public by design.
+ *
+ * Held as SHA-256 digests rather than values. Listing a key here in full would
+ * commit it again, in the very file that exists to stop that.
+ */
+const KNOWN_PUBLIC_HISTORICAL: Record<string, string> = {
+  // The current Firebase web key. Also read from the config at runtime below;
+  // pinned here so the history scan does not depend on that file existing.
+  '2113e74341c7b199a14bcf00ed2b5e398b498dd528295bbe4d27a15525364f1c': 'current Firebase web key',
+
+  // The Firebase web key of gen-lang-client-0060098211, the original AI Studio
+  // project this application migrated away from on 2026-09-01 (382121c). A
+  // Firebase web key identifies a project and authorises nothing; it is
+  // protected by security rules and authorised domains rather than by secrecy.
+  // It is in history because this config file's apiKey line changed, and it
+  // stays there because rewriting history to remove a public-by-design value
+  // would break every clone for no benefit.
+  //
+  // What DOES matter about it is in the README: that project should have its
+  // key deleted, because an unwatched project with a live key is a sign-up and
+  // quota surface nobody is looking at.
+  '63a14d60812e47c27b3559f19302fbc4380201361f712a159e07f0c54587969b':
+    'Firebase web key of the abandoned gen-lang-client-0060098211 project',
+};
+
+function digest(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * Every Google API key that appears anywhere in this repository history.
+ *
+ * The tracked-file scan below cannot see these. This file's own docstring says a
+ * key survives in history even after the file is deleted, and then it only
+ * looked at the present — which is how two GitHub secret-scanning alerts
+ * arrived for values that exist in no tracked file.
+ */
+function historicalGoogleKeys(): string[] {
+  try {
+    const log = execSync('git log --all -p --no-color', {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    return [...new Set(log.match(GOOGLE_KEY) ?? [])];
+  } catch {
+    return [];
+  }
+}
+
 describe('INV-8 — no secret is committed to the repository', () => {
   const tracked = trackedFiles();
   const knownPublic = publicFirebaseKey();
@@ -78,6 +130,26 @@ describe('INV-8 — no secret is committed to the repository', () => {
       offenders,
       'a key in a tracked file stays in git history even after deletion',
     ).toEqual([]);
+  });
+
+  it('no Google API key in HISTORY is anything but a known public one', () => {
+    // Deleting a file does not remove its contents from git. A key committed
+    // once is reachable forever, which is what GitHub secret scanning reports
+    // and what the tracked-file check above cannot see.
+    const unknown = historicalGoogleKeys().filter(
+      (k) => !(digest(k) in KNOWN_PUBLIC_HISTORICAL),
+    );
+
+    expect(
+      unknown.map((k) => `${k.slice(0, 12)}… sha256=${digest(k).slice(0, 16)}`),
+      'a key in history cannot be un-committed: rotate it, then add its digest here with a reason',
+    ).toEqual([]);
+  });
+
+  it('the history scan is not vacuous', () => {
+    // If the log scan silently returns nothing, the test above passes while
+    // checking nothing at all.
+    expect(historicalGoogleKeys().length).toBeGreaterThan(0);
   });
 
   it('no GitHub personal access token is tracked', () => {
