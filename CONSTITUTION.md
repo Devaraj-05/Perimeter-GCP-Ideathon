@@ -56,6 +56,10 @@ constitution.
   persisted. See Amendment L.
 - **INV-21** A cached Reader observation is bound to a digest of the exact bytes it was derived
   from, and reusing it changes neither zone nor taint. See Amendment M.
+- **INV-22** An export contains only the caller's own subtree, and never a credential. See
+  Amendment N.
+- **INV-23** Deletion is ordered so a partial failure leaves an account recoverable, not orphaned:
+  data first, Auth record last, third-party grants revoked before either. See Amendment N.
 
 ## §3 Secure coding standards
 
@@ -642,3 +646,57 @@ question and this is not the metrics system.
 **7. Corpus payload.** None. This changes when a value is computed, not what any model reads or
 what any tool does. The existing corpus runs unchanged through the same Reader; a payload that
 exercised only the cache would be testing Firestore.
+
+---
+
+## Amendment N — Getting your data out, and getting it deleted (adopted 2026-09-06)
+
+Adopted **before** the export and deletion code was written, per §9. A user may download everything
+this application holds about them, and may delete their account.
+
+**Why it is an amendment and not a chore.** This application ingests people's email, their web
+reading, their repositories and their private journal. Holding that without a way out is a
+position, and it is not one this document would defend if it were written down. It was not written
+down, which is how it survived.
+
+**1. Data flows.** Two, both entirely within one user's own subtree.
+
+*Export:* `users/{uid}/**` → a JSON file returned to the authenticated owner of that uid.
+*Deletion:* `users/{uid}/**` → removed, then the Firebase Auth user record → removed.
+
+**2. New untrusted input?** No. Export reads what is already stored; nothing new enters.
+
+**3. New egress path?** No, and the distinction matters. Egress in this system means *data leaving
+to a destination the model can name*. An export is the owner receiving their own data over their
+own authenticated session. No tool can trigger it: the Planner's tool registry has no export and no
+delete, so an instruction hidden in a document cannot reach either route. That is a property of the
+registry, not of prompt wording, and a test asserts it.
+
+**4. New secrets?** No.
+
+**5. New Firestore paths?** None. Existing paths, recursively.
+
+**6. New invariants.**
+
+> **INV-22** — An export contains only the caller's own subtree, and never a credential. The
+> `users/{uid}/private/` collection — sealed Gmail and GitHub tokens — is **excluded from every
+> export**, including the owner's own. INV-16 says the token never leaves the server, and "except
+> to its owner" is not a safe exception: an export is a file, files get stored, forwarded and
+> synced, and the token inside is still live at Google or GitHub. The user is told the connection
+> exists and is not handed the key to it.
+
+> **INV-23** — Deletion is ordered so that a partial failure leaves the account **recoverable, not
+> orphaned**. Firestore data is deleted first and the Auth user last. If deletion fails halfway,
+> the user can still sign in and retry; deleting the Auth record first would leave data that
+> nobody can authenticate to reach, and therefore nobody can ever delete. Third-party grants are
+> revoked at the provider before local state goes, because a token we have forgotten is still a
+> token that works.
+
+**On the audit log.** The hash-chained perimeter log is included in an export, because it is the
+user's evidence of what this system did on their behalf. Its tamper-evidence does **not** survive
+the export: a chain verifies against the collection it lives in, and a JSON copy of it proves
+nothing on its own. The export says so in the file rather than letting a reader assume otherwise.
+
+**7. Corpus payload.** Yes — a document instructing the assistant to export the user's data to an
+address, and a second instructing it to delete the journal. Both must fail for the same structural
+reason rather than a refusal: there is no tool to call.

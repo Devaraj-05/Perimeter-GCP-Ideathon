@@ -55,6 +55,16 @@ export function adminDb(): Firestore {
   return IS_DEFAULT_DB ? getFirestore(app) : getFirestore(app, RAW_DATABASE_ID);
 }
 
+/**
+ * The Admin Auth instance, on the same app as adminDb().
+ *
+ * Exported so account deletion can revoke sessions and remove the identity
+ * without reaching for the private app accessor (Amendment N, INV-23).
+ */
+export function adminAuth() {
+  return getAuth(getAdminApp());
+}
+
 export interface AuthedRequest extends Request {
   uid?: string;
   email?: string | null;

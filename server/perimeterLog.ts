@@ -23,6 +23,10 @@ export type EventKind =
   | 'decision'
   | 'execute'
   | 'redteam'
+  // An export or a deletion: not a refusal and not a tool call, but a moment
+  // where everything an account holds was read or removed in one go, which is
+  // exactly what this log is for (Amendment N).
+  | 'account'
   | 'error';
 
 export interface PerimeterEvent {

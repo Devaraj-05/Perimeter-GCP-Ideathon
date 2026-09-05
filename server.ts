@@ -15,6 +15,7 @@ import { redteamRouter } from './server/redteam';
 import { secretStatus } from './server/secrets';
 import { gmailRouter } from './server/gmailRoutes';
 import { githubRouter } from './server/githubRoutes';
+import { accountRouter } from './server/accountRoutes';
 import { buildConversationContents, buildSystemInstruction } from './server/conversation';
 import { securityHeaders } from './server/headers';
 
@@ -65,6 +66,7 @@ app.use('/internal', internalRouter);
 app.use('/api/redteam', redteamRouter);
 app.use('/api/gmail', gmailRouter);
 app.use('/api/github', githubRouter);
+app.use('/api/account', accountRouter);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
