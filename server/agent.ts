@@ -13,6 +13,7 @@ import {
   LADDER_BUDGET_MS,
 } from './gemini';
 import { consumeLadder, type StreamChunk } from './plannerStream';
+import { mapPool } from './pool';
 // Type-only: assemble.ts is superseded and must not be reachable at runtime.
 import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
@@ -219,6 +220,13 @@ async function generateWithPlannerStream(
   );
 }
 
+/**
+ * How many artifacts the Reader may hold open at once. Tunable without a
+ * deploy of new code, and deliberately modest: each is a model call against
+ * the same per-minute quota the Planner needs.
+ */
+const READER_CONCURRENCY = Number(process.env.READER_CONCURRENCY) || 6;
+
 agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
@@ -264,49 +272,72 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     const observations: { segmentId: string; sourceRef: string | null; output: ReaderOutput }[] = [];
     let readerFailures = 0;
 
-    for (const artifact of untrusted) {
+    // Read the artifacts CONCURRENTLY, bounded.
+    //
+    // This was a for-await loop: one Gemini round trip per connected source,
+    // serially, before the Planner had been called at all. With eighteen
+    // sources a one-line question measured 2.9 minutes, none of it in the
+    // model call the user was waiting for.
+    //
+    // Bounded rather than Promise.all over everything: a user with fifty
+    // sources would otherwise open fifty concurrent model calls and convert a
+    // slow turn into a rate-limited one.
+    const reads = await mapPool(untrusted, READER_CONCURRENCY, async (artifact) => {
       try {
-        const output = await readerRead(artifact.title + '\n\n' + artifact.body);
-        observations.push({
-          segmentId: artifact.id,
-          sourceRef: artifact.sourceRef ?? null,
-          output,
-        });
-
-        // S6. The Reader is the only component that actually read this
-        // document, which makes its finding the strongest attempt signal in
-        // the system — and it was being handed to the Planner and dropped.
-        // Pattern matching (L1) misses roughly half the corpus, so without
-        // this row, whether the user ever learns an attempt was made came
-        // down to the Planner choosing to mention it in prose. A model
-        // deciding whether to disclose is not a visibility guarantee, and
-        // "shows you every attempt" cannot rest on one.
-        //
-        // Logged as an observation, not a decision: nothing was refused
-        // here. The refusal, if a tool call follows, is its own event.
-        if (output.contains_instruction_attempt) {
-          await logEvent(uid, {
-            kind: 'reader',
-            zone: 'UNTRUSTED',
-            tool: null,
-            decision: null,
-            reason: 'instruction_attempt_detected',
-            invariant: 'INV-1',
-            detail: {
-              segmentId: artifact.id,
-              sourceRef: artifact.sourceRef ?? null,
-              // Already capped at 200 chars upstream; §7 caps it again here.
-              excerpt: output.instruction_attempt_excerpt ?? '',
-              detectedBy: 'reader',
-            },
-          }).catch(() => undefined);
-        }
+        return { artifact, output: await readerRead(artifact.title + '\n\n' + artifact.body) };
       } catch (err: any) {
         // Constitution section 8: a Reader failure degrades, it never falls
         // back to passing raw untrusted text to the Planner. The document is
         // absent from this turn and the user is told.
-        readerFailures++;
         console.warn('[airlock] reader failed for ' + artifact.id + ': ' + err?.message);
+        return { artifact, output: null };
+      }
+    });
+
+    // Assembled and logged in input order, serially.
+    //
+    // The audit log is hash-chained, so its writes cannot be concurrent
+    // without racing the chain — and the Planner's context has to be identical
+    // for identical turns. Only the model calls above are parallel.
+    for (const { artifact, output } of reads) {
+      if (!output) {
+        readerFailures++;
+        continue;
+      }
+
+      observations.push({
+        segmentId: artifact.id,
+        sourceRef: artifact.sourceRef ?? null,
+        output,
+      });
+
+      // S6. The Reader is the only component that actually read this
+      // document, which makes its finding the strongest attempt signal in
+      // the system — and it was being handed to the Planner and dropped.
+      // Pattern matching (L1) misses roughly half the corpus, so without
+      // this row, whether the user ever learns an attempt was made came
+      // down to the Planner choosing to mention it in prose. A model
+      // deciding whether to disclose is not a visibility guarantee, and
+      // "shows you every attempt" cannot rest on one.
+      //
+      // Logged as an observation, not a decision: nothing was refused
+      // here. The refusal, if a tool call follows, is its own event.
+      if (output.contains_instruction_attempt) {
+        await logEvent(uid, {
+          kind: 'reader',
+          zone: 'UNTRUSTED',
+          tool: null,
+          decision: null,
+          reason: 'instruction_attempt_detected',
+          invariant: 'INV-1',
+          detail: {
+            segmentId: artifact.id,
+            sourceRef: artifact.sourceRef ?? null,
+            // Already capped at 200 chars upstream; section 7 caps it again here.
+            excerpt: output.instruction_attempt_excerpt ?? '',
+            detectedBy: 'reader',
+          },
+        }).catch(() => undefined);
       }
     }
 
