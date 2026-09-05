@@ -3,6 +3,10 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   User,
@@ -49,6 +53,89 @@ export function stripUndefined<T>(obj: T): T {
 export async function signInWithGoogle(): Promise<User> {
   const result = await signInWithPopup(auth, googleProvider);
   return result.user;
+}
+
+/**
+ * Email and password — a deliberate deviation from Directive 3.
+ *
+ * That directive says: "Do not implement email/password login forms that
+ * require handling or storing passwords in the application custom code. Prefer
+ * Federated Identity." Google sign-in remains and is still the default path.
+ * This was added at the project owner's explicit instruction after the conflict
+ * was raised, and it is recorded in the commit and in Honest Limits rather than
+ * left for a reader to discover.
+ *
+ * What is true about the implementation:
+ *
+ *   - The password is passed straight to the Firebase SDK and is never stored,
+ *     logged, sent to our server, or held in any state that outlives the
+ *     submit. Firebase Authentication holds the credential; this application
+ *     holds an ID token exactly as it does after a Google sign-in.
+ *   - Every /api/* route still verifies that token with the Admin SDK. Nothing
+ *     downstream can tell which method produced it, so INV-3 is untouched.
+ *
+ * What is NOT true: that this is as safe as federated identity. It puts a
+ * password field on the page, which is a phishing target and a credential the
+ * user may have reused elsewhere. That is the cost, and it is why the
+ * directive says what it says.
+ */
+export async function signInWithEmail(email: string, password: string): Promise<User> {
+  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+  return result.user;
+}
+
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  displayName?: string,
+): Promise<User> {
+  const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  if (displayName?.trim()) {
+    // Best effort. A profile without a name is a cosmetic problem; failing the
+    // whole sign-up over one would not be.
+    await updateProfile(result.user, { displayName: displayName.trim() }).catch(() => undefined);
+  }
+  return result.user;
+}
+
+export async function sendPasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+/**
+ * Firebase error codes, turned into something a person can act on.
+ *
+ * Never returns the raw error. Firebase messages carry internal details and
+ * occasionally the email address itself, and INV-10 keeps that class of thing
+ * off the screen.
+ *
+ * auth/invalid-credential is deliberately NOT split into "no such user" and
+ * "wrong password". Firebase collapses them on purpose so that a sign-in form
+ * cannot be used to discover which email addresses have accounts, and undoing
+ * that here to be more helpful would hand an attacker a user-enumeration
+ * oracle.
+ */
+export function describeAuthError(err: unknown): string {
+  const code = String((err as { code?: unknown } | null)?.code ?? '');
+
+  const table: Record<string, string> = {
+    'auth/invalid-credential': 'That email and password do not match an account.',
+    'auth/wrong-password': 'That email and password do not match an account.',
+    'auth/user-not-found': 'That email and password do not match an account.',
+    'auth/invalid-email': 'That does not look like an email address.',
+    'auth/user-disabled': 'That account has been disabled.',
+    'auth/email-already-in-use': 'An account already exists for that email. Try signing in.',
+    'auth/weak-password': 'Passwords need at least 6 characters.',
+    'auth/missing-password': 'Enter a password.',
+    'auth/too-many-requests': 'Too many attempts. Wait a minute and try again.',
+    'auth/network-request-failed': 'Could not reach the sign-in service. Check your connection.',
+    'auth/operation-not-allowed':
+      'Email and password sign-in is not enabled for this project yet.',
+    'auth/popup-closed-by-user': 'The sign-in window closed before finishing.',
+    'auth/popup-blocked': 'Your browser blocked the sign-in window.',
+  };
+
+  return table[code] ?? 'Could not sign you in. Please try again.';
 }
 
 export async function logOut(): Promise<void> {

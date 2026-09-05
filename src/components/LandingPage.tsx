@@ -1,10 +1,20 @@
-import React from 'react';
-import { Shield, Lock, BrainCircuit, ScrollText, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Lock, BrainCircuit, ScrollText, CheckCircle2, Mail } from 'lucide-react';
 
 interface LandingPageProps {
   onSignIn: () => void;
+  /**
+   * Email and password — a deliberate deviation from Directive 3, made at the
+   * project owner's instruction after the conflict was raised. Google sign-in
+   * stays and is still presented first. See src/lib/firebase.ts for what is
+   * and is not true about the implementation.
+   */
+  onEmailSignIn: (email: string, password: string) => void;
+  onEmailSignUp: (email: string, password: string) => void;
+  onPasswordReset: (email: string) => void;
   isLoading: boolean;
   error: string | null;
+  notice?: string | null;
 }
 
 const PILLARS = [
@@ -28,7 +38,41 @@ const PILLARS = [
   },
 ];
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, isLoading, error }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({
+  onSignIn,
+  onEmailSignIn,
+  onEmailSignUp,
+  onPasswordReset,
+  isLoading,
+  error,
+  notice,
+}) => {
+  const [showEmail, setShowEmail] = useState(false);
+  const [mode, setMode] = useState<'in' | 'up'>('in');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalError(null);
+
+    if (!email.trim()) return setLocalError('Enter your email address.');
+    if (!password) return setLocalError('Enter a password.');
+
+    if (mode === 'up') {
+      // Checked here so the user is told before a round trip. Firebase
+      // enforces its own minimum regardless; this is the courtesy, not the
+      // control.
+      if (password.length < 6) return setLocalError('Passwords need at least 6 characters.');
+      if (password !== confirm) return setLocalError('The two passwords do not match.');
+      onEmailSignUp(email, password);
+      return;
+    }
+    onEmailSignIn(email, password);
+  };
+
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col justify-between bg-[#fcfaf7] text-[#434338]">
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pt-20">
@@ -68,6 +112,124 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, isLoading, e
               <span>{isLoading ? 'Signing in…' : 'Sign in with Google'}</span>
             </button>
 
+            {/* Email and password.
+                Behind a disclosure so federated sign-in stays the default
+                path, which is what Directive 3 prescribes. The password never
+                leaves this form: it is handed to the Firebase SDK and is not
+                stored, logged, or sent to our own server. */}
+            {!showEmail ? (
+              <button
+                type="button"
+                onClick={() => setShowEmail(true)}
+                className="inline-flex items-center gap-2 text-xs text-[#5a5a40] underline underline-offset-4 hover:text-[#2c2c24]"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Use an email address instead
+              </button>
+            ) : (
+              <form
+                onSubmit={submit}
+                className="w-full max-w-sm space-y-2.5 rounded-xl border border-[#e5e0d3] bg-white/70 p-4 text-left"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-[#2c2c24]">
+                    {mode === 'in' ? 'Sign in with email' : 'Create an account'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode(mode === 'in' ? 'up' : 'in');
+                      setLocalError(null);
+                    }}
+                    className="cursor-pointer text-[11px] text-[#5a5a40] underline underline-offset-2 hover:text-[#2c2c24]"
+                  >
+                    {mode === 'in' ? 'Need an account?' : 'Already have one?'}
+                  </button>
+                </div>
+
+                <input
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                />
+
+                <input
+                  type="password"
+                  autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                />
+
+                {mode === 'up' && (
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Confirm password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                  />
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full cursor-pointer rounded-lg bg-[#5a5a40] px-4 py-2 text-sm font-medium text-white hover:bg-[#484833] disabled:opacity-60"
+                >
+                  {isLoading
+                    ? 'Working…'
+                    : mode === 'in'
+                      ? 'Sign in'
+                      : 'Create account'}
+                </button>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  {mode === 'in' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocalError(null);
+                        if (!email.trim()) return setLocalError('Enter your email first.');
+                        onPasswordReset(email);
+                      }}
+                      className="cursor-pointer text-[11px] text-[#8a8a75] underline underline-offset-2 hover:text-[#5a5a40]"
+                    >
+                      Forgot password
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowEmail(false)}
+                    className="cursor-pointer text-[11px] text-[#8a8a75] underline underline-offset-2 hover:text-[#5a5a40]"
+                  >
+                    Back to Google
+                  </button>
+                </div>
+
+                {localError && (
+                  <p role="alert" className="text-[11px] text-rose-700">
+                    {localError}
+                  </p>
+                )}
+              </form>
+            )}
+
+            {notice && (
+              <div
+                role="status"
+                className="max-w-md rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-left text-xs text-emerald-800"
+              >
+                {notice}
+              </div>
+            )}
+
             {error && (
               <div
                 role="alert"
@@ -80,7 +242,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignIn, isLoading, e
 
             <p className="flex items-center gap-1.5 text-xs text-[#8a8a75]">
               <Lock className="h-3 w-3" />
-              <span>Passwordless Google sign-in via Firebase. No passwords are ever stored.</span>
+              <span>
+                Google sign-in is federated and handles no credential here. If you use email,
+                Firebase Authentication holds the password &mdash; this application never stores it.
+              </span>
             </p>
           </div>
         </div>

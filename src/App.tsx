@@ -5,6 +5,10 @@ import {
   subscribeToAuth,
   hasAdminClaim,
   signInWithGoogle,
+  signInWithEmail,
+  signUpWithEmail,
+  sendPasswordReset,
+  describeAuthError,
   logOut,
   syncUserProfile,
   fetchUserEntries,
@@ -30,6 +34,8 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  /** Confirmations that are not errors, e.g. a reset link being sent. */
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   // Journal entries & active editor state
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -172,10 +178,70 @@ export default function App() {
       await loadUserEntries(signedInUser);
       await loadGroundingArtifacts();
     } catch (err: any) {
-      console.error('Google Sign-In failed:', err);
-      setAuthError(err?.message || 'Failed to sign in with Google. Please try again.');
+      // Same treatment as the email path. This previously showed err.message,
+      // which is Firebase's own wording and carries internal detail (INV-10) —
+      // the test written for the new path caught it on the old one.
+      console.error('Google Sign-In failed:', err?.code);
+      setAuthError(describeAuthError(err));
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  /**
+   * Email and password — a deliberate deviation from Directive 3, made at the
+   * project owner's instruction after the conflict was raised.
+   *
+   * One path for both sign-in and sign-up: everything after authentication is
+   * identical, and two copies of the profile sync and the entry load would be
+   * two places to forget one. The password is not held in any state here — it
+   * arrives as an argument, goes to the Firebase SDK, and is gone.
+   */
+  const afterSignIn = async (signedInUser: any) => {
+    setUser(signedInUser);
+    await syncUserProfile(signedInUser);
+    await loadUserEntries(signedInUser);
+    await loadGroundingArtifacts();
+  };
+
+  const handleEmailAuth = async (
+    email: string,
+    password: string,
+    mode: 'in' | 'up',
+  ) => {
+    setAuthLoading(true);
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      const signedInUser =
+        mode === 'in'
+          ? await signInWithEmail(email, password)
+          : await signUpWithEmail(email, password);
+      await afterSignIn(signedInUser);
+    } catch (err: any) {
+      // describeAuthError, never err.message: Firebase messages carry internal
+      // detail and sometimes the address itself (INV-10). The code is logged,
+      // the credential never is.
+      console.error('Email sign-in failed:', err?.code);
+      setAuthError(describeAuthError(err));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (email: string) => {
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      await sendPasswordReset(email);
+    } catch (err: any) {
+      console.error('Password reset failed:', err?.code);
+    } finally {
+      // The same words whether or not an account exists. Confirming which
+      // addresses are registered would turn this button into a user-enumeration
+      // oracle, which is the thing Firebase collapses invalid-credential to
+      // avoid.
+      setAuthNotice('If an account exists for that address, a reset link is on its way.');
     }
   };
 
@@ -287,6 +353,10 @@ export default function App() {
         />
         <LandingPage
           onSignIn={handleSignIn}
+          onEmailSignIn={(email, password) => void handleEmailAuth(email, password, 'in')}
+          onEmailSignUp={(email, password) => void handleEmailAuth(email, password, 'up')}
+          onPasswordReset={(email) => void handlePasswordReset(email)}
+          notice={authNotice}
           isLoading={authLoading}
           error={authError}
         />
