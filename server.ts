@@ -6,6 +6,7 @@ import { requireAuth, AuthedRequest } from './server/auth';
 import {
   generateContentWithFallback,
   generateContentStreamWithFallback,
+  describeModelFailure,
 } from './server/gemini';
 import { ingestRouter } from './server/ingest';
 import { agentRouter } from './server/agent';
@@ -153,18 +154,22 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
     );
     return res.end();
   } catch (error: any) {
-    console.error('Error in /api/gemini/reflect:', error);
+    // One classifier, shared with the agent route. This branch previously sent
+    // a single generic sentence for every mid-stream failure, so a spent quota
+    // and a dead connection were indistinguishable to the user.
+    const failure = describeModelFailure(error);
+    console.error('Error in /api/gemini/reflect:', failure.code, error?.message);
+
     if (res.headersSent) {
       res.write(
-        JSON.stringify({
-          type: 'error',
-          error: 'The assistant stopped partway through this reply. Nothing was saved.',
-        }) + '\n',
+        JSON.stringify({ type: 'error', error: failure.message, code: failure.code }) + '\n',
       );
       return res.end();
     }
-    return res.status(500).json({
-      error: error?.message || 'Failed to generate reflection. Please try again.',
+    return res.status(failure.status).json({
+      error: failure.message,
+      code: failure.code,
+      retryAfterSeconds: failure.retryAfterSeconds,
     });
   }
 });

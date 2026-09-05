@@ -311,3 +311,61 @@ describe('a credential failure names itself', () => {
     expect(readCredentialError(undefined)).toBeNull();
   });
 });
+
+describe('describeModelFailure — one classification for every caller', () => {
+  /**
+   * The streaming work created a fourth place that collapsed quota, credential
+   * and timeout failures into "the assistant is unavailable" — the same defect
+   * the rest of this file exists to fix, reintroduced by its author. Four call
+   * sites classifying independently is three chances to forget one.
+   */
+  it('a daily quota keeps its 429 and its advice', async () => {
+    const { describeModelFailure } = await import('./gemini');
+    const f = describeModelFailure(
+      new Error('429 RESOURCE_EXHAUSTED free_tier_requests PerDay. Please retry in 12s.'),
+    );
+    expect(f.status).toBe(429);
+    expect(f.code).toBe('quota_daily');
+    expect(f.message).toMatch(/enable billing/i);
+  });
+
+  it('a per-minute limit is told apart from a daily one', async () => {
+    const { describeModelFailure } = await import('./gemini');
+    const f = describeModelFailure(
+      new Error('429 RESOURCE_EXHAUSTED PerMinute. Please retry in 8s.'),
+    );
+    expect(f.code).toBe('quota_rate');
+    expect(f.retryAfterSeconds).toBe(8);
+  });
+
+  it('an unconfigured deployment is a 503 that names the variable', async () => {
+    const { describeModelFailure } = await import('./gemini');
+    const f = describeModelFailure(new Error('config_missing:GEMINI_KEY_SECRET_or_GEMINI_API_KEY'));
+    expect(f.status).toBe(503);
+    expect(f.code).toBe('not_configured');
+    expect(f.message).toContain('GEMINI_KEY_SECRET');
+  });
+
+  it('a timeout says so rather than claiming the assistant is unavailable', async () => {
+    const { describeModelFailure, ModelTimeoutError } = await import('./gemini');
+    const f = describeModelFailure(new ModelTimeoutError('ladder', 55000));
+    expect(f.status).toBe(504);
+    expect(f.code).toBe('model_timeout');
+    expect(f.message).not.toMatch(/unavailable/i);
+  });
+
+  it('an unknown failure keeps the generic message and says it is generic', async () => {
+    // The code matters: it is how the handler decides to log a stack.
+    const { describeModelFailure } = await import('./gemini');
+    const f = describeModelFailure(new Error('something nobody has seen'));
+    expect(f.status).toBe(500);
+    expect(f.code).toBe('assistant_unavailable');
+  });
+
+  it('never returns an empty message, whatever it was handed', async () => {
+    const { describeModelFailure } = await import('./gemini');
+    for (const input of [undefined, null, '', new Error(''), { nope: true }]) {
+      expect(describeModelFailure(input).message.length).toBeGreaterThan(0);
+    }
+  });
+});

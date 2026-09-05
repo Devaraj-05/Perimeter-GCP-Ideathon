@@ -252,6 +252,56 @@ export async function generateContentStreamWithFallback(
   return { text: response.text, modelUsed };
 }
 
+/**
+ * One classification of a failed model call, for every caller.
+ *
+ * Written after the streaming work created a FOURTH place that collapsed
+ * quota, credential and timeout failures into "the assistant is unavailable" —
+ * the same defect this file has been fixing all along, reintroduced by the
+ * author of the fixes. Four call sites classifying independently is three
+ * chances to forget one, so there is now one function and they all use it.
+ */
+export interface ModelFailure {
+  status: number;
+  code: string;
+  message: string;
+  retryAfterSeconds?: number | null;
+}
+
+export function describeModelFailure(err: unknown): ModelFailure {
+  const quota = readQuotaError(err);
+  if (quota) {
+    return {
+      status: 429,
+      code: quota.daily ? 'quota_daily' : 'quota_rate',
+      retryAfterSeconds: quota.retryAfterSeconds,
+      message: quota.daily
+        ? 'The Gemini free-tier daily quota for this project is spent (20 requests per model). It resets tomorrow, or enable billing on the API to lift it.'
+        : `Gemini is rate-limiting this project. Try again in about ${quota.retryAfterSeconds ?? 60} seconds.`,
+    };
+  }
+
+  const fault = readCredentialError(err);
+  if (fault) {
+    return { status: 503, code: fault, message: CREDENTIAL_FAULT_MESSAGE[fault] };
+  }
+
+  if (err instanceof ModelTimeoutError) {
+    return {
+      status: 504,
+      code: 'model_timeout',
+      message:
+        'The assistant did not finish within the time limit. This is usually load rather than a fault in your request — sending it again often works.',
+    };
+  }
+
+  return {
+    status: 500,
+    code: 'assistant_unavailable',
+    message: 'The assistant is unavailable. Please retry.',
+  };
+}
+
 export interface FallbackOptions {
   systemInstruction?: string;
   temperature?: number;

@@ -8,6 +8,7 @@ import {
   readQuotaError,
   readCredentialError,
   CREDENTIAL_FAULT_MESSAGE,
+  describeModelFailure,
   withDeadline,
   LADDER_BUDGET_MS,
 } from './gemini';
@@ -498,55 +499,29 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
 
     res.json(payload);
   } catch (err: any) {
+    const failure = describeModelFailure(err);
+
     // Amendment L. Once the stream has begun, res.status().json() is a no-op
-    // and the client would hang on a response that never ends. The failure
-    // has to arrive as a record, and the connection has to be closed.
+    // and the client would hang on a response that never ends. The failure has
+    // to arrive as a record, and the connection has to be closed.
     if (res.headersSent) {
-      const fault = readCredentialError(err);
-      const quota = readQuotaError(err);
-      const message = fault
-        ? CREDENTIAL_FAULT_MESSAGE[fault]
-        : quota
-          ? quota.daily
-            ? 'The Gemini free-tier daily quota for this project is spent (20 requests per model). It resets tomorrow, or enable billing on the API to lift it.'
-            : `Gemini is rate-limiting this project. Try again in about ${quota.retryAfterSeconds ?? 60} seconds.`
-          : 'The assistant stopped partway through this reply. Nothing was saved.';
-      console.error('[agent] chat stream failed:', err?.name, err?.message);
-      res.write(JSON.stringify({ type: 'error', error: message }) + '\n');
+      console.error('[agent] chat stream failed:', failure.code, err?.message);
+      res.write(JSON.stringify({ type: 'error', error: failure.message, code: failure.code }) + '\n');
       return res.end();
     }
 
-    // A spent quota is not "unavailable, please retry". Google says which
-    // wall was hit and when it lifts, and the difference between waiting a
-    // minute and enabling billing is the whole of the user's next action.
-    const quota = readQuotaError(err);
-    if (quota) {
-      console.error('[agent] chat blocked by quota. daily:', quota.daily);
-      return res.status(429).json({
-        error: quota.daily
-          ? 'The Gemini free-tier daily quota for this project is spent (20 requests per model). It resets tomorrow, or enable billing on the API to lift it.'
-          : `Gemini is rate-limiting this project. Try again in about ${quota.retryAfterSeconds ?? 60} seconds.`,
-        code: quota.daily ? 'quota_daily' : 'quota_rate',
-        retryAfterSeconds: quota.retryAfterSeconds,
-      });
+    if (failure.code === 'assistant_unavailable') {
+      // Genuinely unclassified, so log enough to name it next time (INV-8: a
+      // stack is not a credential).
+      console.error('[agent] chat failed:', err?.name, err?.message, err?.stack);
+    } else {
+      console.error('[agent] chat failed:', failure.code, err?.message);
     }
-
-    // Nor is a bad credential. An invalid key, a disabled API and a key
-    // blocked by its own restrictions each need a different operator action,
-    // and "please retry" is wrong advice for all three.
-    const fault = readCredentialError(err);
-    if (fault) {
-      console.error('[agent] chat blocked by credential fault:', fault);
-      return res.status(503).json({
-        error: CREDENTIAL_FAULT_MESSAGE[fault],
-        code: fault,
-      });
-    }
-
-    // Whatever is left is genuinely unclassified, so log enough to name it
-    // next time rather than only the message (INV-8: the stack, never the key).
-    console.error('[agent] chat failed:', err?.name, err?.message, err?.stack);
-    res.status(500).json({ error: 'The assistant is unavailable. Please retry.' });
+    res.status(failure.status).json({
+      error: failure.message,
+      code: failure.code,
+      retryAfterSeconds: failure.retryAfterSeconds,
+    });
   }
 });
 
