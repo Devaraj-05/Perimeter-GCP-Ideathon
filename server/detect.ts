@@ -276,6 +276,22 @@ function offDomainUrlMatches(text: string, allowedHosts: string[]): Match[] {
   return out;
 }
 
+/**
+ * True when this signal alone justifies a hostile verdict.
+ *
+ * Exported as an accessor rather than exposing HIGH_CONFIDENCE itself. A
+ * caller that could mutate that set could decide whether a write is blocked,
+ * and the repository scanner is a caller.
+ */
+export function isHighConfidence(signal: Signal): boolean {
+  return HIGH_CONFIDENCE.has(signal);
+}
+
+/** How much this signal contributes to L1Result.score, 0..1. */
+export function signalWeight(signal: Signal): number {
+  return SIGNAL_WEIGHTS[signal] ?? 0;
+}
+
 export interface L1Options {
   /** Hosts considered native to the artifact's own source. */
   allowedHosts?: string[];

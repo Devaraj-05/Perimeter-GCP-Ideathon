@@ -1,6 +1,14 @@
 import { detectL1, Match } from './detect';
 import { readTarGz } from './tarball';
 import {
+  triageFile,
+  summariseFindings,
+  tierRank,
+  type FindingTier,
+  type RepoFinding,
+  type RepoVerdict,
+} from './triage';
+import {
   fetchDefaultBranch,
   fetchTree,
   fetchBlobText,
@@ -54,20 +62,34 @@ export const CONCURRENCY = 8;
 export const MAX_ARCHIVE_BYTES = 40_000_000;
 
 /**
- * Signals that carry no information in a repository.
+ * One file's worth of scanning, shared by both fetch paths.
  *
- * offdomain_url asks "does this link point somewhere other than the source's
- * own domain?" — a real question about a fetched web page, and a meaningless
- * one about a README, where linking outward is the entire point. Scanning this
- * project's own repository produced thirteen matches on README.md, eight of
- * them offdomain_url, burying the two that mattered.
+ * Extracted because the archive path and the per-blob path have already
+ * drifted once — the archive path was missing the progress detail the other
+ * had. Two copies of the decision that turns text into a finding is two
+ * places for that decision to diverge.
  *
- * This is not suppressing an inconvenient result. The signal is weak by its own
- * weighting (0.15, and not high-confidence), and a finding a user learns to
- * scroll past is worse than one that was never shown: it teaches them to
- * distrust the whole report.
+ * Note what is NOT here: no filter. An earlier version deleted offdomain_url
+ * matches outright, which was the right instinct wired the wrong way. Every
+ * match L1 finds is kept; triage ranks and labels it. A finding the user
+ * cannot see is a finding they cannot judge.
  */
-const NOISE_IN_REPOSITORIES = new Set(['offdomain_url']);
+function scanOne(path: string, text: string): RepoFinding | null {
+  // The repository's own domain is not a signal here — every link in a README
+  // points outward, so github.com links are not treated as off-domain.
+  const l1 = detectL1(text, { allowedHosts: ['github.com', 'githubusercontent.com'] });
+  return triageFile(path, text, l1);
+}
+
+const liveCount = (m: Map<number, RepoFinding>) =>
+  [...m.values()].filter((f) => f.tier === 'live').length;
+
+/** Strongest tier first, then original prioritised order within a tier. */
+function orderFindings(hits: Map<number, RepoFinding>): RepoFinding[] {
+  return [...hits.entries()]
+    .sort((a, b) => tierRank(a[1].tier) - tierRank(b[1].tier) || a[0] - b[0])
+    .map(([, f]) => f);
+}
 
 /**
  * Files an agent is built to obey.
@@ -109,11 +131,6 @@ export interface TreeEntry {
 
 export type StopReason = 'complete' | 'max_files' | 'max_bytes' | 'time' | 'rate_limit';
 
-export interface RepoFinding {
-  path: string;
-  matches: Match[];
-}
-
 /** Emitted as each batch lands, so a long scan is legible while it runs. */
 export interface ScanProgress {
   scanned: number;
@@ -121,6 +138,8 @@ export interface ScanProgress {
   /** The last path read in this batch. Shown so progress is visibly real. */
   path: string;
   findings: number;
+  /** Surfaced separately so a real hit is visible the moment it lands. */
+  live: number;
 }
 
 export interface RepoScanResult {
@@ -131,6 +150,11 @@ export interface RepoScanResult {
   bytesScanned: number;
   stoppedBy: StopReason;
   coverage: string;
+  /** What the scan concluded. Never merged with coverage — see below. */
+  verdict: RepoVerdict;
+  /** One sentence, composed from fixed literals and counts. */
+  headline: string;
+  tierCounts: Record<FindingTier, number>;
   /**
    * Conditions the user should know about that did not stop the scan — a
    * rejected token, for instance. Degrading silently would hide a real
@@ -279,11 +303,8 @@ export async function scanRepository(
       scanned++;
       bytes += entry.bytes;
 
-      const { matches } = detectL1(entry.text, {
-        allowedHosts: ['github.com', 'githubusercontent.com'],
-      });
-      const signal = matches.filter((m) => !NOISE_IN_REPOSITORIES.has(m.signal));
-      if (signal.length > 0) hits.set(index, { path: entry.path, matches: signal });
+      const finding = scanOne(entry.path, entry.text);
+      if (finding) hits.set(index, finding);
     }
 
     const stopped: StopReason = truncated
@@ -292,7 +313,16 @@ export async function scanRepository(
         ? 'max_files'
         : 'complete';
 
-    onProgress?.({ scanned, total: wanted.size, path: '', findings: hits.size });
+    onProgress?.({
+      scanned,
+      total: wanted.size,
+      path: '',
+      findings: hits.size,
+      live: liveCount(hits),
+    });
+
+    const archiveFindings = orderFindings(hits);
+    const archiveSummary = summariseFindings(archiveFindings);
 
     return {
       repo: repoRef,
@@ -306,8 +336,11 @@ export async function scanRepository(
         filesTotal: eligible.length,
         stoppedBy: stopped,
       }),
+      verdict: archiveSummary.verdict,
+      headline: archiveSummary.headline,
+      tierCounts: archiveSummary.tierCounts,
       warnings: [githubAuthWarning()].filter((w): w is string => typeof w === 'string'),
-      findings: [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f),
+      findings: archiveFindings,
     };
   } catch (err) {
     // Too large, or the archive endpoint refused. Fall through to per-blob
@@ -360,14 +393,8 @@ export async function scanRepository(
       bytesScanned += Buffer.byteLength(r.text, 'utf8');
       lastPath = r.entry.path;
 
-      // The repository's own domain is not a signal here — every link in a
-      // README points outward. Passing the host allowlist keeps offdomain_url
-      // from firing on every file and drowning the findings that matter.
-      const { matches } = detectL1(r.text, {
-        allowedHosts: ['github.com', 'githubusercontent.com'],
-      });
-      const signal = matches.filter((m) => !NOISE_IN_REPOSITORIES.has(m.signal));
-      if (signal.length > 0) found.set(r.index, { path: r.entry.path, matches: signal });
+      const finding = scanOne(r.entry.path, r.text);
+      if (finding) found.set(r.index, finding);
     }
 
     onProgress?.({
@@ -375,14 +402,17 @@ export async function scanRepository(
       total: capped.length,
       path: lastPath,
       findings: found.size,
+      live: liveCount(found),
     });
 
     if (stoppedBy === 'rate_limit') break;
   }
 
-  // Sorted by position in the prioritised list, not by completion order, so a
-  // rerun of an unchanged repository reports identically.
-  const findings = [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f);
+  // Strongest tier first, then position in the prioritised list — not
+  // completion order, so a rerun of an unchanged repository reports
+  // identically despite fetches finishing out of order.
+  const findings = orderFindings(found);
+  const summary = summariseFindings(findings);
 
   return {
     repo: repoRef,
@@ -392,6 +422,9 @@ export async function scanRepository(
     bytesScanned,
     stoppedBy,
     coverage: summariseCoverage({ filesScanned, filesTotal: eligible.length, stoppedBy }),
+    verdict: summary.verdict,
+    headline: summary.headline,
+    tierCounts: summary.tierCounts,
     warnings: [githubAuthWarning()].filter((w): w is string => typeof w === 'string'),
     findings,
   };
