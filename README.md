@@ -272,6 +272,17 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   `tests/fixtures/` is a free demotion for anyone who wants it. And this adds no detection
   power: it re-ranks what the patterns already found.
 
+- **A connected GitHub account grants more than Perimeter uses.** GitHub’s `repo` scope is
+  the narrowest OAuth scope that reads private repositories, and it also grants write. INV-19
+  bounds what this application requests — five read-only endpoint shapes, checked before any URL
+  is built, asserted by a test and verified to refuse `/repos/o/n/contents/x`, `/user/repos`
+  and `/repos/o/n/collaborators/x`. It cannot bound what the credential itself permits: anyone
+  holding the sealed token and the encryption key has write access to those repositories. A
+  GitHub App with `Contents: Read-only` and per-repository selection would not have this
+  property; it was considered and rejected in favour of reusing the proven Gmail pattern.
+  Disconnecting revokes the grant at GitHub rather than only forgetting our copy, because a
+  classic OAuth App token does not expire.
+
 - **A bad `GITHUB_TOKEN` costs one request, not the scan.** A token GitHub rejects is dropped
   after the first refusal and both fetch paths retry without it. Measured with a deliberately
   invalid token: **124 of 124 files, complete, in 3 seconds**. The report still carries a warning
@@ -309,7 +320,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 591 unit tests, no infrastructure needed
+npm test                      # 608 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```
@@ -369,6 +380,20 @@ done
 #   GOOGLE_CLIENT_SECRET_SECRET=projects/PROJECT_ID/secrets/GOOGLE_CLIENT_SECRET/versions/1
 #   GOOGLE_CLIENT_ID=<your OAuth client id>
 #   GOOGLE_OAUTH_REDIRECT=https://<your-run-domain>/api/gmail/callback
+
+# Optional — Amendment J, connecting a GitHub account (INV-19).
+# The repo scope grants read AND WRITE on every private repository the user can
+# reach; GitHub has no read-only private scope for OAuth Apps. INV-19 bounds what
+# this application requests. It does not bound what the credential permits.
+gcloud secrets create GITHUB_CLIENT_SECRET --replication-policy=automatic
+echo -n "YOUR_GITHUB_OAUTH_CLIENT_SECRET" | \
+  gcloud secrets versions add GITHUB_CLIENT_SECRET --data-file=-
+gcloud secrets add-iam-policy-binding GITHUB_CLIENT_SECRET \
+  --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
+#   ...then add to --set-env-vars:
+#   GITHUB_CLIENT_SECRET_SECRET=projects/PROJECT_ID/secrets/GITHUB_CLIENT_SECRET/versions/1
+#   GITHUB_CLIENT_ID=<your OAuth app client id>
+#   GITHUB_OAUTH_REDIRECT=https://<your-run-domain>/api/github/callback
 
 # Optional — GitHub issue ingestion. Injected by value rather than by path, so
 # it is the one credential this app does not fetch through the Secret Manager
