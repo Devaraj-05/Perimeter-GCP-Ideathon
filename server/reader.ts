@@ -197,7 +197,7 @@ export function parseReaderJson(text: string): unknown | null {
  * user that external content could not be analysed and continues without it.
  */
 export async function read(untrustedText: string): Promise<ReaderOutput> {
-  const { MODEL_FALLBACK_LADDER, isRecoverable } = await import('./gemini');
+  const { MODEL_FALLBACK_LADDER, isRecoverable, withDeadline } = await import('./gemini');
   const ai = await getAI();
   let lastError: unknown = null;
 
@@ -209,7 +209,10 @@ export async function read(untrustedText: string): Promise<ReaderOutput> {
     assertReaderHasNoTools(request);
 
     try {
-      const response = await ai.models.generateContent(request);
+      // §8. This loop is a second ladder that does not go through
+      // generateContentWithFallback, so it needs its own deadline — a Reader
+      // that never returns holds the whole chat turn open.
+      const response = await withDeadline(ai.models.generateContent(request), model);
       const parsed = parseReaderJson(response.text ?? '');
       if (parsed === null) {
         lastError = new Error('reader_output_unparseable');

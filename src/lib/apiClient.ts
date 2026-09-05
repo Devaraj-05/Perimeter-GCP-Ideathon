@@ -40,13 +40,34 @@ export async function readError(res: Response): Promise<string> {
  */
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Chat and ingest are slower by nature and the number is not arbitrary: the
+ * server's own ladder budget is 55s, so anything below that abandons work the
+ * server is still legitimately doing, and the user is told it "took too long"
+ * about a request that was about to succeed.
+ *
+ * This sits above that budget, so the server always answers first — with a
+ * result or with a typed error it can explain — and this timeout only fires
+ * when something is genuinely wrong.
+ */
+const SLOW_REQUEST_TIMEOUT_MS = 75_000;
+
+/** Paths whose work is bounded by the server's model budget, not by a click. */
+const SLOW_PATHS = ['/api/agent/chat', '/api/gemini/', '/api/ingest/'];
+
+function timeoutFor(path: string): number {
+  return SLOW_PATHS.some((p) => path.startsWith(p))
+    ? SLOW_REQUEST_TIMEOUT_MS
+    : REQUEST_TIMEOUT_MS;
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       ...init,
       headers: await authedHeaders(),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutFor(path)),
     });
   } catch (err: any) {
     if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {

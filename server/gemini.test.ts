@@ -92,3 +92,64 @@ describe('isRecoverable — Directive 6 Error Recovery Matrix', () => {
     expect(isRecoverable({ status: 400, message: '{"error":{"code":503}}' })).toBe(false);
   });
 });
+
+describe('§8 — every model call is bounded', () => {
+  /**
+   * Constitution §8 requires every external call to be wrapped in a timeout
+   * and names Gemini first. Gemini was the only one without one, and the
+   * symptom was a chat that returned nothing while the browser showed "that
+   * took too long": the server had no opinion about how long a model may
+   * take, so the client abandoned a request the server was still working on.
+   *
+   * Asserted here because an invariant nothing checks is one that drifts.
+   */
+
+  it('resolves normally when the work finishes in time', async () => {
+    const { withDeadline } = await import('./gemini');
+    await expect(withDeadline(Promise.resolve('ok'), 'm', 1_000)).resolves.toBe('ok');
+  });
+
+  it('rejects with a typed error when the work does not', async () => {
+    const { withDeadline, ModelTimeoutError } = await import('./gemini');
+    const never = new Promise(() => undefined);
+    await expect(withDeadline(never as Promise<unknown>, 'slow-model', 20)).rejects.toBeInstanceOf(
+      ModelTimeoutError,
+    );
+  });
+
+  it('names the model and the budget, so a log says which rung hung', async () => {
+    const { withDeadline } = await import('./gemini');
+    const never = new Promise(() => undefined);
+    await expect(
+      withDeadline(never as Promise<unknown>, 'gemini-3.6-flash', 15),
+    ).rejects.toThrow('model_timeout:gemini-3.6-flash:15ms');
+  });
+
+  it('treats a timeout as recoverable, so the ladder tries the next model', async () => {
+    const { isRecoverable, ModelTimeoutError } = await import('./gemini');
+    expect(isRecoverable(new ModelTimeoutError('m', 10))).toBe(true);
+  });
+
+  it('does not treat a bad key as recoverable', async () => {
+    // A condition the next model shares is not worth three more round trips.
+    const { isRecoverable } = await import('./gemini');
+    expect(isRecoverable(new Error('API key not valid'))).toBe(false);
+  });
+
+  it('clears its timer so a fast call leaves nothing pending', async () => {
+    // A leaked timer keeps the event loop alive and makes a server that
+    // answered quickly take the full budget to shut down.
+    const { withDeadline } = await import('./gemini');
+    const before = process.getActiveResourcesInfo?.().length ?? 0;
+    await withDeadline(Promise.resolve(1), 'm', 30_000);
+    const after = process.getActiveResourcesInfo?.().length ?? 0;
+    expect(after).toBeLessThanOrEqual(before);
+  });
+
+  it('the ladder budget exceeds no single attempt budget', async () => {
+    // If one attempt could outlast the whole climb, the budget would never
+    // stop anything.
+    const { MODEL_ATTEMPT_TIMEOUT_MS, LADDER_BUDGET_MS } = await import('./gemini');
+    expect(LADDER_BUDGET_MS).toBeGreaterThan(MODEL_ATTEMPT_TIMEOUT_MS);
+  });
+});

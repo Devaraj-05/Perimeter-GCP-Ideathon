@@ -58,7 +58,61 @@ export function isRecoverable(err: any): boolean {
   // treat anything else as permanent - retrying an unknown failure four times
   // is worse than surfacing it once.
   const message = String(err?.message ?? '');
+  // A timed-out model is exactly the case the ladder exists for: the next one
+  // may well answer. It is recoverable, and the budget above stops the climb
+  // from becoming its own hang.
+  if (/^model_timeout:/.test(message)) return true;
   return /overloaded|RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED/.test(message);
+}
+
+/**
+ * How long one rung of the ladder may take, and how long the whole climb may.
+ *
+ * Constitution §8 requires every external call to be wrapped in a timeout and
+ * names Gemini first. Gemini was the only one without: generateContent was
+ * awaited with no deadline, so a slow or wedged model blocked the request
+ * until the BROWSER gave up at 30 seconds and showed "that took too long".
+ * The server had no opinion about it at all.
+ *
+ * The ladder makes it worse rather than better. Four models tried in sequence
+ * multiply the exposure, so the budget bounds the climb as well as each step:
+ * a request that cannot finish inside the budget should fail as a typed error
+ * the UI can explain, not as an abandoned socket.
+ */
+export const MODEL_ATTEMPT_TIMEOUT_MS = 20_000;
+export const LADDER_BUDGET_MS = 55_000;
+
+export class ModelTimeoutError extends Error {
+  constructor(model: string, ms: number) {
+    super(`model_timeout:${model}:${ms}ms`);
+    this.name = 'ModelTimeoutError';
+  }
+}
+
+/**
+ * Bounds a model call.
+ *
+ * Promise.race rather than an SDK abort signal: it bounds what the CALLER
+ * waits for regardless of which SDK version is installed, which is the
+ * property §8 is actually about. The underlying request may still be in
+ * flight; it is no longer holding a user request open.
+ */
+export async function withDeadline<T>(
+  work: Promise<T>,
+  model: string,
+  ms: number = MODEL_ATTEMPT_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ModelTimeoutError(model, ms)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export interface FallbackOptions {
@@ -77,19 +131,32 @@ export async function generateContentWithFallback(
   options?: FallbackOptions
 ): Promise<{ text: string; modelUsed: string }> {
   const ai = await getAI();
+  const startedAt = Date.now();
   let lastError: any = null;
 
   for (const modelName of MODEL_FALLBACK_LADDER) {
+    // Climbing further cannot help if there is no time left to climb in. The
+    // caller gets a typed error it can render rather than a request the
+    // browser eventually abandons.
+    if (Date.now() - startedAt >= LADDER_BUDGET_MS) {
+      throw lastError ?? new ModelTimeoutError('ladder', LADDER_BUDGET_MS);
+    }
+
     try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents,
-        config: {
-          systemInstruction: options?.systemInstruction,
-          temperature: options?.temperature ?? 0.7,
-          maxOutputTokens: options?.maxOutputTokens ?? 2048,
-        },
-      });
+      const remaining = LADDER_BUDGET_MS - (Date.now() - startedAt);
+      const response = await withDeadline(
+        ai.models.generateContent({
+          model: modelName,
+          contents,
+          config: {
+            systemInstruction: options?.systemInstruction,
+            temperature: options?.temperature ?? 0.7,
+            maxOutputTokens: options?.maxOutputTokens ?? 2048,
+          },
+        }),
+        modelName,
+        Math.min(MODEL_ATTEMPT_TIMEOUT_MS, Math.max(1_000, remaining)),
+      );
 
       const text = response.text || '';
       if (text) {
