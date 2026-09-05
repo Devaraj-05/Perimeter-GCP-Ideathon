@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { statusOf, isRecoverable, MODEL_FALLBACK_LADDER } from './gemini';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 /**
  * Directive 6 — Resilient Model Fallback Ladder and Error Recovery Matrix.
@@ -366,6 +368,49 @@ describe('describeModelFailure — one classification for every caller', () => {
     const { describeModelFailure } = await import('./gemini');
     for (const input of [undefined, null, '', new Error(''), { nope: true }]) {
       expect(describeModelFailure(input).message.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('the API key is attached explicitly, so ADC is never reached', () => {
+  /**
+   * Cloud Run always has Application Default Credentials. The SDK falls back
+   * to them when it does not find an API key on a request, and that fallback
+   * fails against generativelanguage.googleapis.com with
+   * 401 ACCESS_TOKEN_TYPE_UNSUPPORTED — the Gemini API does not accept a
+   * service-account bearer token. StreamGenerateContent returned exactly that
+   * in production while the key had loaded correctly from Secret Manager.
+   */
+  it('sets x-goog-api-key as a default header, not only the apiKey field', async () => {
+    const { clientOptions } = await import('./gemini');
+    const o = clientOptions('AIza-test-key') as any;
+    expect(o.apiKey).toBe('AIza-test-key');
+    expect(o.httpOptions.headers['x-goog-api-key']).toBe('AIza-test-key');
+  });
+
+  it('never enables the Vertex backend implicitly', async () => {
+    // A client that reached for ADC because vertexai was somehow true would
+    // fail the same way. It is not set, and it is not read from the
+    // environment here.
+    const { clientOptions } = await import('./gemini');
+    expect((clientOptions('k') as any).vertexai).toBeUndefined();
+    expect((clientOptions('k') as any).googleAuthOptions).toBeUndefined();
+  });
+
+  it('carries whatever the secret held, without reformatting it', async () => {
+    // INV-8: this function must not trim, prefix or otherwise transform a
+    // credential. resolveSecret already trimmed it; doing it twice would hide
+    // a malformed secret rather than surfacing it.
+    const { clientOptions } = await import('./gemini');
+    const raw = '  spaced-key  ';
+    expect((clientOptions(raw) as any).apiKey).toBe(raw);
+  });
+
+  it('does not log the key', async () => {
+    const src = readFileSync(join(process.cwd(), 'server', 'gemini.ts'), 'utf8');
+    for (const line of src.split('\n')) {
+      if (!line.includes('console.')) continue;
+      expect(line).not.toMatch(/apiKey|getGeminiKey\(\)/);
     }
   });
 });

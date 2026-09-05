@@ -19,9 +19,46 @@ let aiClient: GoogleGenAI | null = null;
  */
 export async function getAI(): Promise<GoogleGenAI> {
   if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey: await getGeminiKey() });
+    aiClient = new GoogleGenAI(clientOptions(await getGeminiKey()));
   }
   return aiClient;
+}
+
+/**
+ * The key is supplied twice, deliberately — and the second time is the one
+ * that matters in production.
+ *
+ * Cloud Run always has Application Default Credentials. The SDK falls back to
+ * them whenever it does not find an API key on a request, and that fallback
+ * fails against generativelanguage.googleapis.com with
+ *
+ *   401 ACCESS_TOKEN_TYPE_UNSUPPORTED
+ *   "Expected OAuth 2 access token, login cookie or other valid credential"
+ *
+ * because the Gemini API does not accept a service-account bearer token. That
+ * is precisely what StreamGenerateContent returned on revision
+ * perimeter-00042 while the key itself had loaded correctly from version 3.
+ *
+ * Setting `x-goog-api-key` as a default header removes the fallback rather
+ * than trusting every code path inside the SDK to reach the same auth branch.
+ * The header is checked first and short-circuits: an SDK path that would have
+ * reached for ADC finds the key already present and never gets there.
+ *
+ * This does not weaken INV-8. The value comes from Secret Manager at runtime,
+ * exactly as before, is never logged, and never leaves the server — the only
+ * change is that it is attached to the request explicitly instead of being
+ * derived from client state.
+ */
+export function clientOptions(apiKey: string) {
+  return {
+    apiKey,
+    httpOptions: { headers: { 'x-goog-api-key': apiKey } },
+  };
+}
+
+/** Test seam. The client is cached for the life of the process otherwise. */
+export function __resetAIClient(): void {
+  aiClient = null;
 }
 
 export const MODEL_FALLBACK_LADDER = [
