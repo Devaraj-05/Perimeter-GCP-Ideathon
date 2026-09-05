@@ -56,21 +56,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
-      <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
+      <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e5e5] bg-[#ffffff] shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e5e5e5] p-5">
           <div>
-            <h2 className="flex items-center gap-2 font-serif text-xl font-semibold text-[#2c2c24]">
-              <ShieldCheck className="h-5 w-5 text-[#5a5a40]" />
+            <h2 className="flex items-center gap-2 font-serif text-xl font-semibold text-[#1a1a1a]">
+              <ShieldCheck className="h-5 w-5 text-[#1a1a1a]" />
               Fleet security
             </h2>
-            <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
+            <p className="mt-1 max-w-lg text-xs text-[#6b6b6b]">
               Counters across every account. No names, no entries, no attack text — an
               administrator can see how the perimeter is performing and nothing about anyone.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="cursor-pointer rounded-lg p-1.5 text-[#8a8a75] hover:bg-[#f3efe6] hover:text-[#2c2c24]"
+            className="cursor-pointer rounded-lg p-1.5 text-[#6b6b6b] hover:bg-[#f7f7f8] hover:text-[#1a1a1a]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -88,7 +88,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
         <div className="space-y-4 p-5">
           {loading && !metrics && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#8a8a75]">
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#6b6b6b]">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           )}
@@ -97,20 +97,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {([
-                  { label: 'Attacks fired', value: metrics.totalRuns, tone: 'text-[#2c2c24]' },
+                  { label: 'Attacks fired', value: metrics.totalRuns, tone: 'text-[#1a1a1a]' },
                   { label: 'Held', value: metrics.blocked, tone: 'text-emerald-800' },
                   {
                     label: 'Reached execution',
                     value: metrics.leaked,
-                    tone: metrics.leaked > 0 ? 'text-rose-800' : 'text-[#2c2c24]',
+                    tone: metrics.leaked > 0 ? 'text-rose-800' : 'text-[#1a1a1a]',
                   },
                   { label: 'Held rate', value: held === null ? '—' : `${held}%`, tone: 'text-emerald-800' },
                 ] as { label: string; value: string | number; tone: string }[]).map(({ label, value, tone }) => (
                   <div
                     key={label}
-                    className="rounded-xl border border-[#e5e0d3] bg-white p-3.5"
+                    className="rounded-xl border border-[#e5e5e5] bg-white p-3.5"
                   >
-                    <p className="text-[11px] text-[#8a8a75]">{label}</p>
+                    <p className="text-[11px] text-[#6b6b6b]">{label}</p>
                     <p className={`mt-1 font-serif text-2xl font-semibold ${tone}`}>{value}</p>
                   </div>
                 ))}
@@ -118,15 +118,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
               {classes.length > 0 && (
                 <div>
-                  <h3 className="mb-2 text-xs font-medium text-[#434338]">By attack class</h3>
+                  <h3 className="mb-2 text-xs font-medium text-[#3f3f3f]">By attack class</h3>
                   <div className="space-y-1.5">
                     {classes.map(([name, count]) => (
                       <div
                         key={name}
-                        className="flex items-center gap-2 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-[11px]"
+                        className="flex items-center gap-2 rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-[11px]"
                       >
-                        <span className="font-mono text-[#5a5a40]">{name.replace(/_/g, ' ')}</span>
-                        <span className="ml-auto font-medium text-[#2c2c24]">{count}</span>
+                        <span className="font-mono text-[#1a1a1a]">{name.replace(/_/g, ' ')}</span>
+                        <span className="ml-auto font-medium text-[#1a1a1a]">{count}</span>
                       </div>
                     ))}
                   </div>
@@ -134,7 +134,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               )}
 
               {metrics.updatedAt && (
-                <p className="text-[11px] text-[#8a8a75]">
+                <p className="text-[11px] text-[#6b6b6b]">
                   Last attack recorded {new Date(metrics.updatedAt).toLocaleString()}.
                 </p>
               )}

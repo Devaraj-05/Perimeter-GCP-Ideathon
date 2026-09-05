@@ -166,25 +166,25 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
-      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
+      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e5e5] bg-[#ffffff] shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e5e5e5] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it refused</h2>
-            <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
+            <h2 className="font-serif text-xl font-semibold text-[#1a1a1a]">What it refused</h2>
+            <p className="mt-1 max-w-lg text-xs text-[#6b6b6b]">
               Everything the assistant read, proposed, and was allowed or refused. Written by the
               server only — this app cannot edit its own record, and neither can you.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="cursor-pointer rounded-lg p-2 text-[#8a8a75] transition-colors hover:bg-[#f3efe6] hover:text-[#2c2c24]"
+            className="cursor-pointer rounded-lg p-2 text-[#6b6b6b] transition-colors hover:bg-[#f7f7f8] hover:text-[#1a1a1a]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#e5e0d3] px-5 py-3">
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338]">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#e5e5e5] px-5 py-3">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e5e5] bg-white px-2 py-1 text-[11px] text-[#3f3f3f]">
             {isLive && (
               <span
                 aria-hidden="true"
@@ -202,7 +202,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
 
           <button
             onClick={() => void load()}
-            className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#434338] transition-colors hover:bg-[#f3efe6]"
+            className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#3f3f3f] transition-colors hover:bg-[#f7f7f8]"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -211,7 +211,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
           <button
             onClick={() => void verify()}
             disabled={verifying}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#5a5a40] px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-[#484833] disabled:opacity-50"
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-[#000000] disabled:opacity-50"
             title="Recompute the hash chain and check nothing was altered"
           >
             {verifying ? (
@@ -271,16 +271,16 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
 
         <div className="space-y-2 p-5">
           {loading && events.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#8a8a75]">
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#6b6b6b]">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           )}
 
           {!loading && events.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[#e5e0d3] bg-white/60 p-8 text-center">
+            <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
               <ScrollText className="mx-auto h-8 w-8 text-[#b5b0a0]" />
-              <p className="mt-3 font-serif text-base text-[#2c2c24]">Nothing recorded yet</p>
-              <p className="mx-auto mt-1 max-w-sm text-xs text-[#8a8a75]">
+              <p className="mt-3 font-serif text-base text-[#1a1a1a]">Nothing recorded yet</p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                 Save a link or ask the assistant to do something. Every decision lands here.
               </p>
             </div>
@@ -300,23 +300,23 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
                     ? 'border-rose-200 bg-rose-50/60'
                     : isHold
                       ? 'border-amber-200 bg-amber-50/60'
-                      : 'border-[#e5e0d3] bg-white'
+                      : 'border-[#e5e5e5] bg-white'
                 }`}
               >
                 <div className="flex items-start gap-2">
                   <Icon
                     className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      isDeny ? 'text-rose-700' : isHold ? 'text-amber-700' : 'text-[#5a5a40]'
+                      isDeny ? 'text-rose-700' : isHold ? 'text-amber-700' : 'text-[#1a1a1a]'
                     }`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-[#2c2c24]">{meta.label}</span>
+                      <span className="text-xs font-medium text-[#1a1a1a]">{meta.label}</span>
                       {e.tool && (
-                        <span className="font-mono text-[11px] text-[#434338]">{e.tool}</span>
+                        <span className="font-mono text-[11px] text-[#3f3f3f]">{e.tool}</span>
                       )}
                       {e.invariant && (
-                        <span className="rounded bg-[#f3efe6] px-1.5 py-0.5 font-mono text-[10px] text-[#5a5a40]">
+                        <span className="rounded bg-[#f7f7f8] px-1.5 py-0.5 font-mono text-[10px] text-[#1a1a1a]">
                           {e.invariant}
                         </span>
                       )}
@@ -325,7 +325,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
                       </span>
                     </div>
 
-                    <p className="mt-1 text-[11px] text-[#434338]">
+                    <p className="mt-1 text-[11px] text-[#3f3f3f]">
                       {explain(e.reason, e.invariant)}
                     </p>
 

@@ -91,11 +91,11 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center bg-black/30 backdrop-blur-sm p-4 sm:p-8 overflow-y-auto">
-      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
+      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e5e5] bg-[#ffffff] shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e5e5e5] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">Agent Activity</h2>
-            <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
+            <h2 className="font-serif text-xl font-semibold text-[#1a1a1a]">Agent Activity</h2>
+            <p className="mt-1 max-w-lg text-xs text-[#6b6b6b]">
               The assistant can propose actions, but it cannot perform them. Every proposal is
               decided by a policy engine that never consults a language model, and every decision
               is recorded here.
@@ -103,21 +103,21 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-[#8a8a75] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+            className="rounded-lg p-2 text-[#6b6b6b] hover:bg-[#f7f7f8] hover:text-[#1a1a1a] transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-[#e5e0d3] px-5 pt-3">
+        <div className="flex gap-1 border-b border-[#e5e5e5] px-5 pt-3">
           {(['queue', 'activity'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-t-lg px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                 tab === t
-                  ? 'border-b-2 border-[#5a5a40] text-[#2c2c24]'
-                  : 'text-[#8a8a75] hover:text-[#434338]'
+                  ? 'border-b-2 border-[#1a1a1a] text-[#1a1a1a]'
+                  : 'text-[#6b6b6b] hover:text-[#3f3f3f]'
               }`}
             >
               {t === 'queue' ? `Awaiting approval (${pending.length})` : `All decisions (${audit.length})`}
@@ -137,7 +137,7 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
 
         <div className="space-y-3 p-5">
           {loading && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#8a8a75]">
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#6b6b6b]">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           )}
@@ -145,10 +145,10 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
           {tab === 'queue' && !loading && (
             <>
               {pending.length === 0 && (
-                <div className="rounded-xl border border-dashed border-[#e5e0d3] bg-white/60 p-8 text-center">
+                <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
                   <ShieldCheck className="mx-auto h-8 w-8 text-emerald-600" />
-                  <p className="mt-3 font-serif text-base text-[#2c2c24]">Nothing awaiting approval</p>
-                  <p className="mx-auto mt-1 max-w-sm text-xs text-[#8a8a75]">
+                  <p className="mt-3 font-serif text-base text-[#1a1a1a]">Nothing awaiting approval</p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                     Write actions appear here for an explicit click before they run.
                   </p>
                 </div>
@@ -158,19 +158,19 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
                 <div key={c.id} className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-amber-700" />
-                    <span className="font-mono text-xs font-medium text-[#2c2c24]">{c.tool}</span>
+                    <span className="font-mono text-xs font-medium text-[#1a1a1a]">{c.tool}</span>
                     <span className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-900">
                       write
                     </span>
                   </div>
 
                   {/* B.4: the exact arguments, not a summary of them. */}
-                  <pre className="mt-2 overflow-x-auto rounded-lg border border-[#e5e0d3] bg-white p-2.5 font-mono text-[11px] text-[#434338]">
+                  <pre className="mt-2 overflow-x-auto rounded-lg border border-[#e5e5e5] bg-white p-2.5 font-mono text-[11px] text-[#3f3f3f]">
 {JSON.stringify(c.args, null, 2)}
                   </pre>
 
                   {c.originSourceIds.length > 0 && (
-                    <p className="mt-2 text-[11px] text-[#8a8a75]">
+                    <p className="mt-2 text-[11px] text-[#6b6b6b]">
                       Context included: {c.originSourceIds.join(', ')}
                     </p>
                   )}
@@ -179,7 +179,7 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
                     <button
                       onClick={() => void act(c.id, true)}
                       disabled={busyId === c.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#484833] disabled:opacity-50 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#000000] disabled:opacity-50 cursor-pointer"
                     >
                       {busyId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                       Approve and run
@@ -187,7 +187,7 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
                     <button
                       onClick={() => void act(c.id, false)}
                       disabled={busyId === c.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-1.5 text-xs font-medium text-[#434338] hover:bg-[#f3efe6] disabled:opacity-50 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#3f3f3f] hover:bg-[#f7f7f8] disabled:opacity-50 cursor-pointer"
                     >
                       <Ban className="h-3.5 w-3.5" /> Reject
                     </button>
@@ -197,19 +197,19 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
 
               {blocked.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[#434338]">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[#3f3f3f]">
                     <ShieldAlert className="h-4 w-4 text-rose-700" />
                     Refused ({blocked.length})
                   </h3>
                   {blocked.slice(0, 10).map((c) => (
                     <div key={c.id} className="mb-2 rounded-lg border border-rose-200 bg-rose-50/60 p-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-medium text-[#2c2c24]">{c.tool}</span>
+                        <span className="font-mono text-xs font-medium text-[#1a1a1a]">{c.tool}</span>
                         <span className="font-mono text-[10px] text-rose-700">{c.reason}</span>
                       </div>
-                      <p className="mt-1 text-[11px] text-[#434338]">{explain(c.reason)}</p>
+                      <p className="mt-1 text-[11px] text-[#3f3f3f]">{explain(c.reason)}</p>
                       {c.originSourceIds.length > 0 && (
-                        <p className="mt-1 text-[11px] text-[#8a8a75]">
+                        <p className="mt-1 text-[11px] text-[#6b6b6b]">
                           Originating source: {c.originSourceIds.join(', ')}
                         </p>
                       )}
@@ -223,17 +223,17 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
           {tab === 'activity' && !loading && (
             <>
               {audit.length === 0 && (
-                <div className="rounded-xl border border-dashed border-[#e5e0d3] bg-white/60 p-8 text-center">
+                <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
                   <ScrollText className="mx-auto h-8 w-8 text-[#b5b0a0]" />
-                  <p className="mt-3 font-serif text-base text-[#2c2c24]">No activity yet</p>
-                  <p className="mx-auto mt-1 max-w-sm text-xs text-[#8a8a75]">
+                  <p className="mt-3 font-serif text-base text-[#1a1a1a]">No activity yet</p>
+                  <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                     Ask the assistant something that would need a tool, and every decision lands here.
                   </p>
                 </div>
               )}
 
               {audit.map((e) => (
-                <div key={e.id} className="rounded-lg border border-[#e5e0d3] bg-white p-3">
+                <div key={e.id} className="rounded-lg border border-[#e5e5e5] bg-white p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
@@ -247,16 +247,16 @@ export const ThreatFeed: React.FC<ThreatFeedProps> = ({ isOpen, onClose }) => {
                       {e.decision || e.type}
                     </span>
                     {e.tool && (
-                      <span className="font-mono text-xs text-[#2c2c24]">{e.tool}</span>
+                      <span className="font-mono text-xs text-[#1a1a1a]">{e.tool}</span>
                     )}
                     {e.turnTaint && (
                       <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">
                         tainted turn
                       </span>
                     )}
-                    <span className="ml-auto text-[10px] text-[#8a8a75]">{timeOf(e.at)}</span>
+                    <span className="ml-auto text-[10px] text-[#6b6b6b]">{timeOf(e.at)}</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-[#434338]">{explain(e.reason)}</p>
+                  <p className="mt-1 text-[11px] text-[#3f3f3f]">{explain(e.reason)}</p>
                 </div>
               ))}
             </>

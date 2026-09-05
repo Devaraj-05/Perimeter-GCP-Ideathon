@@ -1111,9 +1111,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const charCount = content.length;
 
   return (
-    <div className="flex flex-col h-full bg-[#fcfaf7] overflow-y-auto">
+    <div className="flex flex-col h-full bg-[#ffffff] overflow-y-auto">
       {/* Editor Header Toolbar */}
-      <div className="border-b border-[#e5e0d3] bg-[#fcfaf7] px-4 sm:px-6 py-4 sticky top-0 z-20 shadow-2xs">
+      <div className="border-b border-[#e5e5e5] bg-[#ffffff] px-4 sm:px-6 py-4 sticky top-0 z-20 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Title input */}
           <div className="flex-1 min-w-[240px]">
@@ -1126,23 +1126,23 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 setHasUnsavedChanges(true);
               }}
               placeholder="Give your reflection a title..."
-              className="w-full font-serif text-xl sm:text-2xl font-medium text-[#2c2c24] placeholder:text-[#8a8a75] bg-transparent border-0 focus:outline-hidden focus:ring-0 px-0"
+              className="w-full font-serif text-xl sm:text-2xl font-medium text-[#1a1a1a] placeholder:text-[#6b6b6b] bg-transparent border-0 focus:outline-hidden focus:ring-0 px-0"
             />
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
             {/* Status indicator */}
-            <div className="text-xs text-[#8a8a75] mr-2 flex items-center gap-1.5">
+            <div className="text-xs text-[#6b6b6b] mr-2 flex items-center gap-1.5">
               {isSaving ? (
                 <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#5a5a40]" />
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#1a1a1a]" />
                   <span>Saving to Firestore...</span>
                 </>
               ) : hasUnsavedChanges ? (
                 <span className="text-amber-800 font-medium">Unsaved changes</span>
               ) : (
-                <span className="text-[#5a5a40] flex items-center gap-1">
+                <span className="text-[#1a1a1a] flex items-center gap-1">
                   <Check className="h-3.5 w-3.5" />
                   <span>Saved in Vault</span>
                 </span>
@@ -1153,20 +1153,20 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               id="save-entry-btn"
               onClick={handleSave}
               disabled={isSaving}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-1.5 text-xs font-medium text-[#434338] hover:bg-[#f3efe6] shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#3f3f3f] hover:bg-[#f7f7f8] shadow-2xs transition-colors cursor-pointer"
               title="Save to Cloud Firestore"
             >
-              <Save className="h-3.5 w-3.5 text-[#5a5a40]" />
+              <Save className="h-3.5 w-3.5 text-[#1a1a1a]" />
               <span className="hidden sm:inline">Save</span>
             </button>
 
             <button
               id="export-entry-btn"
               onClick={handleExportMarkdown}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-1.5 text-xs font-medium text-[#434338] hover:bg-[#f3efe6] shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#3f3f3f] hover:bg-[#f7f7f8] shadow-2xs transition-colors cursor-pointer"
               title="Export reflection as Markdown"
             >
-              <Download className="h-3.5 w-3.5 text-[#5a5a40]" />
+              <Download className="h-3.5 w-3.5 text-[#1a1a1a]" />
               <span className="hidden md:inline">Export</span>
             </button>
 
@@ -1188,10 +1188,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </div>
 
         {/* Category, place and sentiment */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-[#f0ede6] text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-[#f0f0f0] text-xs">
           {/* Category Dropdown */}
           <div className="flex items-center gap-1.5">
-            <Tag className="h-3.5 w-3.5 text-[#8a8a75]" />
+            <Tag className="h-3.5 w-3.5 text-[#6b6b6b]" />
             <select
               id="category-select"
               value={category}
@@ -1199,7 +1199,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 setCategory(e.target.value as CategoryType);
                 setHasUnsavedChanges(true);
               }}
-              className="rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-xs font-medium text-[#434338] focus:border-[#5a5a40] focus:outline-hidden"
+              className="rounded-md border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-medium text-[#3f3f3f] focus:border-[#1a1a1a] focus:outline-hidden"
             >
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>
@@ -1214,12 +1214,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               from us — so it renders through UntrustedText like any other
               external-origin string, not as a bare interpolation. */}
           <div className="flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-[#8a8a75]" />
+            <MapPin className="h-3.5 w-3.5 text-[#6b6b6b]" />
             {location ? (
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e0d3] bg-white px-2 py-1">
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e5e5] bg-white px-2 py-1">
                 <UntrustedText
                   text={location.placeName}
-                  className="text-xs text-[#434338]"
+                  className="text-xs text-[#3f3f3f]"
                   placeholder="Unnamed place"
                 />
                 <button
@@ -1228,7 +1228,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     setHasUnsavedChanges(true);
                   }}
                   title="Remove location"
-                  className="cursor-pointer text-[#8a8a75] hover:text-[#2c2c24]"
+                  className="cursor-pointer text-[#6b6b6b] hover:text-[#1a1a1a]"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -1238,7 +1238,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 id="add-location-btn"
                 onClick={() => void attachLocation()}
                 disabled={locating}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-xs font-medium text-[#434338] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#e5e5e5] bg-white px-2 py-1 text-xs font-medium text-[#3f3f3f] transition-colors hover:bg-[#f7f7f8] disabled:opacity-50"
               >
                 {locating ? <RefreshCw className="h-3 w-3 animate-spin" /> : null}
                 {locating ? 'Locating…' : 'Add location'}
@@ -1255,13 +1255,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void attachTypedPlace((e.target as HTMLInputElement).value);
                 }}
-                className="rounded border border-[#e5e0d3] bg-white px-2 py-0.5 text-[11px] text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+                className="rounded border border-[#e5e5e5] bg-white px-2 py-0.5 text-[11px] text-[#1a1a1a] focus:border-[#1a1a1a] focus:outline-hidden"
               />
             </span>
           )}
 
           {sentiment && (
-            <span className="ml-auto rounded-full bg-[#f3efe6] border border-[#e5e0d3] px-2.5 py-0.5 text-[11px] font-medium text-[#5a5a40]">
+            <span className="ml-auto rounded-full bg-[#f7f7f8] border border-[#e5e5e5] px-2.5 py-0.5 text-[11px] font-medium text-[#1a1a1a]">
               Sentiment: {sentiment}
             </span>
           )}
@@ -1275,10 +1275,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           until the first entry is saved — this is onboarding, not chrome. */}
       {isFirstRun && (
         <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-4">
-          <p className="font-serif text-base font-semibold text-[#2c2c24]">
+          <p className="font-serif text-base font-semibold text-[#1a1a1a]">
             This journal reads pages you point it at — and assumes they're hostile.
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-[#5a5a40]">
+          <p className="mt-1 text-sm leading-relaxed text-[#1a1a1a]">
             Text on a web page can carry hidden instructions aimed at the AI, not at you. Here,
             every attempt one makes to hijack this assistant is refused and written to a log you
             can read.
@@ -1343,8 +1343,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           the chips and in the taint notice below.
       */}
       {lastTurnTainted && (
-        <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 rounded-xl border border-[#e5e0d3] bg-[#f3efe6] px-3.5 py-2.5 text-xs text-[#434338]">
-          <Github className="h-4 w-4 shrink-0 text-[#5a5a40]" />
+        <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 rounded-xl border border-[#e5e5e5] bg-[#f7f7f8] px-3.5 py-2.5 text-xs text-[#3f3f3f]">
+          <Github className="h-4 w-4 shrink-0 text-[#1a1a1a]" />
           <span className="font-medium text-rose-700">
             Untrusted content was screened before the assistant read it.
           </span>
@@ -1396,18 +1396,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
         {/* Executive Summary & Insights Card (If generated) */}
         {(summary || (insights && insights.length > 0)) && (
-          <div className="rounded-2xl border border-[#e5e0d3] bg-[#f3efe6]/70 p-5 shadow-2xs space-y-4">
+          <div className="rounded-2xl border border-[#e5e5e5] bg-[#f7f7f8]/70 p-5 shadow-2xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-[#5a5a40]" />
-                <h3 className="font-serif text-base font-semibold text-[#2c2c24]">
+                <Sparkles className="h-4 w-4 text-[#1a1a1a]" />
+                <h3 className="font-serif text-base font-semibold text-[#1a1a1a]">
                   Executive Synthesis & Key Takeaways
                 </h3>
               </div>
               <button
                 onClick={handleGenerateSummary}
                 disabled={isSummarizing}
-                className="text-xs text-[#5a5a40] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs text-[#1a1a1a] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <RefreshCw className={`h-3 w-3 ${isSummarizing ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
@@ -1415,22 +1415,22 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             </div>
 
             {summary && (
-              <div className="text-sm text-[#434338] leading-relaxed bg-white rounded-xl p-3.5 border border-[#e5e0d3]">
-                <p className="font-medium text-xs text-[#2c2c24] mb-1">Core Reflection Summary:</p>
+              <div className="text-sm text-[#3f3f3f] leading-relaxed bg-white rounded-xl p-3.5 border border-[#e5e5e5]">
+                <p className="font-medium text-xs text-[#1a1a1a] mb-1">Core Reflection Summary:</p>
                 <p>{summary}</p>
               </div>
             )}
 
             {insights && insights.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#5a5a40]">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#1a1a1a]">
                   Actionable Insights & Reframing
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {insights.map((insight, idx) => (
                     <div
                       key={idx}
-                      className="flex items-start gap-2 bg-white rounded-xl p-3 border border-[#e5e0d3] text-xs text-[#434338] leading-relaxed shadow-2xs"
+                      className="flex items-start gap-2 bg-white rounded-xl p-3 border border-[#e5e5e5] text-xs text-[#3f3f3f] leading-relaxed shadow-2xs"
                     >
                       <Check className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
                       <span>{insight}</span>
@@ -1445,7 +1445,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 {tags.map((t, idx) => (
                   <span
                     key={idx}
-                    className="rounded-md bg-[#e5e0d3] px-2 py-0.5 text-[11px] font-medium text-[#434338]"
+                    className="rounded-md bg-[#e5e5e5] px-2 py-0.5 text-[11px] font-medium text-[#3f3f3f]"
                   >
                     #{t}
                   </span>
@@ -1462,14 +1462,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             (bringing outside content in) was unreachable until the user had
             already written something and pressed Reflect. */}
         {(
-          <div className="flex flex-1 flex-col rounded-2xl border border-[#e5e0d3] bg-white p-5 shadow-2xs space-y-5">
+          <div className="flex flex-1 flex-col rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-2xs space-y-5">
             {turns.length > 0 && (
-              <div className="flex items-center justify-between border-b border-[#f0ede6] pb-3">
-                <h3 className="font-serif text-base font-semibold text-[#2c2c24] flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-[#5a5a40]" />
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] pb-3">
+                <h3 className="font-serif text-base font-semibold text-[#1a1a1a] flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-[#1a1a1a]" />
                   <span>Conversation</span>
                 </h3>
-                <span className="text-xs text-[#8a8a75]">
+                <span className="text-xs text-[#6b6b6b]">
                   {turns.length} exchange{turns.length === 1 ? '' : 's'}
                 </span>
               </div>
@@ -1494,7 +1494,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     className={`min-w-0 max-w-full rounded-2xl rounded-bl-xs border border-dashed p-4 text-sm ${
                       streamingTaint
                         ? 'border-amber-400 bg-amber-50/60'
-                        : 'border-[#d8d2c4] bg-[#f8f6f0]'
+                        : 'border-[#d8d2c4] bg-[#fafafa]'
                     }`}
                   >
                     {streamingTaint && (
@@ -1507,20 +1507,20 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     {streamingText ? (
                       <UntrustedText text={streamingText} />
                     ) : (
-                      <span className="flex items-center gap-2.5 text-[#5a5a40]">
-                        <RefreshCw className="h-4 w-4 animate-spin text-[#5a5a40]" />
+                      <span className="flex items-center gap-2.5 text-[#1a1a1a]">
+                        <RefreshCw className="h-4 w-4 animate-spin text-[#1a1a1a]" />
                         Thinking...
                       </span>
                     )}
 
-                    <div className="mt-2.5 flex items-center gap-3 border-t border-[#e5e0d3] pt-2">
-                      <span className="text-[10px] text-[#8a8a75]">
+                    <div className="mt-2.5 flex items-center gap-3 border-t border-[#e5e5e5] pt-2">
+                      <span className="text-[10px] text-[#6b6b6b]">
                         {streamingText ? 'Still writing - not saved yet' : ''}
                       </span>
                       <button
                         type="button"
                         onClick={() => abortRef.current?.abort()}
-                        className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-[#d8d2c4] px-2 py-0.5 text-[10px] text-[#5a5a40] hover:bg-[#efeade]"
+                        className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-[#d8d2c4] px-2 py-0.5 text-[10px] text-[#1a1a1a] hover:bg-[#efeade]"
                       >
                         <Square className="h-2.5 w-2.5 fill-current" />
                         Stop
@@ -1546,7 +1546,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 {attachments.map((a) => (
                   <span
                     key={a.id}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338]"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-2 py-1 text-[11px] text-[#3f3f3f]"
                   >
                     <Paperclip className="h-3 w-3 shrink-0" />
                     <span className="truncate">{a.title}</span>
@@ -1564,7 +1564,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
             {attachMenu && (
               <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">
-                <p className="text-[11px] font-medium text-[#2c2c24]">
+                <p className="text-[11px] font-medium text-[#1a1a1a]">
                   {attachMenu === 'link'
                     ? 'Paste a web address. It is fetched on the server and treated as hostile.'
                     : 'Paste anything — an email body, a message, a document excerpt. It is treated as hostile.'}
@@ -1575,7 +1575,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     value={attachDraft}
                     onChange={(e) => setAttachDraft(e.target.value)}
                     placeholder="https://example.com/an-article-you-read"
-                    className="mt-2 w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+                    className="mt-2 w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-xs text-[#1a1a1a] focus:border-[#1a1a1a] focus:outline-hidden"
                   />
                 ) : (
                   <textarea
@@ -1584,14 +1584,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     rows={4}
                     maxLength={20000}
                     placeholder="Paste the text here…"
-                    className="mt-2 w-full resize-y rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] focus:border-[#5a5a40] focus:outline-hidden"
+                    className="mt-2 w-full resize-y rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-xs text-[#1a1a1a] focus:border-[#1a1a1a] focus:outline-hidden"
                   />
                 )}
                 <div className="mt-2 flex items-center gap-2">
                   <button
                     onClick={() => void submitAttachment()}
                     disabled={attaching || !attachDraft.trim()}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#484833] disabled:opacity-50"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#000000] disabled:opacity-50"
                   >
                     {attaching ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
                     {attaching ? 'Reading…' : 'Attach'}
@@ -1602,7 +1602,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                       setAttachDraft('');
                       setAttachError(null);
                     }}
-                    className="cursor-pointer text-xs text-[#8a8a75] hover:text-[#2c2c24]"
+                    className="cursor-pointer text-xs text-[#6b6b6b] hover:text-[#1a1a1a]"
                   >
                     Cancel
                   </button>
@@ -1613,7 +1613,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
             {/* Follow-up input box */}
             {pasteOffer && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#5a5a40]">
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#1a1a1a]">
                 <Paperclip className="h-3.5 w-3.5 shrink-0" />
                 <span>
                   {pasteOffer.kind === 'link'
@@ -1631,7 +1631,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 <button
                   type="button"
                   onClick={() => setPasteOffer(null)}
-                  className="cursor-pointer text-[#8a8a75] underline"
+                  className="cursor-pointer text-[#6b6b6b] underline"
                 >
                   No, it&rsquo;s mine
                 </button>
@@ -1643,14 +1643,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 type="button"
                 onClick={() => void screenPastedLinks()}
                 disabled={isGenerating}
-                className="mt-2 cursor-pointer rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-1.5 text-[11px] font-medium text-[#2c2c24] hover:bg-[#f5eeda] disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-2 cursor-pointer rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-1.5 text-[11px] font-medium text-[#1a1a1a] hover:bg-[#f5eeda] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Fetch and screen this link
               </button>
             )}
 
             {!webSearch && mentionsUrl(followUpInput) && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#5a5a40]">
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#d8cfae] bg-[#fbf6e6] px-3 py-2 text-[11px] text-[#1a1a1a]">
                 <Globe className="h-3.5 w-3.5 shrink-0" />
                 <span>That link will be ignored. Turn on Web to fetch and read it.</span>
                 <button
@@ -1671,7 +1671,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 the way a chat input does. */}
             <form
               onSubmit={handleSendFollowUp}
-              className="mt-4 flex items-center gap-2 rounded-2xl border border-[#e5e0d3] bg-white p-2 transition-shadow focus-within:border-[#5a5a40] focus-within:shadow-[0_0_0_3px_rgba(90,90,64,0.14)]"
+              className="mt-4 flex items-center gap-2 rounded-2xl border border-[#e5e5e5] bg-white p-2 transition-shadow focus-within:border-[#1a1a1a] focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.14)]"
             >
               {/* One entry point instead of four.
                   Four bare icons beside the composer read as a toolbar and
@@ -1698,7 +1698,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   title="Add something for it to read"
                   aria-haspopup="menu"
                   aria-expanded={plusOpen}
-                  className="inline-flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-xl text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+                  className="inline-flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-xl text-[#1a1a1a] transition-colors hover:bg-[#f7f7f8] disabled:opacity-50"
                 >
                   {attaching ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1710,8 +1710,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 {plusOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setPlusOpen(false)} />
-                    <div className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white py-1 shadow-lg">
-                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#8a8a75]">
+                    <div className="absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-xl border border-[#e5e5e5] bg-white py-1 shadow-lg">
+                      <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6b6b6b]">
                         From outside &mdash; treated as hostile
                       </p>
                       {[
@@ -1755,16 +1755,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                             setPlusOpen(false);
                             run();
                           }}
-                          className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f3efe6]"
+                          className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f7f7f8]"
                         >
                           <Icon
                             className={`mt-0.5 h-4 w-4 shrink-0 ${
-                              connector && on ? 'text-emerald-600' : 'text-[#5a5a40]'
+                              connector && on ? 'text-emerald-600' : 'text-[#1a1a1a]'
                             }`}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-medium text-[#2c2c24]">{label}</span>
-                            <span className="block text-[10px] text-[#8a8a75]">{hint}</span>
+                            <span className="block text-xs font-medium text-[#1a1a1a]">{label}</span>
+                            <span className="block text-[10px] text-[#6b6b6b]">{hint}</span>
                           </span>
                           {/* A connector shows its state and is the control
                               that changes it. Reading it and toggling it are
@@ -1803,8 +1803,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 aria-pressed={webSearch}
                 className={`inline-flex h-[38px] shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-colors ${
                   webSearch
-                    ? 'bg-[#5a5a40] text-white'
-                    : 'text-[#8a8a75] hover:bg-[#f3efe6]'
+                    ? 'bg-[#1a1a1a] text-white'
+                    : 'text-[#6b6b6b] hover:bg-[#f7f7f8]'
                 }`}
               >
                 <Globe className="h-4 w-4" />
@@ -1819,13 +1819,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 onPaste={(e) => onComposerPaste(e.clipboardData.getData('text'))}
                 placeholder={turns.length === 0 ? "What is on your mind? Or add something with + and ask about it…" : "Ask a follow-up, or add another angle…"}
                 disabled={isGenerating}
-                className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:shadow-none focus:outline-hidden"
+                className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-sm text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:shadow-none focus:outline-hidden"
               />
               <button
                 id="send-followup-btn"
                 type="submit"
                 disabled={isGenerating || !followUpInput.trim()}
-                className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#5a5a40] text-white transition-colors hover:bg-[#484833] disabled:bg-[#e5e0d3] disabled:text-[#8a8a75]"
+                className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors hover:bg-[#000000] disabled:bg-[#e5e5e5] disabled:text-[#6b6b6b]"
                 title="Send follow-up"
               >
                 <Send className="h-4 w-4" />

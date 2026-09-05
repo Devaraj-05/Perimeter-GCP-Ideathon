@@ -50,7 +50,7 @@ function Finding({ finding }: { finding: TurnFinding }) {
   const Icon = hostile ? ShieldAlert : ShieldCheck;
 
   return (
-    <div className="max-w-[90%] text-sm leading-relaxed text-[#2c2c24] sm:max-w-[82%]">
+    <div className="max-w-[90%] text-sm leading-relaxed text-[#1a1a1a] sm:max-w-[82%]">
       <p className="flex items-start gap-2">
         <Icon
           className={`mt-0.5 h-4 w-4 shrink-0 ${hostile ? 'text-rose-600' : 'text-emerald-600'}`}
@@ -60,18 +60,18 @@ function Finding({ finding }: { finding: TurnFinding }) {
 
       {finding.matches.map((m, i) => (
         <div key={i} className="mt-2 ml-6 border-l-2 border-rose-300 pl-3">
-          <p className="text-[11px] text-[#8a8a75]">
+          <p className="text-[11px] text-[#6b6b6b]">
             line {m.line} &middot; {describeSignal(m.signal)}
             {m.hidden && <span className="ml-1 text-amber-700">not visible when rendered</span>}
           </p>
-          <p className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[#2c2c24]">
+          <p className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[#1a1a1a]">
             {m.excerpt}
           </p>
         </div>
       ))}
 
       {findingFooter(finding) && (
-        <p className="mt-2.5 ml-6 text-[11px] text-[#5a5a40]">{findingFooter(finding)}</p>
+        <p className="mt-2.5 ml-6 text-[11px] text-[#1a1a1a]">{findingFooter(finding)}</p>
       )}
     </div>
   );
@@ -126,8 +126,8 @@ function TranscriptImpl({ turns }: Props) {
           if (!turn.finding) {
             return (
               <div key={turn.id || index} className="flex flex-col items-start">
-                <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#8a8a75]">
-                  <span className="font-medium text-[#5a5a40]">Perimeter</span>
+                <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#6b6b6b]">
+                  <span className="font-medium text-[#1a1a1a]">Perimeter</span>
                 </div>
                 <div className="max-w-[90%] sm:max-w-[82%]">
                   <UntrustedText text={turn.text} />
@@ -140,8 +140,8 @@ function TranscriptImpl({ turns }: Props) {
         if (turn.role === 'perimeter' && turn.finding) {
                   return (
                     <div key={turn.id || index} className="flex flex-col items-start">
-                      <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#8a8a75]">
-                        <span className="font-medium text-[#5a5a40]">Perimeter</span>
+                      <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#6b6b6b]">
+                        <span className="font-medium text-[#1a1a1a]">Perimeter</span>
                         <span>&bull;</span>
                         <span>deterministic scan, no model</span>
                       </div>
@@ -155,7 +155,7 @@ function TranscriptImpl({ turns }: Props) {
                     key={turn.id || index}
                     className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                   >
-                    <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#8a8a75]">
+                    <div className="flex items-center gap-2 mb-1 px-1 text-[11px] text-[#6b6b6b]">
                       <span className="font-medium">
                         {isUser ? 'You' : `Gemini (${turn.modelUsed || 'gemini-3.6-flash'})`}
                       </span>
@@ -177,8 +177,8 @@ function TranscriptImpl({ turns }: Props) {
                     <div
                       className={`relative group max-w-[90%] sm:max-w-[82%] rounded-2xl p-4 text-sm leading-relaxed ${
                         isUser
-                          ? 'bg-[#5a5a40] text-white rounded-br-xs shadow-xs'
-                          : 'bg-[#f8f6f0] text-[#2c2c24] rounded-bl-xs border border-[#e5e0d3]'
+                          ? 'bg-[#1a1a1a] text-white rounded-br-xs shadow-xs'
+                          : 'bg-[#fafafa] text-[#1a1a1a] rounded-bl-xs border border-[#e5e5e5]'
                       }`}
                     >
                       {isUser ? (
@@ -196,8 +196,8 @@ function TranscriptImpl({ turns }: Props) {
                         onClick={() => copyToClipboard(turn.text, turn.id)}
                         className={`absolute top-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ${
                           isUser
-                            ? 'text-stone-300 hover:bg-[#484833]'
-                            : 'text-[#8a8a75] hover:bg-[#e5e0d3]'
+                            ? 'text-stone-300 hover:bg-[#000000]'
+                            : 'text-[#6b6b6b] hover:bg-[#e5e5e5]'
                         }`}
                         title="Copy message text"
                       >

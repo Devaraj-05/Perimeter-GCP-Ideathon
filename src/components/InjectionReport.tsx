@@ -73,7 +73,7 @@ export function InjectionReport({
   const found = matches.length;
 
   return (
-    <div className="mt-3 rounded-xl border border-[#e5e0d3] bg-white p-4">
+    <div className="mt-3 rounded-xl border border-[#e5e5e5] bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
           {found > 0 ? (
@@ -85,7 +85,7 @@ export function InjectionReport({
           ) : (
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
           )}
-          <p className="text-sm font-medium text-[#2c2c24]">
+          <p className="text-sm font-medium text-[#1a1a1a]">
             {found > 0
               ? `${found} injection attempt${found === 1 ? '' : 's'} in ${title}`
               : `No injection attempts found in ${title}`}
@@ -101,7 +101,7 @@ export function InjectionReport({
       </div>
 
       {found === 0 && (
-        <p className="mt-2 text-[11px] leading-relaxed text-[#5a5a40]">
+        <p className="mt-2 text-[11px] leading-relaxed text-[#1a1a1a]">
           Every pattern was checked and none matched. Detection is not the boundary either way:
           this content was read by a model that holds no tools, so an instruction hidden in it
           would have had nothing to call.
@@ -109,7 +109,7 @@ export function InjectionReport({
       )}
 
       {found > 0 && (
-        <p className="mt-2 text-[11px] leading-relaxed text-[#5a5a40]">
+        <p className="mt-2 text-[11px] leading-relaxed text-[#1a1a1a]">
           Quoted exactly as it appears in the content. Nothing here was written by a model.
           These attempts reached a model that holds no tools, so none of them could act.
         </p>
@@ -119,15 +119,15 @@ export function InjectionReport({
         {matches.map((m, i) => (
           <div
             key={`${m.signal}-${m.start}-${i}`}
-            className="rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] p-3"
+            className="rounded-lg border border-[#e5e5e5] bg-[#fbf9f2] p-3"
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="rounded bg-[#2c2c24] px-1.5 py-0.5 font-mono text-[10px] text-white">
+              <span className="rounded bg-[#1a1a1a] px-1.5 py-0.5 font-mono text-[10px] text-white">
                 {m.signal}
               </span>
-              <span className="text-[11px] text-[#8a8a75]">line {m.line}</span>
+              <span className="text-[11px] text-[#6b6b6b]">line {m.line}</span>
               {m.containment && m.containment !== 'none' && (
-                <span className="rounded bg-[#f3efe6] px-1.5 py-0.5 text-[10px] text-[#5a5a40]">
+                <span className="rounded bg-[#f7f7f8] px-1.5 py-0.5 text-[10px] text-[#1a1a1a]">
                   {CONTAINMENT_COPY[m.containment] ?? m.containment}
                 </span>
               )}
@@ -139,7 +139,7 @@ export function InjectionReport({
               )}
             </div>
 
-            <p className="mt-1 text-[11px] text-[#5a5a40]">
+            <p className="mt-1 text-[11px] text-[#1a1a1a]">
               {SIGNAL_COPY[m.signal] ?? m.signal}
             </p>
 
@@ -147,8 +147,8 @@ export function InjectionReport({
               A plain text child. React escapes it, and nothing interprets it,
               so the quotation is byte-faithful to what the attacker wrote.
             */}
-            <div className="mt-2 overflow-x-auto rounded border border-[#e5e0d3] bg-white p-2">
-              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[#2c2c24]">
+            <div className="mt-2 overflow-x-auto rounded border border-[#e5e5e5] bg-white p-2">
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[#1a1a1a]">
                 {m.excerpt}
               </pre>
             </div>

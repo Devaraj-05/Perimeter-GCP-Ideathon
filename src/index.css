@@ -12,23 +12,28 @@
 @layer base {
   :root {
     /* Ground + surfaces */
-    --bg-natural: #fcfaf7;
-    --sidebar-natural: #f3efe6;
+    --bg-natural: #ffffff;
+    --sidebar-natural: #f7f7f8;
     --surface-card: #ffffff;
 
     /* Borders */
-    --border-natural: #e5e0d3;
-    --border-subtle: #f0ede6;
+    --border-natural: #e5e5e5;
+    --border-subtle: #f0f0f0;
 
     /* The one accent, locked across the whole app */
-    --accent-natural: #5a5a40;
-    --accent-hover: #484833;
-    --accent-light: #f3efe6;
+    --accent-natural: #1a1a1a;
+    --accent-hover: #000000;
+    --accent-light: #f7f7f8;
 
     /* Text ramp */
-    --text-primary: #2c2c24;
-    --text-body: #434338;
-    --text-muted: #8a8a75;
+    --text-primary: #1a1a1a;
+    --text-body: #3f3f3f;
+    /* Body copy on a marketing surface. The old palette used the accent for
+       this, so when the accent became near-black the paragraphs became as
+       heavy as the headings above them. A monochrome scheme has to earn its
+       hierarchy from value alone, which means it needs more steps, not fewer. */
+    --text-secondary: #525252;
+    --text-muted: #6b6b6b;
 
     /* Radius scale — one system: inputs/chips 8, cards 12, panels 16, pill full */
     --r-sm: 8px;
@@ -36,9 +41,9 @@
     --r-lg: 16px;
 
     /* Tinted shadows — never pure black on a warm ground */
-    --shadow-sm: 0 1px 2px rgba(58, 53, 40, 0.06);
-    --shadow-md: 0 6px 20px rgba(58, 53, 40, 0.10);
-    --shadow-lg: 0 24px 60px rgba(58, 53, 40, 0.16);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.10);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.16);
 
     /* Motion — one rhythm. Apple-ish ease-out for enters. */
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -51,8 +56,8 @@
        A history rail reads as one surface with a highlight moving through it.
        Two tokens rather than one so hover and selected can never be mistaken
        for each other: hover is a whisper, selected is a resting state. */
-    --row-hover: rgba(90, 90, 64, 0.06);
-    --row-active: #e7e2d5;
+    --row-hover: rgba(0, 0, 0, 0.06);
+    --row-active: #ececec;
   }
 
   html {
@@ -76,7 +81,7 @@
 
   /* Selection uses the accent, not the browser default blue */
   ::selection {
-    background: rgba(90, 90, 64, 0.18);
+    background: rgba(0, 0, 0, 0.18);
     color: var(--text-primary);
   }
 }
@@ -120,7 +125,7 @@
   textarea:focus,
   select:focus {
     outline: none;
-    box-shadow: 0 0 0 3px rgba(90, 90, 64, 0.14);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.14);
     border-color: var(--accent-natural);
   }
 
@@ -190,13 +195,13 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d8d2c2;
+  background: #d4d4d4;
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #8a8a75;
+  background: #6b6b6b;
   background-clip: padding-box;
 }
 

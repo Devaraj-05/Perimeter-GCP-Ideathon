@@ -328,10 +328,10 @@ export default function App() {
   // Loading screen during initial auth verification
   if (authLoading && !user) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#fcfaf7]">
+      <div className="flex h-screen w-screen items-center justify-center bg-[#ffffff]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#5a5a40] border-t-transparent" />
-          <p className="font-serif text-sm text-[#434338]">Connecting to ReflectAI Vault...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-3 border-[#1a1a1a] border-t-transparent" />
+          <p className="font-serif text-sm text-[#3f3f3f]">Connecting to ReflectAI Vault...</p>
         </div>
       </div>
     );
@@ -340,7 +340,7 @@ export default function App() {
   // Unauthenticated Landing Page
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#fcfaf7] flex flex-col font-sans">
+      <div className="min-h-screen bg-[#ffffff] flex flex-col font-sans">
         <Navbar
           user={null}
           entryCount={0}
@@ -373,7 +373,7 @@ export default function App() {
 
   // Authenticated Workspace
   return (
-    <div className="h-screen flex flex-col bg-[#fcfaf7] overflow-hidden font-sans">
+    <div className="h-screen flex flex-col bg-[#ffffff] overflow-hidden font-sans">
       <Navbar
         user={user}
         entryCount={entries.length}
@@ -420,12 +420,12 @@ export default function App() {
               onAttached={() => void loadGroundingArtifacts()}
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center p-6 text-[#8a8a75]">
+            <div className="flex-1 flex items-center justify-center p-6 text-[#6b6b6b]">
               <div className="text-center space-y-2">
-                <p className="font-serif text-lg text-[#2c2c24]">No active reflection</p>
+                <p className="font-serif text-lg text-[#1a1a1a]">No active reflection</p>
                 <button
                   onClick={handleNewEntry}
-                  className="rounded-lg bg-[#5a5a40] px-4 py-2 text-xs font-medium text-white hover:bg-[#484833] cursor-pointer"
+                  className="rounded-lg bg-[#1a1a1a] px-4 py-2 text-xs font-medium text-white hover:bg-[#000000] cursor-pointer"
                 >
                   Start New Reflection
                 </button>

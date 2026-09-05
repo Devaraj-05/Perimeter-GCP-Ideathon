@@ -56,20 +56,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="flex min-h-[calc(100dvh-4rem)] flex-col justify-between bg-[#fcfaf7] text-[#434338]">
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col justify-between bg-[#ffffff] text-[#3f3f3f]">
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pt-20">
         <div className="mx-auto max-w-3xl space-y-6 text-center">
-          <div className="anim-rise inline-flex items-center gap-2 rounded-full border border-[#e5e0d3] bg-[#f3efe6] px-3.5 py-1.5 text-xs font-medium text-[#5a5a40]">
+          <div className="anim-rise inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f8] px-3.5 py-1.5 text-xs font-medium text-[#1a1a1a]">
             <Shield className="h-3.5 w-3.5" />
             <span>Perimeter — a journal that reads your untrusted world safely</span>
           </div>
 
-          <h1 className="anim-rise anim-rise-1 font-serif text-[2.1rem] font-normal leading-[1.12] tracking-tight text-[#2c2c24] sm:text-5xl lg:text-[3.5rem]">
+          <h1 className="anim-rise anim-rise-1 font-serif text-[2.1rem] font-normal leading-[1.12] tracking-tight text-[#1a1a1a] sm:text-5xl lg:text-[3.5rem]">
             Journal with an AI that reads your world,
-            <span className="block text-[#5a5a40]">and can&rsquo;t be hijacked by it.</span>
+            <span className="block text-[#1a1a1a]">and can&rsquo;t be hijacked by it.</span>
           </h1>
 
-          <p className="anim-rise anim-rise-2 mx-auto max-w-xl text-base leading-relaxed text-[#5a5a40] sm:text-lg">
+          <p className="anim-rise anim-rise-2 mx-auto max-w-xl text-base leading-relaxed text-[#525252] sm:text-lg">
             Reflect with Gemini, bring in the articles and repositories on your mind, and watch every
             attempt to hijack the assistant get refused, live.
           </p>
@@ -79,7 +79,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               id="google-signin-btn"
               onClick={onSignIn}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-3 rounded-xl bg-[#5a5a40] px-6 py-3.5 text-sm font-medium text-white shadow-[0_6px_20px_rgba(58,53,40,0.16)] transition-colors hover:bg-[#484833] disabled:opacity-60 sm:text-base"
+              className="inline-flex items-center justify-center gap-3 rounded-xl bg-[#1a1a1a] px-6 py-3.5 text-sm font-medium text-white shadow-[0_6px_20px_rgba(0,0,0,0.16)] transition-colors hover:bg-[#000000] disabled:opacity-60 sm:text-base"
             >
               {isLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -103,7 +103,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <button
                 type="button"
                 onClick={() => setShowEmail(true)}
-                className="inline-flex items-center gap-2 text-xs text-[#5a5a40] underline underline-offset-4 hover:text-[#2c2c24]"
+                className="inline-flex items-center gap-2 text-xs text-[#1a1a1a] underline underline-offset-4 hover:text-[#1a1a1a]"
               >
                 <Mail className="h-3.5 w-3.5" />
                 Use an email address instead
@@ -111,10 +111,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             ) : (
               <form
                 onSubmit={submit}
-                className="w-full max-w-sm space-y-2.5 rounded-xl border border-[#e5e0d3] bg-white/70 p-4 text-left"
+                className="w-full max-w-sm space-y-2.5 rounded-xl border border-[#e5e5e5] bg-white/70 p-4 text-left"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-[#2c2c24]">
+                  <p className="text-xs font-medium text-[#1a1a1a]">
                     {mode === 'in' ? 'Sign in with email' : 'Create an account'}
                   </p>
                   <button
@@ -123,7 +123,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       setMode(mode === 'in' ? 'up' : 'in');
                       setLocalError(null);
                     }}
-                    className="cursor-pointer text-[11px] text-[#5a5a40] underline underline-offset-2 hover:text-[#2c2c24]"
+                    className="cursor-pointer text-[11px] text-[#1a1a1a] underline underline-offset-2 hover:text-[#1a1a1a]"
                   >
                     {mode === 'in' ? 'Need an account?' : 'Already have one?'}
                   </button>
@@ -135,7 +135,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:border-[#1a1a1a] focus:outline-hidden"
                 />
 
                 <input
@@ -144,7 +144,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                  className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:border-[#1a1a1a] focus:outline-hidden"
                 />
 
                 {mode === 'up' && (
@@ -154,14 +154,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     placeholder="Confirm password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
-                    className="w-full rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                    className="w-full rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:border-[#1a1a1a] focus:outline-hidden"
                   />
                 )}
 
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full cursor-pointer rounded-lg bg-[#5a5a40] px-4 py-2 text-sm font-medium text-white hover:bg-[#484833] disabled:opacity-60"
+                  className="w-full cursor-pointer rounded-lg bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-white hover:bg-[#000000] disabled:opacity-60"
                 >
                   {isLoading
                     ? 'Working…'
@@ -179,7 +179,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         if (!email.trim()) return setLocalError('Enter your email first.');
                         onPasswordReset(email);
                       }}
-                      className="cursor-pointer text-[11px] text-[#8a8a75] underline underline-offset-2 hover:text-[#5a5a40]"
+                      className="cursor-pointer text-[11px] text-[#6b6b6b] underline underline-offset-2 hover:text-[#1a1a1a]"
                     >
                       Forgot password
                     </button>
@@ -189,7 +189,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowEmail(false)}
-                    className="cursor-pointer text-[11px] text-[#8a8a75] underline underline-offset-2 hover:text-[#5a5a40]"
+                    className="cursor-pointer text-[11px] text-[#6b6b6b] underline underline-offset-2 hover:text-[#1a1a1a]"
                   >
                     Back to Google
                   </button>
@@ -222,7 +222,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             )}
 
-            <p className="flex items-center gap-1.5 text-xs text-[#8a8a75]">
+            <p className="flex items-center gap-1.5 text-xs text-[#6b6b6b]">
               <Lock className="h-3 w-3" />
               <span>
                 Google sign-in is federated and handles no credential here. If you use email,
@@ -246,12 +246,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <Verification />
       <Limits />
 
-      <footer className="border-t border-[#e5e0d3] bg-white py-10">
+      <footer className="border-t border-[#e5e5e5] bg-white py-10">
         <div className="mx-auto max-w-5xl px-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-sm">
-              <p className="font-serif text-base font-semibold text-[#2c2c24]">Perimeter</p>
-              <p className="mt-1.5 text-xs leading-relaxed text-[#8a8a75]">
+              <p className="font-serif text-base font-semibold text-[#1a1a1a]">Perimeter</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#6b6b6b]">
                 A journal that reads your untrusted world and shows you every attempt that world
                 makes to hijack its AI.
               </p>
@@ -262,7 +262,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 href="https://github.com/Devaraj-05/Perimeter-GCP-Ideathon"
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 text-[#5a5a40] underline-offset-4 hover:underline"
+                className="inline-flex items-center gap-1.5 text-[#1a1a1a] underline-offset-4 hover:underline"
               >
                 <Github className="h-3.5 w-3.5" />
                 Source
@@ -271,21 +271,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 href="https://github.com/Devaraj-05/Perimeter-GCP-Ideathon/blob/main/CONSTITUTION.md"
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 text-[#5a5a40] underline-offset-4 hover:underline"
+                className="inline-flex items-center gap-1.5 text-[#1a1a1a] underline-offset-4 hover:underline"
               >
                 <BookOpen className="h-3.5 w-3.5" />
                 Engineering constitution
               </a>
               <a
                 href="#how-it-works"
-                className="text-[#5a5a40] underline-offset-4 hover:underline"
+                className="text-[#1a1a1a] underline-offset-4 hover:underline"
               >
                 How it works
               </a>
             </div>
           </div>
 
-          <div className="mt-8 flex flex-col gap-2 border-t border-[#f0ede6] pt-6 text-[11px] text-[#8a8a75] sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-8 flex flex-col gap-2 border-t border-[#f0f0f0] pt-6 text-[11px] text-[#6b6b6b] sm:flex-row sm:items-center sm:justify-between">
             <span>Firebase Auth · Cloud Firestore · Gemini · Google Cloud Run</span>
             <span>Owner-bound data, server-verified, tamper-evident by design.</span>
           </div>

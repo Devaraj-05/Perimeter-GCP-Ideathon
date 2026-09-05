@@ -38,17 +38,17 @@ const STEPS = [
 ];
 
 export const HowItWorks: React.FC = () => (
-  <section id="how-it-works" className="border-t border-[#e5e0d3] bg-white py-20 sm:py-28">
+  <section id="how-it-works" className="border-t border-[#e5e5e5] bg-white py-20 sm:py-28">
     <div className="mx-auto max-w-5xl px-6">
       <Reveal>
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8a8a75]">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6b6b6b]">
           How it works
         </p>
-        <h2 className="mt-3 font-serif text-3xl font-normal leading-[1.15] tracking-[-0.02em] text-[#2c2c24] sm:text-4xl">
+        <h2 className="mt-3 font-serif text-3xl font-normal leading-[1.15] tracking-[-0.02em] text-[#1a1a1a] sm:text-4xl">
           The model that reads your world
           <br className="hidden sm:block" /> is not the model that can act on it.
         </h2>
-        <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#5a5a40]">
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#525252]">
           Most defences try to detect a malicious instruction. This one assumes detection will
           sometimes fail, and removes the capability instead.
         </p>
@@ -80,7 +80,7 @@ export const HowItWorks: React.FC = () => (
                 markerHeight="7"
                 orient="auto"
               >
-                <path d="M0 0 10 5 0 10z" fill="#8a8a75" />
+                <path d="M0 0 10 5 0 10z" fill="#6b6b6b" />
               </marker>
             </defs>
 
@@ -88,13 +88,13 @@ export const HowItWorks: React.FC = () => (
             <text x="102" y="60" textAnchor="middle" fill="#9f3f3f" fontSize="11" fontWeight="600">
               UNTRUSTED
             </text>
-            <text x="102" y="96" textAnchor="middle" fill="#2c2c24" fontSize="14" fontWeight="600">
+            <text x="102" y="96" textAnchor="middle" fill="#1a1a1a" fontSize="14" fontWeight="600">
               A document
             </text>
-            <text x="102" y="119" textAnchor="middle" fill="#8a8a75" fontSize="11">
+            <text x="102" y="119" textAnchor="middle" fill="#6b6b6b" fontSize="11">
               email, page, PDF,
             </text>
-            <text x="102" y="135" textAnchor="middle" fill="#8a8a75" fontSize="11">
+            <text x="102" y="135" textAnchor="middle" fill="#6b6b6b" fontSize="11">
               repository
             </text>
 
@@ -103,22 +103,22 @@ export const HowItWorks: React.FC = () => (
               y1="105"
               x2="252"
               y2="105"
-              stroke="#8a8a75"
+              stroke="#6b6b6b"
               strokeWidth="1.5"
               markerEnd="url(#pm-arrow)"
             />
 
-            <rect x="256" y="34" width="180" height="142" rx="14" fill="#f8f6f0" stroke="#e5e0d3" />
-            <text x="346" y="60" textAnchor="middle" fill="#8a8a75" fontSize="11" fontWeight="600">
+            <rect x="256" y="34" width="180" height="142" rx="14" fill="#fafafa" stroke="#e5e5e5" />
+            <text x="346" y="60" textAnchor="middle" fill="#6b6b6b" fontSize="11" fontWeight="600">
               READER
             </text>
-            <text x="346" y="96" textAnchor="middle" fill="#2c2c24" fontSize="14" fontWeight="600">
+            <text x="346" y="96" textAnchor="middle" fill="#1a1a1a" fontSize="14" fontWeight="600">
               Holds no tools
             </text>
-            <text x="346" y="122" textAnchor="middle" fill="#5a5a40" fontSize="11">
+            <text x="346" y="122" textAnchor="middle" fill="#1a1a1a" fontSize="11">
               reads the text,
             </text>
-            <text x="346" y="138" textAnchor="middle" fill="#5a5a40" fontSize="11">
+            <text x="346" y="138" textAnchor="middle" fill="#1a1a1a" fontSize="11">
               returns typed JSON
             </text>
 
@@ -127,25 +127,25 @@ export const HowItWorks: React.FC = () => (
               y1="105"
               x2="488"
               y2="105"
-              stroke="#8a8a75"
+              stroke="#6b6b6b"
               strokeWidth="1.5"
               markerEnd="url(#pm-arrow)"
             />
-            <text x="466" y="92" textAnchor="middle" fill="#8a8a75" fontSize="10">
+            <text x="466" y="92" textAnchor="middle" fill="#6b6b6b" fontSize="10">
               findings
             </text>
 
-            <rect x="492" y="34" width="180" height="142" rx="14" fill="#f3efe6" stroke="#d8d2c2" />
-            <text x="582" y="60" textAnchor="middle" fill="#5a5a40" fontSize="11" fontWeight="600">
+            <rect x="492" y="34" width="180" height="142" rx="14" fill="#f7f7f8" stroke="#d4d4d4" />
+            <text x="582" y="60" textAnchor="middle" fill="#1a1a1a" fontSize="11" fontWeight="600">
               PLANNER
             </text>
-            <text x="582" y="96" textAnchor="middle" fill="#2c2c24" fontSize="14" fontWeight="600">
+            <text x="582" y="96" textAnchor="middle" fill="#1a1a1a" fontSize="14" fontWeight="600">
               Holds the tools
             </text>
-            <text x="582" y="122" textAnchor="middle" fill="#5a5a40" fontSize="11">
+            <text x="582" y="122" textAnchor="middle" fill="#1a1a1a" fontSize="11">
               never sees the
             </text>
-            <text x="582" y="138" textAnchor="middle" fill="#5a5a40" fontSize="11">
+            <text x="582" y="138" textAnchor="middle" fill="#1a1a1a" fontSize="11">
               raw document
             </text>
 
@@ -154,22 +154,22 @@ export const HowItWorks: React.FC = () => (
               y1="105"
               x2="724"
               y2="105"
-              stroke="#8a8a75"
+              stroke="#6b6b6b"
               strokeWidth="1.5"
               markerEnd="url(#pm-arrow)"
             />
 
-            <rect x="728" y="34" width="168" height="142" rx="14" fill="#5a5a40" />
-            <text x="812" y="60" textAnchor="middle" fill="#cfcbb4" fontSize="11" fontWeight="600">
+            <rect x="728" y="34" width="168" height="142" rx="14" fill="#1a1a1a" />
+            <text x="812" y="60" textAnchor="middle" fill="#a3a3a3" fontSize="11" fontWeight="600">
               BROKER
             </text>
             <text x="812" y="96" textAnchor="middle" fill="#ffffff" fontSize="14" fontWeight="600">
               Allow or deny
             </text>
-            <text x="812" y="122" textAnchor="middle" fill="#cfcbb4" fontSize="11">
+            <text x="812" y="122" textAnchor="middle" fill="#a3a3a3" fontSize="11">
               logged before
             </text>
-            <text x="812" y="138" textAnchor="middle" fill="#cfcbb4" fontSize="11">
+            <text x="812" y="138" textAnchor="middle" fill="#a3a3a3" fontSize="11">
               anything runs
             </text>
 
@@ -193,12 +193,12 @@ export const HowItWorks: React.FC = () => (
         {STEPS.map((s, i) => (
           <Reveal key={s.n} delay={(i % 3) as 0 | 1 | 2}>
             <div className="flex gap-4">
-              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e5e0d3] bg-[#f8f6f0] text-xs font-semibold text-[#5a5a40]">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#e5e5e5] bg-[#fafafa] text-xs font-semibold text-[#1a1a1a]">
                 {s.n}
               </span>
               <div>
-                <h3 className="text-[15px] font-semibold text-[#2c2c24]">{s.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-[#5a5a40]">{s.body}</p>
+                <h3 className="text-[15px] font-semibold text-[#1a1a1a]">{s.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#525252]">{s.body}</p>
               </div>
             </div>
           </Reveal>

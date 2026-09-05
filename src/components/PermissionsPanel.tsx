@@ -184,18 +184,18 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center overflow-y-auto bg-black/30 p-4 backdrop-blur-sm sm:p-8">
-      <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
+      <div className="w-full max-w-2xl anim-panel rounded-2xl border border-[#e5e5e5] bg-[#ffffff] shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e5e5e5] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it can do</h2>
-            <p className="mt-1 max-w-lg text-xs text-[#8a8a75]">
+            <h2 className="font-serif text-xl font-semibold text-[#1a1a1a]">What it can do</h2>
+            <p className="mt-1 max-w-lg text-xs text-[#6b6b6b]">
               What the assistant is allowed to do on your behalf. Nothing runs without a
               permission you granted here — not even when the assistant asks for it.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="cursor-pointer rounded-lg p-2 text-[#8a8a75] transition-colors hover:bg-[#f3efe6] hover:text-[#2c2c24]"
+            className="cursor-pointer rounded-lg p-2 text-[#6b6b6b] transition-colors hover:bg-[#f7f7f8] hover:text-[#1a1a1a]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -213,7 +213,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
 
         <div className="space-y-3 p-5">
           {loading && caps.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#8a8a75]">
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#6b6b6b]">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           )}
@@ -224,18 +224,18 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
               <div
                 key={g.tool}
                 className={`rounded-xl border p-4 ${
-                  active ? 'border-emerald-200 bg-emerald-50/40' : 'border-[#e5e0d3] bg-white'
+                  active ? 'border-emerald-200 bg-emerald-50/40' : 'border-[#e5e5e5] bg-white'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <KeyRound
                     className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      active ? 'text-emerald-700' : 'text-[#8a8a75]'
+                      active ? 'text-emerald-700' : 'text-[#6b6b6b]'
                     }`}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-[#2c2c24]">{g.label}</span>
+                      <span className="text-sm font-medium text-[#1a1a1a]">{g.label}</span>
                       {g.risk === 'egress' && (
                         <span className="rounded border border-rose-300 bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-rose-900">
                           leaves the app
@@ -259,13 +259,13 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                           connected later is NOT covered, and the user should
                           learn that here rather than from a refusal. */}
                       {active && g.tool === 'summarise_source' && (
-                        <span className="rounded border border-[#e5e0d3] bg-[#f3efe6] px-1.5 py-0.5 text-[10px] text-[#5a5a40]">
+                        <span className="rounded border border-[#e5e5e5] bg-[#f7f7f8] px-1.5 py-0.5 text-[10px] text-[#1a1a1a]">
                           {scopeCount(g.tool)} source{scopeCount(g.tool) === 1 ? '' : 's'} · re-allow
                           after adding one
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-[#8a8a75]">{g.detail}</p>
+                    <p className="mt-1 text-xs text-[#6b6b6b]">{g.detail}</p>
                     <p className="mt-1 font-mono text-[10px] text-[#b5b0a0]">{g.tool}</p>
                   </div>
 
@@ -273,7 +273,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                     <button
                       onClick={() => void revoke(active.id)}
                       disabled={busy === active.id}
-                      className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-3 py-1.5 text-xs font-medium text-[#434338] transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
+                      className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e5e5e5] bg-white px-3 py-1.5 text-xs font-medium text-[#3f3f3f] transition-colors hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50"
                     >
                       {busy === active.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -286,7 +286,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                     <button
                       onClick={() => void grant(g.tool, g.resource)}
                       disabled={busy === g.tool}
-                      className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#484833] disabled:opacity-50"
+                      className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#000000] disabled:opacity-50"
                     >
                       {busy === g.tool ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -302,12 +302,12 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
           })}
 
           {live.length === 0 && !loading && (
-            <div className="rounded-xl border border-dashed border-[#e5e0d3] bg-white/60 p-6 text-center">
+            <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-6 text-center">
               <ShieldCheck className="mx-auto h-7 w-7 text-emerald-600" />
-              <p className="mt-2 font-serif text-sm text-[#2c2c24]">
+              <p className="mt-2 font-serif text-sm text-[#1a1a1a]">
                 The assistant currently has no permissions
               </p>
-              <p className="mx-auto mt-1 max-w-md text-xs text-[#8a8a75]">
+              <p className="mx-auto mt-1 max-w-md text-xs text-[#6b6b6b]">
                 It can still talk with you. It just cannot take any action until you allow one
                 above — and it will tell you what it could not do.
               </p>
@@ -327,7 +327,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
               model output (INV-9). It is never rendered as markup. */}
           {destinations.length > 0 && (
             <div className="pt-2">
-              <h3 className="mb-2 text-xs font-medium text-[#434338]">
+              <h3 className="mb-2 text-xs font-medium text-[#3f3f3f]">
                 Destinations and what was sent to them
               </h3>
               <div className="space-y-2">
@@ -336,21 +336,21 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                   return (
                     <div
                       key={d.id}
-                      className="rounded-xl border border-[#e5e0d3] bg-white p-3.5"
+                      className="rounded-xl border border-[#e5e5e5] bg-white p-3.5"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium text-[#2c2c24]">{d.label}</span>
-                        <span className="rounded border border-[#d8cfae] bg-[#fbf6e6] px-1.5 py-0.5 text-[10px] font-medium uppercase text-[#5a5a40]">
+                        <span className="text-sm font-medium text-[#1a1a1a]">{d.label}</span>
+                        <span className="rounded border border-[#d8cfae] bg-[#fbf6e6] px-1.5 py-0.5 text-[10px] font-medium uppercase text-[#1a1a1a]">
                           sandbox
                         </span>
-                        <span className="ml-auto text-[11px] text-[#8a8a75]">
+                        <span className="ml-auto text-[11px] text-[#6b6b6b]">
                           {rows.length === 0
                             ? 'nothing sent'
                             : `${rows.length} delivery${rows.length === 1 ? '' : 's'}`}
                         </span>
                       </div>
 
-                      <p className="mt-1 text-[11px] text-[#8a8a75]">
+                      <p className="mt-1 text-[11px] text-[#6b6b6b]">
                         Recorded against a sandbox. Nothing left the application.
                       </p>
 
@@ -359,10 +359,10 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                           {rows.map((r) => (
                             <div
                               key={r.id}
-                              className="rounded-lg border border-[#e5e0d3] bg-[#fcfaf7] p-2.5"
+                              className="rounded-lg border border-[#e5e5e5] bg-[#ffffff] p-2.5"
                             >
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#8a8a75]">
-                                <span className="font-medium text-[#434338]">
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6b6b6b]">
+                                <span className="font-medium text-[#3f3f3f]">
                                   {r.bodyLength} bytes
                                 </span>
                                 <span className="font-mono">
@@ -372,10 +372,10 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                                   {new Date(r.at).toLocaleString()}
                                 </span>
                               </div>
-                              <div className="mt-1.5 border-t border-[#e5e0d3] pt-1.5">
+                              <div className="mt-1.5 border-t border-[#e5e5e5] pt-1.5">
                                 <UntrustedText
                                   text={r.preview}
-                                  className="text-[11px] text-[#434338]"
+                                  className="text-[11px] text-[#3f3f3f]"
                                   placeholder="Empty body."
                                 />
                               </div>
@@ -392,16 +392,16 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
 
           {past.length > 0 && (
             <div className="pt-2">
-              <h3 className="mb-2 text-xs font-medium text-[#434338]">
+              <h3 className="mb-2 text-xs font-medium text-[#3f3f3f]">
                 Expired and revoked ({past.length})
               </h3>
               <div className="space-y-1.5">
                 {past.slice(0, 8).map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center gap-2 rounded-lg border border-[#e5e0d3] bg-white/60 px-3 py-2 text-[11px] text-[#8a8a75]"
+                    className="flex items-center gap-2 rounded-lg border border-[#e5e5e5] bg-white/60 px-3 py-2 text-[11px] text-[#6b6b6b]"
                   >
-                    <span className="font-mono text-[#434338]">{c.tool}</span>
+                    <span className="font-mono text-[#3f3f3f]">{c.tool}</span>
                     <span className="ml-auto">
                       {c.revokedAt ? 'revoked' : c.usedAt ? 'used' : 'expired'}
                     </span>

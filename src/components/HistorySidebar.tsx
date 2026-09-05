@@ -154,22 +154,22 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
   return (
     <aside
-      className={`border-r border-[#e5e0d3] bg-[#f3efe6] flex flex-col transition-all duration-300 z-10 ${
+      className={`border-r border-[#e5e5e5] bg-[#f7f7f8] flex flex-col transition-all duration-300 z-10 ${
         isOpen
           ? 'w-80 sm:w-96'
           : 'w-0 sm:w-16 overflow-hidden border-r-0 sm:border-r'
       }`}
     >
       {/* Sidebar Top Header */}
-      <div className="p-4 border-b border-[#e5e0d3] flex items-center justify-between bg-[#f3efe6]">
+      <div className="p-4 border-b border-[#e5e5e5] flex items-center justify-between bg-[#f7f7f8]">
         {isOpen ? (
           <div className="w-full space-y-3">
             <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 shrink-0 text-[#5a5a40]" />
-              <h2 className="font-serif text-sm font-semibold text-[#2c2c24]">
+              <BookOpen className="h-4 w-4 shrink-0 text-[#1a1a1a]" />
+              <h2 className="font-serif text-sm font-semibold text-[#1a1a1a]">
                 Journal History
               </h2>
-              <span className="rounded-full border border-[#e5e0d3] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5a5a40]">
+              <span className="rounded-full border border-[#e5e5e5] bg-white px-2 py-0.5 text-[10px] font-medium text-[#1a1a1a]">
                 {entries.length}
               </span>
             </div>
@@ -180,7 +180,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             <button
               id="sidebar-new-entry-btn"
               onClick={onNewEntry}
-              className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#484833]"
+              className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#1a1a1a] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#000000]"
               title="Start a new reflection"
             >
               <Plus className="h-4 w-4" />
@@ -191,14 +191,14 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           <div className="flex flex-col items-center gap-3 mx-auto">
             <button
               onClick={onToggle}
-              className="p-2 rounded-lg hover:bg-[#e5e0d3] text-[#5a5a40] transition-colors cursor-pointer"
+              className="p-2 rounded-lg hover:bg-[#e5e5e5] text-[#1a1a1a] transition-colors cursor-pointer"
               title="Expand history"
             >
               <BookOpen className="h-5 w-5" />
             </button>
             <button
               onClick={onNewEntry}
-              className="p-2 rounded-lg bg-[#5a5a40] text-white hover:bg-[#484833] transition-colors cursor-pointer"
+              className="p-2 rounded-lg bg-[#1a1a1a] text-white hover:bg-[#000000] transition-colors cursor-pointer"
               title="New reflection"
             >
               <Plus className="h-4 w-4" />
@@ -210,16 +210,16 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       {isOpen && (
         <>
           {/* Search and Filters */}
-          <div className="p-3 border-b border-[#e5e0d3] space-y-2 bg-[#f8f6f0]">
+          <div className="p-3 border-b border-[#e5e5e5] space-y-2 bg-[#fafafa]">
             <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[#8a8a75]" />
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[#6b6b6b]" />
               <input
                 id="search-history-input"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search reflections & insights..."
-                className="w-full rounded-lg border border-[#e5e0d3] bg-white pl-8 pr-3 py-1.5 text-xs text-[#2c2c24] placeholder:text-[#8a8a75] focus:border-[#5a5a40] focus:outline-hidden"
+                className="w-full rounded-lg border border-[#e5e5e5] bg-white pl-8 pr-3 py-1.5 text-xs text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:border-[#1a1a1a] focus:outline-hidden"
               />
             </div>
 
@@ -228,7 +228,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                 id="filter-category-select"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value as any)}
-                className="flex-1 rounded-md border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338] focus:outline-hidden"
+                className="flex-1 rounded-md border border-[#e5e5e5] bg-white px-2 py-1 text-[11px] text-[#3f3f3f] focus:outline-hidden"
               >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -243,8 +243,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           <div className="flex-1 space-y-4 overflow-y-auto px-2 py-2">
             {filteredEntries.length === 0 ? (
               <div className="px-4 py-10 text-center">
-                <p className="text-sm text-[#434338]">No reflections yet</p>
-                <p className="mt-1 text-xs text-[#8a8a75]">
+                <p className="text-sm text-[#3f3f3f]">No reflections yet</p>
+                <p className="mt-1 text-xs text-[#6b6b6b]">
                   Press + to start one, or change the filter.
                 </p>
               </div>
@@ -257,7 +257,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                         scrolling through. On the sidebar's own ground, not the
                         page's — a light material stacked on a light material
                         would smear. */}
-                    <div className="chrome-blur-sidebar sticky top-0 z-10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#8a8a75]">
+                    <div className="chrome-blur-sidebar sticky top-0 z-10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#6b6b6b]">
                       {groupTitle}
                     </div>
 
@@ -286,8 +286,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                              shouted louder than the conversation beside it. */
                           className={`group relative flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
                             isActive
-                              ? 'bg-[var(--row-active)] text-[#2c2c24]'
-                              : 'text-[#434338] hover:bg-[var(--row-hover)]'
+                              ? 'bg-[var(--row-active)] text-[#1a1a1a]'
+                              : 'text-[#3f3f3f] hover:bg-[var(--row-hover)]'
                           }`}
                         >
                           {renaming?.id === item.id ? (
@@ -306,7 +306,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                                 if (e.key === 'Escape') setRenaming(null);
                               }}
-                              className="min-w-0 flex-1 rounded border border-[#5a5a40] bg-white px-1.5 py-0.5 text-sm text-[#2c2c24] focus:outline-hidden"
+                              className="min-w-0 flex-1 rounded border border-[#1a1a1a] bg-white px-1.5 py-0.5 text-sm text-[#1a1a1a] focus:outline-hidden"
                             />
                           ) : (
                             /* One line. The date left this row entirely: the
@@ -333,7 +333,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                 e.stopPropagation();
                                 setMenu(isMenuOpen ? null : { id: item.id });
                               }}
-                              className={`cursor-pointer rounded p-1 text-[#8a8a75] transition-opacity hover:text-[#2c2c24] focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                              className={`cursor-pointer rounded p-1 text-[#6b6b6b] transition-opacity hover:text-[#1a1a1a] focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 ${
                                 isMenuOpen ? 'opacity-100' : 'opacity-0'
                               }`}
                               title="More"
@@ -348,7 +348,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                 role="menu"
                                 onClick={(e) => e.stopPropagation()}
                                 style={{ transformOrigin: 'top right' }}
-                                className="anim-panel absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-[#e5e0d3] bg-white py-1 shadow-[0_12px_32px_rgba(58,53,40,0.14)]"
+                                className="anim-panel absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-[#e5e5e5] bg-white py-1 shadow-[0_12px_32px_rgba(0,0,0,0.14)]"
                               >
                                 <button
                                   type="button"
@@ -357,7 +357,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                                     setRenaming({ id: item.id, value: item.title || '' });
                                     setMenu(null);
                                   }}
-                                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-[#434338] hover:bg-[#f3efe6]"
+                                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-[#3f3f3f] hover:bg-[#f7f7f8]"
                                 >
                                   <Pencil className="h-3 w-3" /> Rename
                                 </button>

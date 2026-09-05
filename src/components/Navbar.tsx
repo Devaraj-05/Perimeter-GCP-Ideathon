@@ -127,7 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   const ghost =
-    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm font-medium text-[#434338] transition-colors hover:bg-[#f3efe6] hover:text-[#2c2c24]';
+    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e5e5e5] bg-white px-3 py-2 text-sm font-medium text-[#3f3f3f] transition-colors hover:bg-[#f7f7f8] hover:text-[#1a1a1a]';
 
   return (
     <header className="chrome-blur sticky top-0 z-30">
@@ -138,10 +138,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             product name were two things competing with the actions. The badge
             now lives in the account menu, where a session property belongs. */}
         <div className="flex min-w-0 shrink items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#5a5a40] text-[#f3efe6]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#f7f7f8]">
             <Logo className="h-[19px] w-[19px]" />
           </span>
-          <span className="truncate font-serif text-lg font-semibold tracking-[-0.01em] text-[#2c2c24]">
+          <span className="truncate font-serif text-lg font-semibold tracking-[-0.01em] text-[#1a1a1a]">
             Perimeter
           </span>
         </div>
@@ -182,17 +182,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   aria-expanded={moreOpen}
                   className={ghost}
                 >
-                  <ScrollText className="h-4 w-4 text-[#5a5a40]" />
+                  <ScrollText className="h-4 w-4 text-[#1a1a1a]" />
                   Inspect
                   <ChevronDown
-                    className={`h-3.5 w-3.5 text-[#8a8a75] transition-transform ${moreOpen ? 'rotate-180' : ''}`}
+                    className={`h-3.5 w-3.5 text-[#6b6b6b] transition-transform ${moreOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
                 {moreOpen && (
                   <div
                     role="menu"
                     style={{ transformOrigin: 'top right' }}
-                    className="anim-panel absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white shadow-[0_24px_60px_rgba(58,53,40,0.16)]"
+                    className="anim-panel absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-[#e5e5e5] bg-white shadow-[0_24px_60px_rgba(0,0,0,0.16)]"
                   >
                     {inspect.map(({ id, label, Icon, onClick }, i) => (
                       <button
@@ -200,11 +200,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                         id={id}
                         role="menuitem"
                         onClick={run(onClick)}
-                        className={`flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[#434338] transition-colors hover:bg-[#f3efe6] ${
-                          i === 3 ? 'border-t border-[#f0ede6]' : ''
+                        className={`flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[#3f3f3f] transition-colors hover:bg-[#f7f7f8] ${
+                          i === 3 ? 'border-t border-[#f0f0f0]' : ''
                         }`}
                       >
-                        <Icon className="h-4 w-4 shrink-0 text-[#5a5a40]" />
+                        <Icon className="h-4 w-4 shrink-0 text-[#1a1a1a]" />
                         {label}
                       </button>
                     ))}
@@ -225,7 +225,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onNewEntry}
                 aria-label="New reflection"
-                className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#5a5a40] text-white"
+                className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#1a1a1a] text-white"
               >
                 <Plus className="h-5 w-5" />
               </button>
@@ -233,7 +233,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => setMobileOpen(true)}
                 aria-label="Open menu"
                 aria-expanded={mobileOpen}
-                className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#e5e0d3] bg-white text-[#434338]"
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#e5e5e5] bg-white text-[#3f3f3f]"
               >
                 <Menu className="h-5 w-5" />
               </button>
@@ -250,26 +250,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setMobileOpen(false)}
             className="anim-backdrop absolute inset-0 h-full w-full bg-black/30 backdrop-blur-sm"
           />
-          <div className="anim-panel absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto border-b border-[#e5e0d3] bg-[#fcfaf7] p-4 shadow-[0_24px_60px_rgba(58,53,40,0.16)]">
+          <div className="anim-panel absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto border-b border-[#e5e5e5] bg-[#ffffff] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.16)]">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 {user.photoURL ? (
                   <img
                     src={user.photoURL}
                     alt=""
-                    className="h-9 w-9 rounded-full border border-[#d8d2c2] object-cover"
+                    className="h-9 w-9 rounded-full border border-[#d4d4d4] object-cover"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e5e0d3] bg-[#f3efe6] text-xs font-medium text-[#5a5a40]">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e5e5e5] bg-[#f7f7f8] text-xs font-medium text-[#1a1a1a]">
                     {(user.displayName || user.email || 'U')[0].toUpperCase()}
                   </div>
                 )}
                 <div className="text-left text-sm">
-                  <div className="max-w-[180px] truncate font-medium text-[#2c2c24]">
+                  <div className="max-w-[180px] truncate font-medium text-[#1a1a1a]">
                     {user.displayName || user.email?.split('@')[0]}
                   </div>
-                  <div className="text-xs text-[#8a8a75]">
+                  <div className="text-xs text-[#6b6b6b]">
                     {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
                   </div>
                 </div>
@@ -277,7 +277,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={() => setMobileOpen(false)}
                 aria-label="Close menu"
-                className="flex h-11 w-11 items-center justify-center rounded-lg text-[#8a8a75] hover:bg-[#f3efe6]"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-[#6b6b6b] hover:bg-[#f7f7f8]"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -304,10 +304,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`flex min-h-[48px] w-full items-center gap-3 rounded-xl border px-4 text-left text-sm font-medium transition-colors ${
                     accent
                       ? 'border-rose-200 bg-rose-50 text-rose-800'
-                      : 'border-[#e5e0d3] bg-white text-[#434338]'
+                      : 'border-[#e5e5e5] bg-white text-[#3f3f3f]'
                   }`}
                 >
-                  <Icon className={`h-5 w-5 shrink-0 ${accent ? '' : 'text-[#5a5a40]'}`} />
+                  <Icon className={`h-5 w-5 shrink-0 ${accent ? '' : 'text-[#1a1a1a]'}`} />
                   {label}
                 </button>
               ))}
@@ -315,7 +315,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Destructive-adjacent action, separated from ordinary navigation. */}
               <button
                 onClick={run(onSignOut)}
-                className="mt-3 flex min-h-[48px] w-full items-center gap-3 rounded-xl border border-[#e5e0d3] bg-white px-4 text-left text-sm font-medium text-[#8a8a75]"
+                className="mt-3 flex min-h-[48px] w-full items-center gap-3 rounded-xl border border-[#e5e5e5] bg-white px-4 text-left text-sm font-medium text-[#6b6b6b]"
               >
                 <LogOut className="h-5 w-5 shrink-0" />
                 Sign out

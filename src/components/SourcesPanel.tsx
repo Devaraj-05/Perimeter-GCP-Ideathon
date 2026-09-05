@@ -146,12 +146,12 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 anim-backdrop flex items-start justify-center bg-black/30 backdrop-blur-sm p-4 sm:p-8 overflow-y-auto">
-      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e0d3] bg-[#fcfaf7] shadow-xl">
+      <div className="w-full max-w-3xl anim-panel rounded-2xl border border-[#e5e5e5] bg-[#ffffff] shadow-xl">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-[#e5e0d3] p-5">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e5e5e5] p-5">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-[#2c2c24]">What it reads</h2>
-            <p className="mt-1 text-xs text-[#8a8a75] max-w-lg">
+            <h2 className="font-serif text-xl font-semibold text-[#1a1a1a]">What it reads</h2>
+            <p className="mt-1 text-xs text-[#6b6b6b] max-w-lg">
               Connect public repositories so your reflections can draw on real project context.
               Everything fetched here is treated as <strong>untrusted</strong> and screened before
               Gemini is allowed to read it.
@@ -159,7 +159,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-[#8a8a75] hover:bg-[#f3efe6] hover:text-[#2c2c24] transition-colors cursor-pointer"
+            className="rounded-lg p-2 text-[#6b6b6b] hover:bg-[#f7f7f8] hover:text-[#1a1a1a] transition-colors cursor-pointer"
             title="Close"
           >
             <X className="h-4 w-4" />
@@ -168,20 +168,20 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
 
 
         {/* Add form */}
-        <form onSubmit={handleAdd} className="flex gap-2 border-b border-[#e5e0d3] p-5">
+        <form onSubmit={handleAdd} className="flex gap-2 border-b border-[#e5e5e5] p-5">
           <div className="relative flex-1">
-            <Github className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a8a75]" />
+            <Github className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b6b6b]" />
             <input
               value={newRef}
               onChange={(e) => setNewRef(e.target.value)}
               placeholder="owner/repository — e.g. facebook/react"
-              className="w-full rounded-lg border border-[#e5e0d3] bg-white py-2.5 pl-9 pr-3 text-sm text-[#2c2c24] placeholder:text-[#b5b0a0] focus:border-[#5a5a40] focus:outline-none"
+              className="w-full rounded-lg border border-[#e5e5e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1a1a1a] placeholder:text-[#b5b0a0] focus:border-[#1a1a1a] focus:outline-none"
             />
           </div>
           <button
             type="submit"
             disabled={adding || !newRef.trim()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#5a5a40] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#484833] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#000000] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Add
@@ -222,17 +222,17 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
         {/* Sources */}
         <div className="space-y-3 p-5">
           {loading && sources.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-[#8a8a75]">
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-[#6b6b6b]">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading sources…
             </div>
           )}
 
           {!loading && sources.length === 0 && (
-            <div className="rounded-xl border border-dashed border-[#e5e0d3] bg-white/60 p-8 text-center">
+            <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
               <Github className="mx-auto h-8 w-8 text-[#b5b0a0]" />
-              <p className="mt-3 font-serif text-base text-[#2c2c24]">No sources connected</p>
-              <p className="mx-auto mt-1 max-w-sm text-xs text-[#8a8a75]">
+              <p className="mt-3 font-serif text-base text-[#1a1a1a]">No sources connected</p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                 Add a public repository above. Its open issues become context your journal can
                 reason about — screened first, so a poisoned issue cannot hijack the assistant.
               </p>
@@ -247,17 +247,17 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
             return (
               <div
                 key={source.id}
-                className="rounded-xl border border-[#e5e0d3] bg-white overflow-hidden"
+                className="rounded-xl border border-[#e5e5e5] bg-white overflow-hidden"
               >
                 <div className="flex items-center gap-3 p-4">
-                  <Github className="h-5 w-5 shrink-0 text-[#5a5a40]" />
+                  <Github className="h-5 w-5 shrink-0 text-[#1a1a1a]" />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-[#2c2c24]">
+                      <span className="truncate text-sm font-medium text-[#1a1a1a]">
                         {source.ref}
                       </span>
-                      <span className="shrink-0 rounded border border-[#e5e0d3] bg-[#f3efe6] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#5a5a40]">
+                      <span className="shrink-0 rounded border border-[#e5e5e5] bg-[#f7f7f8] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#1a1a1a]">
                         untrusted
                       </span>
                       {hostileCount > 0 && (
@@ -269,7 +269,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
 
                     {/* A.5: last-run state is always visible. A background job
                         that fails silently is a defect. */}
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-[#8a8a75]">
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-[#6b6b6b]">
                       <span>
                         {own.length} artifact{own.length === 1 ? '' : 's'}
                       </span>
@@ -296,7 +296,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                     {own.length > 0 && (
                       <button
                         onClick={() => setExpanded(isExpanded ? null : source.id)}
-                        className="rounded-lg border border-[#e5e0d3] px-2.5 py-1.5 text-[11px] font-medium text-[#434338] hover:bg-[#f3efe6] transition-colors cursor-pointer"
+                        className="rounded-lg border border-[#e5e5e5] px-2.5 py-1.5 text-[11px] font-medium text-[#3f3f3f] hover:bg-[#f7f7f8] transition-colors cursor-pointer"
                       >
                         {isExpanded ? 'Hide' : 'Inspect'}
                       </button>
@@ -304,7 +304,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                     <button
                       onClick={() => void handleRun(source.id)}
                       disabled={runningId === source.id}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e0d3] px-2.5 py-1.5 text-[11px] font-medium text-[#434338] hover:bg-[#f3efe6] disabled:opacity-50 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] px-2.5 py-1.5 text-[11px] font-medium text-[#3f3f3f] hover:bg-[#f7f7f8] disabled:opacity-50 transition-colors cursor-pointer"
                       title="Fetch open issues now"
                     >
                       <RefreshCw
@@ -314,7 +314,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                     </button>
                     <button
                       onClick={() => void handleRemove(source.id)}
-                      className="rounded-lg p-1.5 text-[#8a8a75] hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+                      className="rounded-lg p-1.5 text-[#6b6b6b] hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
                       title="Remove source and its artifacts"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -324,7 +324,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
 
                 {/* Artifact detail */}
                 {isExpanded && (
-                  <div className="divide-y divide-[#f0ede6] border-t border-[#e5e0d3] bg-[#fcfaf7]">
+                  <div className="divide-y divide-[#f0f0f0] border-t border-[#e5e5e5] bg-[#ffffff]">
                     {own.map((a) => {
                       const { label, cls, Icon } = VERDICT_STYLE[a.verdict];
                       return (
@@ -338,7 +338,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                             </span>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
-                                <span className="truncate text-xs font-medium text-[#2c2c24]">
+                                <span className="truncate text-xs font-medium text-[#1a1a1a]">
                                   #{a.externalId} {a.title}
                                 </span>
                                 {a.url && (
@@ -346,13 +346,13 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                                     href={a.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="shrink-0 text-[#8a8a75] hover:text-[#5a5a40]"
+                                    className="shrink-0 text-[#6b6b6b] hover:text-[#1a1a1a]"
                                   >
                                     <ExternalLink className="h-3 w-3" />
                                   </a>
                                 )}
                               </div>
-                              <div className="mt-0.5 text-[11px] text-[#8a8a75]">
+                              <div className="mt-0.5 text-[11px] text-[#6b6b6b]">
                                 by {a.author} · threat {(a.threatScore * 100).toFixed(0)}%
                                 {a.classifierError && ' · classifier abstained'}
                               </div>
@@ -362,7 +362,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
                                   {a.signals.map((s) => (
                                     <span
                                       key={s}
-                                      className="rounded bg-[#f3efe6] px-1.5 py-0.5 font-mono text-[10px] text-[#5a5a40]"
+                                      className="rounded bg-[#f7f7f8] px-1.5 py-0.5 font-mono text-[10px] text-[#1a1a1a]"
                                     >
                                       {s}
                                     </span>

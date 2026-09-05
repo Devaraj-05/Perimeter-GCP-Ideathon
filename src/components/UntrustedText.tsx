@@ -59,7 +59,7 @@ function renderInline(raw: string, keyPrefix: string): React.ReactNode[] {
 
     if (token.startsWith('**')) {
       out.push(
-        <strong key={`${keyPrefix}-b${i}`} className="font-semibold text-[#2c2c24]">
+        <strong key={`${keyPrefix}-b${i}`} className="font-semibold text-[#1a1a1a]">
           {token.slice(2, -2)}
         </strong>,
       );
@@ -67,7 +67,7 @@ function renderInline(raw: string, keyPrefix: string): React.ReactNode[] {
       out.push(
         <code
           key={`${keyPrefix}-c${i}`}
-          className="rounded border border-[#e5e0d3] bg-[#f3efe6] px-1 py-0.5 font-mono text-[0.85em] text-[#5a5a40]"
+          className="rounded border border-[#e5e5e5] bg-[#f7f7f8] px-1 py-0.5 font-mono text-[0.85em] text-[#1a1a1a]"
         >
           {token.slice(1, -1)}
         </code>,
@@ -224,21 +224,21 @@ export const UntrustedText: React.FC<UntrustedTextProps> = ({
   const value = typeof text === 'string' ? text : '';
 
   if (!value.trim()) {
-    return <p className={`text-sm italic text-[#8a8a75] ${className}`}>{placeholder}</p>;
+    return <p className={`text-sm italic text-[#6b6b6b] ${className}`}>{placeholder}</p>;
   }
 
   const blocks = parseBlocks(value);
 
   return (
-    <div className={`space-y-2.5 text-sm leading-relaxed text-[#2c2c24] ${className}`}>
+    <div className={`space-y-2.5 text-sm leading-relaxed text-[#1a1a1a] ${className}`}>
       {blocks.map((b, i) => {
         if (b.kind === 'h') {
           return b.level === 2 ? (
-            <h3 key={i} className="mt-1 font-serif text-base font-semibold text-[#2c2c24]">
+            <h3 key={i} className="mt-1 font-serif text-base font-semibold text-[#1a1a1a]">
               {renderInline(b.text, `h${i}`)}
             </h3>
           ) : (
-            <h4 key={i} className="mt-1 text-sm font-semibold text-[#434338]">
+            <h4 key={i} className="mt-1 text-sm font-semibold text-[#3f3f3f]">
               {renderInline(b.text, `h${i}`)}
             </h4>
           );
@@ -252,15 +252,15 @@ export const UntrustedText: React.FC<UntrustedTextProps> = ({
           return (
             <div
               key={i}
-              className="overflow-hidden rounded-lg border border-[#e5e0d3] bg-[#fbf9f2]"
+              className="overflow-hidden rounded-lg border border-[#e5e5e5] bg-[#fbf9f2]"
             >
               {b.lang && (
-                <div className="border-b border-[#e5e0d3] px-3 py-1 font-mono text-[10px] text-[#8a8a75]">
+                <div className="border-b border-[#e5e5e5] px-3 py-1 font-mono text-[10px] text-[#6b6b6b]">
                   {b.lang}
                 </div>
               )}
               <pre className="overflow-x-auto px-3 py-2.5">
-                <code className="font-mono text-xs leading-relaxed text-[#2c2c24]">{b.text}</code>
+                <code className="font-mono text-xs leading-relaxed text-[#1a1a1a]">{b.text}</code>
               </pre>
             </div>
           );
@@ -271,7 +271,7 @@ export const UntrustedText: React.FC<UntrustedTextProps> = ({
             <ul key={i} className="ml-1 space-y-1.5">
               {b.items.map((item, j) => (
                 <li key={j} className="flex gap-2">
-                  <span aria-hidden="true" className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-[#8a8a75]" />
+                  <span aria-hidden="true" className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-[#6b6b6b]" />
                   <span className="min-w-0 break-words">{renderInline(item, `u${i}-${j}`)}</span>
                 </li>
               ))}
@@ -284,7 +284,7 @@ export const UntrustedText: React.FC<UntrustedTextProps> = ({
             <ol key={i} className="ml-1 space-y-1.5">
               {b.items.map((item, j) => (
                 <li key={j} className="flex gap-2.5">
-                  <span className="mt-px shrink-0 font-mono text-xs text-[#8a8a75]">{j + 1}.</span>
+                  <span className="mt-px shrink-0 font-mono text-xs text-[#6b6b6b]">{j + 1}.</span>
                   <span className="min-w-0 break-words">{renderInline(item, `o${i}-${j}`)}</span>
                 </li>
               ))}

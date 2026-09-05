@@ -26,7 +26,7 @@ import type { FindingTier } from '../types';
 const VERDICT_STYLE: Record<RepoVerdict, { icon: typeof ShieldAlert; className: string }> = {
   injection_found: { icon: ShieldAlert, className: 'text-rose-600' },
   review: { icon: ShieldQuestion, className: 'text-amber-600' },
-  discussion_only: { icon: ShieldCheck, className: 'text-[#5a5a40]' },
+  discussion_only: { icon: ShieldCheck, className: 'text-[#1a1a1a]' },
   clean: { icon: ShieldCheck, className: 'text-emerald-600' },
 };
 
@@ -81,24 +81,24 @@ function TierGroup({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full cursor-pointer items-baseline justify-between gap-2 rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] px-3 py-2 text-left hover:bg-[#f3efe6]"
+        className="flex w-full cursor-pointer items-baseline justify-between gap-2 rounded-lg border border-[#e5e5e5] bg-[#fbf9f2] px-3 py-2 text-left hover:bg-[#f7f7f8]"
       >
-        <span className="text-xs font-medium text-[#2c2c24]">
+        <span className="text-xs font-medium text-[#1a1a1a]">
           {copy.label}
-          <span className="ml-1.5 font-normal text-[#8a8a75]">
+          <span className="ml-1.5 font-normal text-[#6b6b6b]">
             {findings.length} file{findings.length === 1 ? '' : 's'}
           </span>
         </span>
-        <span className="shrink-0 text-[10px] text-[#8a8a75]">{open ? 'hide' : 'show'}</span>
+        <span className="shrink-0 text-[10px] text-[#6b6b6b]">{open ? 'hide' : 'show'}</span>
       </button>
 
       {open && (
         <>
-          <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-[#8a8a75]">{copy.hint}</p>
+          <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-[#6b6b6b]">{copy.hint}</p>
           <div className="mt-2 space-y-2">
             {findings.map((f) => (
               <div key={f.path}>
-                <p className="mb-1 px-1 font-mono text-[10px] text-[#8a8a75]">
+                <p className="mb-1 px-1 font-mono text-[10px] text-[#6b6b6b]">
                   {f.path} &middot; {ROLE_LABEL[f.role] ?? f.role}
                   {f.structureUnreliable && (
                     <span className="ml-1.5 text-amber-700">
@@ -134,18 +134,18 @@ export function RepoScanReport({
   const byTier = (tier: FindingTier) => result.findings.filter((f) => f.tier === tier);
 
   return (
-    <div className="mt-3 rounded-xl border border-[#e5e0d3] bg-white p-4">
+    <div className="mt-3 rounded-xl border border-[#e5e5e5] bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          <Github className="mt-0.5 h-4 w-4 shrink-0 text-[#5a5a40]" />
+          <Github className="mt-0.5 h-4 w-4 shrink-0 text-[#1a1a1a]" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[#2c2c24]">
+            <p className="text-sm font-medium text-[#1a1a1a]">
               {result.repo}
-              <span className="ml-1.5 text-[11px] font-normal text-[#8a8a75]">
+              <span className="ml-1.5 text-[11px] font-normal text-[#6b6b6b]">
                 {result.defaultBranch}
               </span>
             </p>
-            <p className="mt-0.5 text-[11px] text-[#5a5a40]">{result.coverage}</p>
+            <p className="mt-0.5 text-[11px] text-[#1a1a1a]">{result.coverage}</p>
           </div>
         </div>
         <button
@@ -167,12 +167,12 @@ export function RepoScanReport({
         </div>
       ))}
 
-      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] px-3 py-2.5">
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e5e5e5] bg-[#fbf9f2] px-3 py-2.5">
         <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.className}`} />
-        <p className="text-xs text-[#2c2c24]">{result.headline}</p>
+        <p className="text-xs text-[#1a1a1a]">{result.headline}</p>
       </div>
 
-      <p className="mt-2 text-[11px] leading-relaxed text-[#5a5a40]">
+      <p className="mt-2 text-[11px] leading-relaxed text-[#1a1a1a]">
         Nothing in this scan reached a model. Files were fetched, matched against fixed patterns,
         and discarded &mdash; so a repository full of instructions had nothing here to instruct. It
         also means this cannot tell you what the code does, only where the injections are.
