@@ -257,12 +257,14 @@ export function summariseCoverage(input: {
 export async function scanRepository(
   repoRef: string,
   onProgress?: (p: ScanProgress) => void,
+  /** The caller's uid, so a connected user's own credential reaches their private repos. */
+  uid?: string,
 ): Promise<RepoScanResult> {
   const startedAt = Date.now();
   resetGithubAuthWarning();
 
-  const defaultBranch = await fetchDefaultBranch(repoRef);
-  const tree = await fetchTree(repoRef, defaultBranch);
+  const defaultBranch = await fetchDefaultBranch(repoRef, uid);
+  const tree = await fetchTree(repoRef, defaultBranch, uid);
 
   const eligible = prioritise(tree.filter(isScannable));
 
@@ -277,7 +279,7 @@ export async function scanRepository(
   // download whole is exactly the case where reading the prioritised files and
   // stopping is the right behaviour.
   try {
-    const archive = await fetchTarball(repoRef, defaultBranch, MAX_ARCHIVE_BYTES);
+    const archive = await fetchTarball(repoRef, defaultBranch, MAX_ARCHIVE_BYTES, uid);
     const wanted = new Map(eligible.slice(0, MAX_FILES).map((e, i) => [e.path, i]));
     // The predicate matters: without it the byte cap is spent on lockfiles
     // and binaries this loop is about to skip, and the scan reports itself
@@ -373,7 +375,7 @@ export async function scanRepository(
     const results = await Promise.all(
       batch.map(async (entry, offset) => {
         try {
-          const text = await fetchBlobText(repoRef, entry.sha, MAX_BLOB_BYTES);
+          const text = await fetchBlobText(repoRef, entry.sha, MAX_BLOB_BYTES, uid);
           return { index: start + offset, entry, text, rateLimited: false };
         } catch (err) {
           const rateLimited =

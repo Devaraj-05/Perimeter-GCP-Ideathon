@@ -117,3 +117,21 @@ describe('only the callback is unauthenticated', () => {
     expect(ROUTES).not.toContain('${req.query');
   });
 });
+
+describe('INV-19 — every GitHub URL is on the allowlist', () => {
+  const GITHUB_SOURCE = strip(readFileSync(join(process.cwd(), 'server', 'github.ts'), 'utf8'));
+
+  it('github.ts declares an endpoint allowlist', () => {
+    expect(GITHUB_SOURCE).toContain('READ_ENDPOINTS');
+    expect(GITHUB_SOURCE).toContain('assertReadEndpoint');
+  });
+
+  it('every fetch in github.ts is a GET', () => {
+    // github.ts is the file that touches repositories. The one non-GET call
+    // in the application is the revocation in githubAuth.ts, which touches
+    // none. A repo-scoped token can write; this is what makes "we only read"
+    // checkable rather than asserted.
+    const methods = [...GITHUB_SOURCE.matchAll(/method:s*.([A-Z]+)./g)].map((m) => m[1]);
+    expect(methods).toEqual([]);
+  });
+});

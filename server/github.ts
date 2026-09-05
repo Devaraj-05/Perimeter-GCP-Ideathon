@@ -204,7 +204,15 @@ export function looksLikeGitHubToken(raw: unknown): boolean {
   return typeof raw === 'string' && TOKEN_PREFIXES.some((prefix) => raw.trim().startsWith(prefix));
 }
 
-function usableToken(): string | undefined {
+async function usableToken(uid?: string): Promise<string | undefined> {
+  // A connected user's own credential first: it reaches their private
+  // repositories, and the deployment-wide token does not.
+  if (uid && !tokenRejected) {
+    const { githubToken } = await import('./githubAuth');
+    const personal = await githubToken(uid);
+    if (personal) return personal;
+  }
+
   const raw = process.env.GITHUB_TOKEN?.trim();
   if (!raw) return undefined;
 
@@ -236,7 +244,35 @@ function minutesUntilReset(header: string | null): string {
   return ` It resets in about ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 }
 
-async function ghFetch(path: string, accept: string): Promise<Response> {
+/**
+ * The only GitHub paths this application will request — INV-19.
+ *
+ * A repo-scoped token can write. This list is what makes "we only read"
+ * checkable rather than asserted: a path matching none of these shapes is
+ * refused before the request is built, so adding a write call means editing
+ * this array in a commit a reviewer can see.
+ *
+ * The archive redirect to codeload.github.com is NOT checked here. Its path
+ * shape is /owner/name/legacy.tar.gz/refs/heads/branch and matches none of
+ * these; assertArchiveHost already validates that hop, and running this
+ * allowlist against it would refuse every archive download.
+ */
+const READ_ENDPOINTS: RegExp[] = [
+  /^\/repos\/[^/]+\/[^/]+$/,
+  /^\/repos\/[^/]+\/[^/]+\/git\/trees\/[^/?]+(\?recursive=1)?$/,
+  /^\/repos\/[^/]+\/[^/]+\/git\/blobs\/[0-9a-f]{7,64}$/,
+  /^\/repos\/[^/]+\/[^/]+\/issues\?[^/]*$/,
+  /^\/repos\/[^/]+\/[^/]+\/tarball\/[^/?]+$/,
+];
+
+function assertReadEndpoint(path: string): void {
+  if (!READ_ENDPOINTS.some((r) => r.test(path))) {
+    throw new IngestError('Refusing a GitHub endpoint that is not on the read allowlist.', false);
+  }
+}
+
+async function ghFetch(path: string, accept: string, uid?: string): Promise<Response> {
+  assertReadEndpoint(path);
   const url = `https://${ALLOWED_HOST}${path}`;
   assertAllowedHost(url);
 
@@ -245,7 +281,7 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'perimeter-ingest',
   };
-  const token = usableToken();
+  const token = await usableToken(uid);
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
@@ -299,7 +335,7 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     // would be a strictly worse outcome than never configuring one.
     if (token && /bad credentials|requires authentication/i.test(detail)) {
       markTokenRejected();
-      return ghFetch(path, accept);
+      return ghFetch(path, accept, uid);
     }
 
     if (!token) {
@@ -345,9 +381,9 @@ function ownerAndName(repoRef: string): [string, string] {
 }
 
 /** The branch a scan reads. Never taken from user input. */
-export async function fetchDefaultBranch(repoRef: string): Promise<string> {
+export async function fetchDefaultBranch(repoRef: string, uid?: string): Promise<string> {
   const [owner, name] = ownerAndName(repoRef);
-  const res = await ghFetch(`/repos/${owner}/${name}`, 'application/vnd.github+json');
+  const res = await ghFetch(`/repos/${owner}/${name}`, 'application/vnd.github+json', uid);
   const payload: any = await res.json().catch(() => null);
   const branch = payload?.default_branch;
   if (typeof branch !== 'string' || !branch) {
@@ -369,11 +405,16 @@ export interface GitHubTreeEntry {
  * GitHub truncates very large trees and says so. Reported rather than hidden:
  * a scan that silently read half a repository is the failure INV-18 names.
  */
-export async function fetchTree(repoRef: string, branch: string): Promise<GitHubTreeEntry[]> {
+export async function fetchTree(
+  repoRef: string,
+  branch: string,
+  uid?: string,
+): Promise<GitHubTreeEntry[]> {
   const [owner, name] = ownerAndName(repoRef);
   const res = await ghFetch(
     `/repos/${owner}/${name}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     'application/vnd.github+json',
+    uid,
   );
   const payload: any = await res.json().catch(() => null);
   if (!payload || !Array.isArray(payload.tree)) {
@@ -393,6 +434,7 @@ export async function fetchBlobText(
   repoRef: string,
   sha: string,
   maxBytes: number,
+  uid?: string,
 ): Promise<string> {
   const [owner, name] = ownerAndName(repoRef);
   if (!/^[0-9a-f]{7,64}$/i.test(String(sha))) {
@@ -402,6 +444,7 @@ export async function fetchBlobText(
   const res = await ghFetch(
     `/repos/${owner}/${name}/git/blobs/${sha}`,
     'application/vnd.github.raw',
+    uid,
   );
 
   const reader = res.body?.getReader();
@@ -468,9 +511,12 @@ export async function fetchTarball(
   repoRef: string,
   branch: string,
   maxBytes: number,
+  uid?: string,
 ): Promise<Buffer> {
   const [owner, name] = ownerAndName(repoRef);
-  let url = `https://${ALLOWED_HOST}/repos/${owner}/${name}/tarball/${encodeURIComponent(branch)}`;
+  const path = `/repos/${owner}/${name}/tarball/${encodeURIComponent(branch)}`;
+  assertReadEndpoint(path);
+  let url = `https://${ALLOWED_HOST}${path}`;
   assertAllowedHost(url);
 
   const headers: Record<string, string> = {
@@ -478,7 +524,7 @@ export async function fetchTarball(
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'perimeter-ingest',
   };
-  const token = usableToken();
+  const token = await usableToken(uid);
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response | null = null;

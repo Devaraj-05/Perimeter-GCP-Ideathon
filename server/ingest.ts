@@ -646,9 +646,15 @@ ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Res
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const result = await scanRepository(repo, (progress) => {
-      res.write(JSON.stringify({ type: 'progress', ...progress }) + '\n');
-    });
+    const result = await scanRepository(
+      repo,
+      (progress) => {
+        res.write(JSON.stringify({ type: 'progress', ...progress }) + '\n');
+      },
+      // A connected user's own credential reaches their private repositories;
+      // the deployment-wide token does not.
+      uid,
+    );
 
     await logEvent(uid, {
       kind: 'ingest',
