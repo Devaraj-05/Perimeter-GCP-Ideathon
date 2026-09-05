@@ -1,5 +1,6 @@
 import { ReflectionMode, CategoryType, TurnMessage } from '../types';
 import { authedHeaders, readError } from './apiClient';
+import { postChatStream, type ChatStreamHandlers } from './chatStream';
 
 export interface ReflectResponse {
   reply: string;
@@ -33,6 +34,19 @@ export async function requestReflection(params: {
   }
 
   return res.json();
+}
+
+/** The streaming twin. Same route, same shape, one extra flag. */
+export async function requestReflectionStream(
+  params: {
+    content: string;
+    mode: ReflectionMode;
+    category: CategoryType;
+    turns: TurnMessage[];
+  },
+  handlers: ChatStreamHandlers = {},
+) {
+  return postChatStream('/api/gemini/reflect', { ...params, stream: true }, handlers);
 }
 
 export async function requestSummary(params: {

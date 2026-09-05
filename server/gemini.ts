@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { getGeminiKey } from './secrets';
+import { consumeLadder } from './plannerStream';
 
 /**
  * Directive 6: Resilient Model Fallback Ladder + Error Recovery Matrix.
@@ -213,6 +214,43 @@ export const CREDENTIAL_FAULT_MESSAGE: Record<CredentialFault, string> = {
   key_restricted:
     'This Gemini API key is blocked by its own API restrictions. Allow the Generative Language API on the key, or use a key without that restriction.',
 };
+
+/**
+ * The streaming twin of generateContentWithFallback — Amendment L.
+ *
+ * Shares the ladder-commit rule with the Planner path (server/plannerStream.ts)
+ * rather than reimplementing it: once a token has been emitted, no other model
+ * may be tried, because a token written cannot be withdrawn.
+ */
+export async function generateContentStreamWithFallback(
+  contents: any,
+  onDelta: (text: string) => void,
+  options?: FallbackOptions,
+): Promise<{ text: string; modelUsed: string }> {
+  const ai = await getAI();
+  const { response, modelUsed } = await withDeadline(
+    consumeLadder({
+      models: MODEL_FALLBACK_LADDER,
+      onDelta,
+      isRecoverable,
+      onModelFailure: (model, err: any) =>
+        console.warn('[gemini] ' + model + ' stream failed: ' + err?.message),
+      open: async (model) =>
+        await ai.models.generateContentStream({
+          model,
+          contents,
+          config: {
+            systemInstruction: options?.systemInstruction,
+            temperature: options?.temperature ?? 0.7,
+            maxOutputTokens: options?.maxOutputTokens ?? 2048,
+          },
+        }),
+    }),
+    'ladder',
+    LADDER_BUDGET_MS,
+  );
+  return { text: response.text, modelUsed };
+}
 
 export interface FallbackOptions {
   systemInstruction?: string;

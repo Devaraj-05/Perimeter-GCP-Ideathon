@@ -196,3 +196,100 @@ describe('message ids do not collide', () => {
     expect(defaultNewId('model')).toContain('-model-');
   });
 });
+
+describe('streaming and stopping — Amendment L', () => {
+  it('reports text as it arrives, cumulatively', async () => {
+    const seen: string[] = [];
+    const { deps } = harness({
+      send: async (_t, onDelta) => {
+        onDelta('Hel');
+        onDelta('lo ');
+        onDelta('world');
+        return REPLY;
+      },
+      onStreamingText: (t) => seen.push(t),
+    });
+    await runChatTurn('hi', [], deps);
+    expect(seen).toEqual(['Hel', 'Hello ', 'Hello world']);
+  });
+
+  it('a non-streaming send simply never reports partial text', async () => {
+    const seen: string[] = [];
+    const { deps } = harness({ onStreamingText: (t) => seen.push(t) });
+    const r = await runChatTurn('hi', [], deps);
+    expect(seen).toEqual([]);
+    expect(r.turns.at(-1)!.text).toBe('a reply');
+  });
+
+  it('the saved turn is the final reply, not the accumulated deltas', async () => {
+    // The 'final' record is authoritative. A client that stitched deltas and
+    // saved those would persist something the server never agreed to.
+    const { deps } = harness({
+      send: async (_t, onDelta) => {
+        onDelta('partial');
+        return { ...REPLY, reply: 'the whole answer' };
+      },
+    });
+    const r = await runChatTurn('hi', [], deps);
+    expect(r.turns.at(-1)!.text).toBe('the whole answer');
+  });
+
+  it('stopping is not failing', async () => {
+    class Aborted extends Error {}
+    const { deps, log } = harness({
+      send: async (_t, onDelta) => {
+        onDelta('half an ans');
+        throw new Aborted();
+      },
+      isAbort: (e) => e instanceof Aborted,
+    });
+    const r = await runChatTurn('hi', [], deps);
+    expect(r.failure!.stage).toBe('aborted');
+    expect(log).not.toContain('save');
+    expect(log).not.toContain('clearInput');
+  });
+
+  it('an abort leaves the transcript exactly as it was', async () => {
+    class Aborted extends Error {}
+    const prior: TurnMessage[] = [{ id: 'a', role: 'user', text: 'earlier', timestamp: 'T' }];
+    const { deps } = harness({
+      send: async (_t, onDelta) => {
+        onDelta('discard me');
+        throw new Aborted();
+      },
+      isAbort: (e) => e instanceof Aborted,
+    });
+    const r = await runChatTurn('hi', prior, deps);
+    expect(r.turns).toEqual(prior);
+    expect(r.reply).toBeUndefined();
+  });
+
+  it('a partial reply is never persisted', async () => {
+    // INV-20. Whatever streamed, nothing reaches save unless the turn finished.
+    class Aborted extends Error {}
+    const saved: TurnMessage[][] = [];
+    const { deps } = harness({
+      send: async (_t, onDelta) => {
+        onDelta('leaked?');
+        throw new Aborted();
+      },
+      isAbort: (e) => e instanceof Aborted,
+      save: async (t) => {
+        saved.push(t);
+      },
+    });
+    await runChatTurn('hi', [], deps);
+    expect(saved).toEqual([]);
+  });
+
+  it('an error that is not an abort is still a send failure', async () => {
+    class Aborted extends Error {}
+    const { deps } = harness({
+      send: async () => {
+        throw new Error('503');
+      },
+      isAbort: (e) => e instanceof Aborted,
+    });
+    expect((await runChatTurn('hi', [], deps)).failure!.stage).toBe('send');
+  });
+});

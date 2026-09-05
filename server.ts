@@ -3,7 +3,10 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { requireAuth, AuthedRequest } from './server/auth';
-import { generateContentWithFallback } from './server/gemini';
+import {
+  generateContentWithFallback,
+  generateContentStreamWithFallback,
+} from './server/gemini';
 import { ingestRouter } from './server/ingest';
 import { agentRouter } from './server/agent';
 import { internalRouter } from './server/internal';
@@ -102,18 +105,64 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
     const systemInstruction = buildSystemInstruction(mode);
     const contents = buildConversationContents({ content, mode, category, turns });
 
-    const { text, modelUsed } = await generateContentWithFallback(contents, {
-      systemInstruction,
-      temperature: 0.75,
-    });
+    // Amendment L. Opt-in per request, so the non-streaming contract stays
+    // exactly as it was for every existing caller.
+    const wantsStream = data.stream === true;
 
-    return res.json({
-      reply: text,
-      modelUsed,
-      timestamp: new Date().toISOString(),
-    });
+    if (!wantsStream) {
+      const { text, modelUsed } = await generateContentWithFallback(contents, {
+        systemInstruction,
+        temperature: 0.75,
+      });
+
+      return res.json({
+        reply: text,
+        modelUsed,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    // INV-20. This path binds no tools and reads no external document, so the
+    // verdict is a constant — but it is still sent first and in the same
+    // shape, because a client that has to know which route answered it in
+    // order to parse the stream is a client that will eventually get it wrong.
+    res.write(JSON.stringify({ type: 'meta', turnTaint: false, contextIds: [] }) + '\n');
+
+    const { text, modelUsed } = await generateContentStreamWithFallback(
+      contents,
+      (delta) => {
+        res.write(JSON.stringify({ type: 'delta', text: delta }) + '\n');
+      },
+      { systemInstruction, temperature: 0.75 },
+    );
+
+    res.write(
+      JSON.stringify({
+        type: 'final',
+        reply: text,
+        modelUsed,
+        turnTaint: false,
+        threatEvents: [],
+        contextIds: [],
+        timestamp: new Date().toISOString(),
+      }) + '\n',
+    );
+    return res.end();
   } catch (error: any) {
     console.error('Error in /api/gemini/reflect:', error);
+    if (res.headersSent) {
+      res.write(
+        JSON.stringify({
+          type: 'error',
+          error: 'The assistant stopped partway through this reply. Nothing was saved.',
+        }) + '\n',
+      );
+      return res.end();
+    }
     return res.status(500).json({
       error: error?.message || 'Failed to generate reflection. Please try again.',
     });

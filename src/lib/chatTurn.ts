@@ -25,7 +25,7 @@ import type { ThreatEvent } from './agentApi';
  * no network, no Firestore and no DOM.
  */
 
-export type TurnStage = 'send' | 'save';
+export type TurnStage = 'send' | 'save' | 'aborted';
 
 export interface TurnFailure {
   stage: TurnStage;
@@ -43,14 +43,27 @@ export interface ChatReply {
 }
 
 export interface RunTurnDeps {
-  /** The model call. Receives the transcript including the new user turn. */
-  send: (turns: TurnMessage[]) => Promise<ChatReply>;
+  /**
+   * The model call. Receives the transcript including the new user turn, and
+   * an onDelta it may call as text arrives. A non-streaming send simply never
+   * calls it.
+   */
+  send: (turns: TurnMessage[], onDelta: (text: string) => void) => Promise<ChatReply>;
   /** The write. Receives the transcript including the model's reply. */
   save: (turns: TurnMessage[]) => Promise<void>;
   /** Paints the transcript optimistically. Called on every change. */
   onTurns: (turns: TurnMessage[]) => void;
   /** Empties the composer. Callable ONLY after a confirmed write. */
   clearInput: () => void;
+  /**
+   * Called with the reply so far, as it streams. The turn it describes is
+   * PROVISIONAL: it is not persisted and must be rendered as unfinished until
+   * this function has stopped being called and runChatTurn has resolved
+   * (Amendment L, INV-20).
+   */
+  onStreamingText?: (textSoFar: string) => void;
+  /** True when the user pressed stop. Distinguished from a failure. */
+  isAbort?: (err: unknown) => boolean;
   /** Injectable so tests are deterministic. */
   newId?: (role: 'user' | 'model') => string;
   nowIso?: () => string;
@@ -101,10 +114,24 @@ export async function runChatTurn(
   const withUser = [...priorTurns, userTurn];
   deps.onTurns(withUser);
 
+  let streamed = '';
   let reply: ChatReply;
   try {
-    reply = await deps.send(withUser);
+    reply = await deps.send(withUser, (delta) => {
+      streamed += delta;
+      deps.onStreamingText?.(streamed);
+    });
   } catch (err) {
+    if (deps.isAbort?.(err)) {
+      // Stopping is not failing. The transcript returns to where it was, the
+      // text stays in the composer, and nothing is written — a half-answer the
+      // user cut off is not something to persist or apologise for.
+      deps.onTurns(priorTurns);
+      return {
+        turns: priorTurns,
+        failure: { stage: 'aborted', message: 'Stopped.', replyAtRisk: false },
+      };
+    }
     // The send failed, so the user turn never happened. Roll it back and leave
     // the text in the composer — that IS the retry affordance Directive 6
     // asks for, and it costs the user nothing to press send again.

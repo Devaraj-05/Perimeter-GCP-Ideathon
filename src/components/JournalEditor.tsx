@@ -30,6 +30,7 @@ import {
   Mail,
   Plus,
   Globe,
+  Square,
 } from 'lucide-react';
 import {
   JournalEntry,
@@ -39,7 +40,6 @@ import {
   Match,
 } from '../types';
 import { requestSummary } from '../lib/geminiApi';
-import { reflectGrounded } from '../lib/reflect';
 import {
   resolveLocation,
   ingestNote,
@@ -60,6 +60,8 @@ import { InjectionReport } from './InjectionReport';
 import { RepoScanReport } from './RepoScanReport';
 import { UntrustedText } from './UntrustedText';
 import { runChatTurn, type TurnStage } from '../lib/chatTurn';
+import { reflectGroundedStream } from '../lib/reflect';
+import { ChatAborted } from '../lib/chatStream';
 
 interface JournalEditorProps {
   entry: JournalEntry;
@@ -220,6 +222,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   // persisted, and the banner has to say so rather than offering a retry
   // that would re-ask the model.
   const [failureStage, setFailureStage] = useState<TurnStage | null>(null);
+  // Amendment L. The reply as it arrives. Provisional: not persisted, and
+  // rendered as unfinished until the stream completes.
+  const [streamingText, setStreamingText] = useState('');
+  // Set from the stream's first record, BEFORE any text is painted (INV-20).
+  const [streamingTaint, setStreamingTaint] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -612,6 +620,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     try {
       const userPrompt = content.trim();
 
+      // Amendment L. One controller per turn, held so the stop button can
+      // abort this stream and only this one.
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setStreamingText('');
+      setStreamingTaint(false);
+
+
       // Same orchestration as a follow-up, and for the same reason: this
       // handler carried the identical pair of defects — colliding Date.now()
       // ids, and one try/catch over both the model call and the write, so a
@@ -621,14 +637,21 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         userPrompt || 'Please reflect on my journal context.',
         turns,
         {
-          send: (nextTurns) =>
-            reflectGrounded({
-              content: userPrompt,
-              mode,
-              category,
-              turns: nextTurns,
-              groundingArtifactIds,
-            }),
+          send: (nextTurns, onDelta) =>
+            reflectGroundedStream(
+              {
+                content: userPrompt,
+                mode,
+                category,
+                turns: nextTurns,
+                groundingArtifactIds,
+              },
+              {
+                onMeta: (m) => setStreamingTaint(m.turnTaint),
+                onDelta,
+                signal: controller.signal,
+              },
+            ),
           save: async (nextTurns) => {
             const updated = { ...getCurrentEntryObject(), turns: nextTurns };
             await onSave(updated);
@@ -641,6 +664,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             setHasUnsavedChanges(true);
           },
           clearInput: () => setHasUnsavedChanges(false),
+          onStreamingText: setStreamingText,
+          isAbort: (err) => err instanceof ChatAborted,
         },
       );
 
@@ -658,6 +683,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setErrorMsg(err?.message || 'Gemini reflection request failed.');
       setFailureStage('send');
     } finally {
+      abortRef.current = null;
+      setStreamingText('');
       setIsGenerating(false);
     }
   };
@@ -813,6 +840,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     setIsGenerating(true);
 
     try {
+      // Amendment L. One controller per turn, held so the stop button can
+      // abort this stream and only this one.
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setStreamingText('');
+      setStreamingTaint(false);
+
       // Web search — links in YOUR message only.
       //
       // extractUrls is deliberately never applied to a turn, an artifact or an
@@ -827,20 +861,28 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       // model call and the write, so a failed save was reported as a failed
       // send. Both were breaches of Directive 6.
       const outcome = await runChatTurn(followUpText, turns, {
-        send: (nextTurns) =>
-          reflectGrounded({
-            content: content.trim(),
-            mode,
-            category,
-            turns: nextTurns,
-            // Newly fetched ids are merged here rather than waiting for the
-            // parent to refresh: the prop would still be stale on this turn.
-            groundingArtifactIds: [
-              ...groundingArtifactIds,
-              ...extraGrounding,
-              ...(override?.grounding ?? []),
-            ],
-          }),
+        send: (nextTurns, onDelta) =>
+          reflectGroundedStream(
+            {
+              content: content.trim(),
+              mode,
+              category,
+              turns: nextTurns,
+              // Newly fetched ids are merged here rather than waiting for the
+              // parent to refresh: the prop would still be stale on this turn.
+              groundingArtifactIds: [
+                ...groundingArtifactIds,
+                ...extraGrounding,
+                ...(override?.grounding ?? []),
+              ],
+            },
+            {
+              // INV-20: this fires before the first delta, always.
+              onMeta: (m) => setStreamingTaint(m.turnTaint),
+              onDelta,
+              signal: controller.signal,
+            },
+          ),
         save: async (nextTurns) => {
           await onSave({ ...getCurrentEntryObject(), turns: nextTurns });
         },
@@ -854,6 +896,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           if (!override) setFollowUpInput('');
           setHasUnsavedChanges(false);
         },
+        onStreamingText: setStreamingText,
+        isAbort: (err) => err instanceof ChatAborted,
       });
 
       if (outcome.reply) {
@@ -871,6 +915,8 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setErrorMsg(err?.message || 'Could not prepare that message.');
       setFailureStage('send');
     } finally {
+      abortRef.current = null;
+      setStreamingText('');
       setIsGenerating(false);
     }
   };
@@ -1395,11 +1441,50 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 );
               })}
 
+              {/* The provisional turn — Amendment L, INV-20.
+                  The taint verdict is set from the stream's FIRST record, so
+                  when this paints with a warning the warning is already
+                  correct: no attacker-influenceable character has been shown
+                  before it. The dashed border and the "not saved yet" line
+                  say plainly that this is unfinished and unpersisted. */}
               {isGenerating && (
                 <div className="flex items-start gap-3">
-                  <div className="rounded-2xl rounded-bl-xs bg-[#f8f6f0] border border-[#e5e0d3] p-4 text-sm text-[#5a5a40] flex items-center gap-2.5">
-                    <RefreshCw className="h-4 w-4 animate-spin text-[#5a5a40]" />
-                    <span>Gemini is considering your reflection...</span>
+                  <div
+                    className={`min-w-0 max-w-full rounded-2xl rounded-bl-xs border border-dashed p-4 text-sm ${
+                      streamingTaint
+                        ? 'border-amber-400 bg-amber-50/60'
+                        : 'border-[#d8d2c4] bg-[#f8f6f0]'
+                    }`}
+                  >
+                    {streamingTaint && (
+                      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800">
+                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                        External content is in this turn. Anything below may reflect it.
+                      </p>
+                    )}
+
+                    {streamingText ? (
+                      <UntrustedText text={streamingText} />
+                    ) : (
+                      <span className="flex items-center gap-2.5 text-[#5a5a40]">
+                        <RefreshCw className="h-4 w-4 animate-spin text-[#5a5a40]" />
+                        Thinking...
+                      </span>
+                    )}
+
+                    <div className="mt-2.5 flex items-center gap-3 border-t border-[#e5e0d3] pt-2">
+                      <span className="text-[10px] text-[#8a8a75]">
+                        {streamingText ? 'Still writing - not saved yet' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => abortRef.current?.abort()}
+                        className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-[#d8d2c4] px-2 py-0.5 text-[10px] text-[#5a5a40] hover:bg-[#efeade]"
+                      >
+                        <Square className="h-2.5 w-2.5 fill-current" />
+                        Stop
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

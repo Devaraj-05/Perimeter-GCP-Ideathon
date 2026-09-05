@@ -1,6 +1,7 @@
-import { requestReflection } from './geminiApi';
-import { agentChat, ThreatEvent } from './agentApi';
+import { requestReflection, requestReflectionStream } from './geminiApi';
+import { agentChat, agentChatStream, ThreatEvent } from './agentApi';
 import { ReflectionMode, CategoryType, TurnMessage } from '../types';
+import type { ChatStreamHandlers } from './chatStream';
 
 /**
  * Chooses how a journal reflection is answered.
@@ -85,6 +86,52 @@ export async function reflectGrounded(params: ReflectParams): Promise<ReflectRes
   }
 
   const r = await agentChat(composeMessage(params), ids);
+  return {
+    reply: r.reply,
+    modelUsed: r.modelUsed,
+    timestamp: new Date().toISOString(),
+    grounded: true,
+    threatEvents: r.threatEvents ?? [],
+    turnTaint: r.turnTaint === true,
+  };
+}
+
+
+/**
+ * The streaming twin of reflectGrounded — Amendment L.
+ *
+ * Routes exactly as the non-streaming one does, for the same reason: with no
+ * connected sources there is no external content and no tools are bound, so
+ * the plain reflection endpoint answers. The caller cannot tell the two apart
+ * beyond the threatEvents being empty, which was already true.
+ */
+export async function reflectGroundedStream(
+  params: ReflectParams,
+  handlers: ChatStreamHandlers = {},
+): Promise<ReflectResult> {
+  const ids = params.groundingArtifactIds;
+
+  if (!ids || ids.length === 0) {
+    const r = await requestReflectionStream(
+      {
+        content: params.content,
+        mode: params.mode,
+        category: params.category,
+        turns: params.turns,
+      },
+      handlers,
+    );
+    return {
+      reply: r.reply,
+      modelUsed: r.modelUsed,
+      timestamp: r.timestamp ?? new Date().toISOString(),
+      grounded: false,
+      threatEvents: [],
+      turnTaint: false,
+    };
+  }
+
+  const r = await agentChatStream(composeMessage(params), ids, handlers);
   return {
     reply: r.reply,
     modelUsed: r.modelUsed,

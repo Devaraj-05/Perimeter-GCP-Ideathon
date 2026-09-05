@@ -8,7 +8,10 @@ import {
   readQuotaError,
   readCredentialError,
   CREDENTIAL_FAULT_MESSAGE,
+  withDeadline,
+  LADDER_BUDGET_MS,
 } from './gemini';
+import { consumeLadder, type StreamChunk } from './plannerStream';
 // Type-only: assemble.ts is superseded and must not be reachable at runtime.
 import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
@@ -180,6 +183,41 @@ async function generateWithPlanner(
   throw lastError || new Error('All Gemini fallback models exhausted.');
 }
 
+/**
+ * The streaming twin of generateWithPlanner — Amendment L.
+ *
+ * The ladder walk lives in server/plannerStream.ts so the commit rule can be
+ * tested against fake streams. The request is still rebuilt per attempt, so
+ * assertNoUntrusted (INV-1) runs before every dispatch exactly as above.
+ *
+ * The whole climb is bounded by LADDER_BUDGET_MS (section 8). Per-attempt
+ * deadlines are not applied here: a stream that has begun is producing output
+ * the user is reading, and cutting it off at a fixed per-model interval would
+ * truncate a working answer mid-sentence.
+ */
+async function generateWithPlannerStream(
+  ai: GoogleGenAI,
+  context: Parameters<typeof buildPlannerRequest>[1],
+  onDelta: (text: string) => void,
+) {
+  return withDeadline(
+    consumeLadder({
+      models: MODEL_FALLBACK_LADDER,
+      onDelta,
+      isRecoverable,
+      isFatal: (err) => err instanceof PerimeterViolation,
+      onModelFailure: (model, err: any) =>
+        console.warn('[planner] ' + model + ' stream failed: ' + err?.message),
+      open: async (model) =>
+        (await ai.models.generateContentStream(
+          buildPlannerRequest(model, context),
+        )) as AsyncIterable<StreamChunk>,
+    }),
+    'ladder',
+    LADDER_BUDGET_MS,
+  );
+}
+
 agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
@@ -188,6 +226,9 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     const artifactIds = Array.isArray(data.artifactIds)
       ? data.artifactIds.filter((v: unknown): v is string => typeof v === 'string')
       : [];
+    // Amendment L. Opt-in per request so the non-streaming contract the red
+    // team console and the corpus runner depend on stays exactly as it was.
+    const wantsStream = data.stream === true;
 
     if (!message) {
       return res.status(400).json({ error: 'A message is required.' });
@@ -307,7 +348,24 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     const contextIds = [...history.map((h) => h.id), ...observations.map((o) => o.segmentId)];
     const turnTaint = computePlannerTaint(plannerContext);
 
-    const { response, modelUsed } = await generateWithPlanner(await getAI(), plannerContext);
+    // INV-20. The verdict is known here, BEFORE generation begins, so it goes
+    // out as the first record on the wire. No token of model text may precede
+    // it: the warning has to be on screen before the first character that an
+    // attacker could have influenced is painted.
+    if (wantsStream) {
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      // Proxies that buffer would defeat the entire point.
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+      res.write(JSON.stringify({ type: 'meta', turnTaint, contextIds }) + '\n');
+    }
+
+    const { response, modelUsed } = wantsStream
+      ? await generateWithPlannerStream(await getAI(), plannerContext, (text) => {
+          res.write(JSON.stringify({ type: 'delta', text }) + '\n');
+        })
+      : await generateWithPlanner(await getAI(), plannerContext);
 
     const calls = extractProposals(response as any).map((p) => ({ name: p.tool, args: p.args }));
     const threatEvents: any[] = [];
@@ -421,14 +479,43 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       });
     }
 
-    res.json({
+    const payload = {
       reply: response.text || '',
       modelUsed,
       turnTaint,
       threatEvents,
       contextIds: contextIds,
-    });
+    };
+
+    if (wantsStream) {
+      // Tool decisions land at the end because the broker sees only the
+      // COMPLETE response — no tool is proposed, authorised or executed on a
+      // partial one (INV-4, INV-6). The reply is repeated in full so a client
+      // that missed a delta can reconcile rather than guess.
+      res.write(JSON.stringify({ type: 'final', ...payload }) + '\n');
+      return res.end();
+    }
+
+    res.json(payload);
   } catch (err: any) {
+    // Amendment L. Once the stream has begun, res.status().json() is a no-op
+    // and the client would hang on a response that never ends. The failure
+    // has to arrive as a record, and the connection has to be closed.
+    if (res.headersSent) {
+      const fault = readCredentialError(err);
+      const quota = readQuotaError(err);
+      const message = fault
+        ? CREDENTIAL_FAULT_MESSAGE[fault]
+        : quota
+          ? quota.daily
+            ? 'The Gemini free-tier daily quota for this project is spent (20 requests per model). It resets tomorrow, or enable billing on the API to lift it.'
+            : `Gemini is rate-limiting this project. Try again in about ${quota.retryAfterSeconds ?? 60} seconds.`
+          : 'The assistant stopped partway through this reply. Nothing was saved.';
+      console.error('[agent] chat stream failed:', err?.name, err?.message);
+      res.write(JSON.stringify({ type: 'error', error: message }) + '\n');
+      return res.end();
+    }
+
     // A spent quota is not "unavailable, please retry". Google says which
     // wall was hit and when it lifts, and the difference between waiting a
     // minute and enabling billing is the whole of the user's next action.

@@ -1,4 +1,5 @@
 import { apiFetch } from './apiClient';
+import { postChatStream, type ChatStreamHandlers } from './chatStream';
 
 export type Decision = 'ALLOW' | 'CONFIRM' | 'DENY';
 export type CallStatus = 'pending' | 'executed' | 'denied' | 'rejected' | 'expired' | 'failed';
@@ -58,6 +59,31 @@ export async function agentChat(message: string, artifactIds: string[]): Promise
     method: 'POST',
     body: JSON.stringify({ message, artifactIds }),
   });
+}
+
+/**
+ * The streaming chat call — Amendment L, INV-20.
+ *
+ * The wire parsing lives in ./chatStream so both streaming routes share one
+ * implementation of the verdict-before-text rule.
+ */
+export async function agentChatStream(
+  message: string,
+  artifactIds: string[],
+  handlers: ChatStreamHandlers = {},
+): Promise<ChatResponse> {
+  const r = await postChatStream(
+    '/api/agent/chat',
+    { message, artifactIds, stream: true },
+    handlers,
+  );
+  return {
+    reply: r.reply,
+    modelUsed: r.modelUsed,
+    turnTaint: r.turnTaint,
+    threatEvents: r.threatEvents,
+    contextIds: r.contextIds,
+  };
 }
 
 export async function listToolCalls(): Promise<ToolCall[]> {
