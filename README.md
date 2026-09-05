@@ -151,7 +151,7 @@ Files an agent is *built* to obey — `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, 
 `.github/**` — are read and reported first, because a poisoned one of those is the highest-value
 target in any repository and must not sit below forty pattern hits from source code.
 
-Eighteen numbered invariants (`CONSTITUTION.md` §2 and its amendments) are referenced by the code,
+Nineteen numbered invariants (`CONSTITUTION.md` §2 and its amendments) are referenced by the code,
 the tests, and the log. Each is mechanically checkable.
 
 #### Prior art — the pattern is not ours
