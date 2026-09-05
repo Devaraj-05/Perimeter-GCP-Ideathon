@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, AuthedRequest } from './auth';
 import { logEvent } from './perimeterLog';
+import { resolveRepoName } from './github';
+import { decide, isResolvableName } from './repoResolve';
 import {
   beginConnect,
   consumeState,
@@ -88,6 +90,45 @@ githubRouter.post('/disconnect', requireAuth, async (req: AuthedRequest, res: Re
  * here, not a fetch call. Every string in that page is a literal, and nothing
  * from the query string reaches it.
  */
+/**
+ * Resolves a bare repository NAME to the repositories it could mean.
+ *
+ * A GET, behind requireAuth, that reads and returns nothing but public
+ * metadata plus whatever the caller's own credential can already see. It
+ * answers with a list, never with an action: scanning is a separate call the
+ * user makes after choosing.
+ */
+githubRouter.get('/resolve', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const name = typeof req.query.name === 'string' ? req.query.name.trim() : '';
+  if (!isResolvableName(name)) {
+    return res.status(400).json({ error: 'That is not a repository name.' });
+  }
+
+  try {
+    const resolution = decide(await resolveRepoName(name, req.uid!));
+    // Only what the UI needs to ask a clear question. No urls, no owner
+    // objects, nothing that would become a link (INV-9).
+    if (resolution.kind === 'one') {
+      return res.json({ kind: 'one', ref: resolution.candidate.ref });
+    }
+    if (resolution.kind === 'many') {
+      return res.json({
+        kind: 'many',
+        candidates: resolution.candidates.map((c) => ({
+          ref: c.ref,
+          description: c.description,
+          private: c.private,
+          stars: c.stars,
+        })),
+      });
+    }
+    return res.json({ kind: 'none' });
+  } catch (err: any) {
+    console.error('[github] resolve failed:', err?.message);
+    res.status(502).json({ error: 'Could not look that repository up right now.' });
+  }
+});
+
 githubRouter.get('/callback', async (req: Request, res: Response) => {
   const page = (title: string, message: string) =>
     `<!doctype html><meta charset="utf-8"><title>${title}</title>` +

@@ -64,3 +64,70 @@ export function findingFooter(finding: TurnFinding): string {
 export function isSilentFinding(finding: TurnFinding): boolean {
   return finding.matches.length === 0 && finding.verdict === 'clean';
 }
+
+
+/**
+ * What Perimeter says about a repository scan. Deterministic, like everything
+ * else in this file — the scan runs no model (INV-18) and neither does its
+ * description.
+ */
+export interface RepoSummaryInput {
+  repo: string;
+  defaultBranch: string;
+  coverage: string;
+  headline: string;
+  findings: { path: string; tier: string; role: string }[];
+  warnings?: string[];
+}
+
+const TIER_WORD: Record<string, string> = {
+  live: 'in a file an agent obeys',
+  active: 'reads as an instruction to an AI',
+  quoted: 'quoted or demonstrated',
+  weak: 'weak signals only',
+};
+
+export function repoSummaryText(r: RepoSummaryInput): string {
+  const lines: string[] = [];
+  lines.push(`**${r.repo}** (${r.defaultBranch}) — ${r.coverage}`);
+  lines.push('');
+  lines.push(r.headline);
+
+  const byTier: Record<string, string[]> = {};
+  for (const f of r.findings) (byTier[f.tier] ??= []).push(f.path);
+
+  for (const tier of ['live', 'active', 'quoted', 'weak']) {
+    const paths = byTier[tier];
+    if (!paths || paths.length === 0) continue;
+    lines.push('');
+    lines.push(`**${paths.length} ${TIER_WORD[tier] ?? tier}**`);
+    // Named, capped, and the cap is stated rather than silently truncating.
+    for (const p of paths.slice(0, 8)) lines.push(`- ${p}`);
+    if (paths.length > 8) lines.push(`- ...and ${paths.length - 8} more`);
+  }
+
+  for (const w of r.warnings ?? []) {
+    lines.push('');
+    lines.push(w);
+  }
+
+  lines.push('');
+  lines.push(
+    'Nothing in this scan reached a model. Files were fetched, matched against fixed patterns and discarded — so this reports where the injections are, and cannot tell you what the code does.',
+  );
+  return lines.join('\n');
+}
+
+/** When a bare name matched nothing, or several things. */
+export function repoAmbiguousText(name: string, candidates: { ref: string }[]): string {
+  if (candidates.length === 0) {
+    return `I could not find a repository called **${name}** that I can reach. If it is private and belongs to someone else, I will not be able to see it. Give me the full \`owner/name\` and I will try that.`;
+  }
+  const list = candidates.map((c) => `- ${c.ref}`).join('\n');
+  return `**${name}** matches more than one repository. Which did you mean?\n\n${list}\n\nReply with the full \`owner/name\`.`;
+}
+
+/** When we have a repository but no idea what is wanted with it. */
+export function repoNoIntentText(ref: string): string {
+  return `I can see **${ref}**. How can I help with it? I can scan it for prompt injections — that is the one thing I do without a model, and it reports where injections are rather than what the code does.`;
+}

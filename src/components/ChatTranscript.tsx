@@ -119,7 +119,25 @@ function TranscriptImpl({ turns }: Props) {
                 // reader has to be able to tell which sentences the
                 // application stands behind and which a model produced from
                 // attacker-influenced input.
-                if (turn.role === 'perimeter' && turn.finding) {
+                // A Perimeter message may carry a structured finding, or prose we
+        // composed (a repository summary, a clarifying question). Both are
+        // ours; neither is model output.
+        if (turn.role === 'perimeter') {
+          if (!turn.finding) {
+            return (
+              <div key={turn.id || index} className="flex flex-col items-start">
+                <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#8a8a75]">
+                  <span className="font-medium text-[#5a5a40]">Perimeter</span>
+                </div>
+                <div className="max-w-[90%] sm:max-w-[82%]">
+                  <UntrustedText text={turn.text} />
+                </div>
+              </div>
+            );
+          }
+        }
+
+        if (turn.role === 'perimeter' && turn.finding) {
                   return (
                     <div key={turn.id || index} className="flex flex-col items-start">
                       <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#8a8a75]">

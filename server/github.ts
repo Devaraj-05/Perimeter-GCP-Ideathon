@@ -6,6 +6,8 @@
  * a URL, and the URL is constructed here from validated components.
  */
 
+import { isResolvableName, toCandidate, type RepoCandidate } from './repoResolve';
+
 /** The ONLY host this application will ever fetch from. */
 const ALLOWED_HOST = 'api.github.com';
 
@@ -263,6 +265,12 @@ const READ_ENDPOINTS: RegExp[] = [
   /^\/repos\/[^/]+\/[^/]+\/git\/blobs\/[0-9a-f]{7,64}$/,
   /^\/repos\/[^/]+\/[^/]+\/issues\?[^/]*$/,
   /^\/repos\/[^/]+\/[^/]+\/tarball\/[^/?]+$/,
+  // Resolving a bare repository name the user typed. A GET, read-only, and
+  // the query is encoded by the caller — no user input reaches the host.
+  /^\/search\/repositories\?[^/]*$/,
+  // The signed-in user's own repositories, for resolving a bare name they
+  // own before searching the whole of GitHub for it.
+  /^\/user\/repos\?[^/]*$/,
 ];
 
 function assertReadEndpoint(path: string): void {
@@ -381,6 +389,70 @@ function ownerAndName(repoRef: string): [string, string] {
 }
 
 /** The branch a scan reads. Never taken from user input. */
+/**
+ * Resolves a bare repository NAME the user typed to the repositories it could
+ * mean — Amendment J.
+ *
+ * Two sources, in order of confidence: the repositories the signed-in user can
+ * reach, then a public search. Only exact name matches count; a search for
+ * "api" returning "api-gateway" is not what the user asked for, and offering
+ * it invites them to scan the wrong thing.
+ *
+ * Private repositories belonging to other people never appear, and there is no
+ * rule here that makes that true. It follows from the credential: GitHub
+ * returns what the user's own token can see, and a token that cannot see a
+ * repository cannot be shown one. Access is not something this code decides.
+ */
+export async function resolveRepoName(name: string, uid?: string): Promise<RepoCandidate[]> {
+  if (!isResolvableName(name)) return [];
+  const wanted = name.toLowerCase();
+  const found = new Map<string, RepoCandidate>();
+
+  // The user's own reachable repositories first. Requires a connection; a
+  // failure here is not fatal, it just means we fall through to search.
+  if (uid) {
+    try {
+      const res = await ghFetch('/user/repos?per_page=100&sort=updated', 'application/vnd.github+json', uid);
+      if (res.ok) {
+        const rows: unknown = await res.json().catch(() => null);
+        if (Array.isArray(rows)) {
+          for (const row of rows) {
+            const c = toCandidate(row, null);
+            if (c && c.ref.split('/')[1].toLowerCase() === wanted) {
+              // Reachable by this user's own credential, so it is "theirs" for
+              // disambiguation purposes whether they own it or collaborate.
+              found.set(c.ref, { ...c, owned: true });
+            }
+          }
+        }
+      }
+    } catch {
+      // Fall through to search.
+    }
+  }
+
+  // Then the public index. encodeURIComponent, and isResolvableName has
+  // already refused anything that could add a qualifier of its own.
+  try {
+    const q = encodeURIComponent(`${name} in:name`);
+    const res = await ghFetch(`/search/repositories?q=${q}&per_page=20`, 'application/vnd.github+json', uid);
+    if (res.ok) {
+      const payload: any = await res.json().catch(() => null);
+      const rows = Array.isArray(payload?.items) ? payload.items : [];
+      for (const row of rows) {
+        const c = toCandidate(row, null);
+        if (c && c.ref.split('/')[1].toLowerCase() === wanted && !found.has(c.ref)) {
+          found.set(c.ref, c);
+        }
+      }
+    }
+  } catch {
+    // An unresolvable name is a question for the user, not an error.
+  }
+
+  return [...found.values()];
+}
+
 export async function fetchDefaultBranch(repoRef: string, uid?: string): Promise<string> {
   const [owner, name] = ownerAndName(repoRef);
   const res = await ghFetch(`/repos/${owner}/${name}`, 'application/vnd.github+json', uid);

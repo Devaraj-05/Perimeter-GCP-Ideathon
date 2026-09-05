@@ -332,6 +332,23 @@ export async function githubConnectUrl(): Promise<string> {
   return url;
 }
 
+export type RepoResolution =
+  | { kind: 'one'; ref: string }
+  | { kind: 'many'; candidates: { ref: string; description: string | null; private: boolean; stars: number }[] }
+  | { kind: 'none' };
+
+/**
+ * Resolves a bare repository name the user typed.
+ *
+ * Returns a list or a refusal, never an action. A private repository belonging
+ * to somebody else simply is not in the answer: GitHub returns what the user's
+ * own credential can see, and there is no separate visibility rule here that
+ * could be got wrong.
+ */
+export async function resolveRepoName(name: string): Promise<RepoResolution> {
+  return apiFetch<RepoResolution>(`/api/github/resolve?name=${encodeURIComponent(name)}`);
+}
+
 export async function githubDisconnect(): Promise<void> {
   await apiFetch<{ ok: boolean }>('/api/github/disconnect', { method: 'POST' });
 }

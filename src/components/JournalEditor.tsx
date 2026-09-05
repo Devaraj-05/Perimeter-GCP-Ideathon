@@ -51,15 +51,21 @@ import {
   scanRepository,
   githubStatus,
   githubConnectUrl,
-  type RepoScanResult,
+  githubDisconnect,
+  resolveRepoName,
   type ScanProgress,
 } from '../lib/perimeterApi';
 import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
-import { RepoScanReport } from './RepoScanReport';
 import { UntrustedText } from './UntrustedText';
 import { ChatTranscript } from './ChatTranscript';
 import { runChatTurn, type TurnStage } from '../lib/chatTurn';
+import { findRepoReference } from '../lib/repoRef';
+import {
+  repoSummaryText,
+  repoAmbiguousText,
+  repoNoIntentText,
+} from '../lib/findingMessage';
 import { isSilentFinding } from '../lib/findingMessage';
 import { reflectGroundedStream } from '../lib/reflect';
 import { ChatAborted } from '../lib/chatStream';
@@ -202,9 +208,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   >([]);
   /** A repository scan in flight, and its result. Never persisted (INV-18). */
   const [repoPrompt, setRepoPrompt] = useState(false);
-  const [repoRef, setRepoRef] = useState('');
   const [repoScanning, setRepoScanning] = useState(false);
-  const [repoResult, setRepoResult] = useState<RepoScanResult | null>(null);
   /** Live scan progress. A tree walk takes tens of seconds; a bare spinner reads as a hang. */
   const [repoProgress, setRepoProgress] = useState<ScanProgress | null>(null);
   /** Whether this account has a GitHub connection — Amendment J. */
@@ -713,41 +717,17 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   };
 
   /**
-   * Scans a public repository for prompt injections — INV-18.
-   *
-   * The question is fixed and there is only one of it: where are the
-   * injections. No model runs anywhere in this path, on the server or here,
-   * which is what makes the scanner itself impossible to hijack. It is also
-   * why there is deliberately no "summarise this repo" button beside it.
+   * Disconnects it. Revokes at GitHub, not merely locally — a classic OAuth
+   * App token does not expire, so deleting our copy while the grant is still
+   * live would leave the user believing they had disconnected.
    */
-  const runRepoScan = async () => {
-    // Accepts a full URL or just owner/name. Plain string work rather than
-    // regexes: the server validates the result with isValidRepoRef anyway,
-    // and this is the tidying, not the check.
-    let ref = repoRef.trim();
-    for (const prefix of ['https://github.com/', 'http://github.com/', 'github.com/']) {
-      if (ref.toLowerCase().startsWith(prefix)) {
-        ref = ref.slice(prefix.length);
-        break;
-      }
-    }
-    if (ref.toLowerCase().endsWith('.git')) ref = ref.slice(0, -4);
-    while (ref.endsWith('/')) ref = ref.slice(0, -1);
-
-    if (!ref || repoScanning) return;
-
-    setRepoScanning(true);
+  const disconnectGithub = async () => {
     setAttachError(null);
-    setRepoResult(null);
-    setRepoProgress(null);
     try {
-      setRepoResult(await scanRepository(ref, setRepoProgress));
-      setRepoPrompt(false);
+      await githubDisconnect();
+      setGithubConnected(false);
     } catch (err: any) {
-      setAttachError(err?.message ?? 'That repository could not be scanned.');
-    } finally {
-      setRepoScanning(false);
-      setRepoProgress(null);
+      setAttachError(err?.message ?? 'Could not disconnect GitHub.');
     }
   };
 
@@ -816,6 +796,89 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * path — the same Reader, the same broker, the same log — rather than a
    * second route to the Planner that could drift out of step with this one.
    */
+  /**
+   * Appends a message Perimeter wrote. Deterministic prose, never model output.
+   */
+  const sayPerimeter = (text: string) => {
+    setTurns((prev) => {
+      const next = [
+        ...prev,
+        {
+          id: `msg-perimeter-${crypto.randomUUID?.() ?? Date.now()}`,
+          role: 'perimeter' as const,
+          text,
+          timestamp: new Date().toISOString(),
+        },
+      ];
+      void onSave({ ...getCurrentEntryObject(), turns: next }).catch(() => undefined);
+      return next;
+    });
+  };
+
+  /**
+   * A repository named in the USER's message — never in a turn, an artifact or
+   * a scan result. The rule extractUrls follows, for the same reason: a
+   * repository name inside untrusted content is an attacker choosing what our
+   * server fetches.
+   *
+   * Returns true when it handled the message, so the model is not also asked.
+   */
+  const handleRepoMention = async (text: string): Promise<boolean> => {
+    const found = findRepoReference(text);
+    if (!found) return false;
+
+    let ref: string | null = null;
+
+    if (found.kind === 'explicit') {
+      ref = found.ref;
+    } else {
+      // A bare name is a candidate, not an answer.
+      try {
+        const r = await resolveRepoName(found.name);
+        if (r.kind === 'one') ref = r.ref;
+        else {
+          sayPerimeter(repoAmbiguousText(found.name, r.kind === 'many' ? r.candidates : []));
+          return true;
+        }
+      } catch {
+        sayPerimeter(repoAmbiguousText(found.name, []));
+        return true;
+      }
+    }
+
+    // We know WHICH repository. Whether the user wants it scanned is a
+    // separate question, and guessing is how a tool does something nobody
+    // asked for.
+    if (!/(scan|inject|injection|injections|check|audit|security)/i.test(text)) {
+      sayPerimeter(repoNoIntentText(ref));
+      return true;
+    }
+
+    setRepoScanning(true);
+    setRepoProgress(null);
+    try {
+      const result = await scanRepository(ref, setRepoProgress);
+      sayPerimeter(
+        repoSummaryText({
+          repo: result.repo,
+          defaultBranch: result.defaultBranch,
+          coverage: result.coverage,
+          headline: result.headline,
+          findings: result.findings.map((f) => ({ path: f.path, tier: f.tier, role: f.role })),
+          warnings: result.warnings,
+        }),
+      );
+    } catch (err: any) {
+      sayPerimeter(
+        `I could not scan **${ref}**. ${err?.message ?? 'The repository could not be read.'}`,
+      );
+    } finally {
+      setRepoScanning(false);
+      setRepoProgress(null);
+    }
+    return true;
+  };
+
   const handleSendFollowUp = async (
     e?: React.FormEvent,
     override?: { text: string; grounding: string[] },
@@ -825,6 +888,31 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     if (!followUpText || isGenerating) return;
 
     setErrorMsg(null);
+
+    // A repository named in the message is handled here and the model is not
+    // asked. The scan runs no model by construction (INV-18), so routing it
+    // through the Planner would add nothing but latency and a chance for a
+    // poisoned file to influence how its own scan is described.
+    if (!override) {
+      const userTurn = {
+        id: `msg-user-${crypto.randomUUID?.() ?? Date.now()}`,
+        role: 'user' as const,
+        text: followUpText,
+        timestamp: new Date().toISOString(),
+      };
+      const probe = findRepoReference(followUpText);
+      if (probe) {
+        setFollowUpInput('');
+        setTurns((prev) => [...prev, userTurn]);
+        setIsGenerating(true);
+        try {
+          if (await handleRepoMention(followUpText)) return;
+        } finally {
+          setIsGenerating(false);
+        }
+      }
+    }
+
     setIsGenerating(true);
 
     try {
@@ -1546,81 +1634,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               </div>
             )}
 
-            {repoPrompt && (
-              <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">
-                <p className="text-[11px] font-medium text-[#2c2c24]">
-                  Scan a public repository for prompt injections
-                </p>
-                <p className="mt-0.5 text-[10px] text-[#5a5a40]">
-                  Files are read on the server, matched against fixed patterns, and discarded.
-                  Nothing is stored and no model sees them &mdash; so this reports where the
-                  injections are, and cannot tell you what the code does.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={repoRef}
-                    onChange={(e) => setRepoRef(e.target.value)}
-                    placeholder="owner/name"
-                    className="flex-1 rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-xs text-[#2c2c24] placeholder:text-[#b5b0a0] focus:border-[#5a5a40] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void runRepoScan()}
-                    disabled={repoScanning || !repoRef.trim()}
-                    className="cursor-pointer rounded-lg bg-[#5a5a40] px-3 py-2 text-xs font-medium text-white hover:bg-[#484833] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {repoScanning ? 'Scanning…' : 'Scan'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRepoPrompt(false)}
-                    className="cursor-pointer text-[11px] text-[#8a8a75] underline"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                {repoProgress && (
-                  <div className="mt-2.5">
-                    <div className="flex items-baseline justify-between gap-2 text-[10px] text-[#5a5a40]">
-                      <span className="truncate font-mono">{repoProgress.path || 'reading…'}</span>
-                      <span className="shrink-0 tabular-nums">
-                        {repoProgress.scanned} / {repoProgress.total}
-                        {repoProgress.live > 0 ? (
-                          <span className="ml-1.5 font-medium text-rose-700">
-                            {repoProgress.live} live
-                          </span>
-                        ) : (
-                          repoProgress.findings > 0 && (
-                            <span className="ml-1.5 text-[#8a8a75]">
-                              {repoProgress.findings} to triage
-                            </span>
-                          )
-                        )}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[#e5e0d3]">
-                      <div
-                        className="h-full rounded-full bg-[#5a5a40] transition-[width] duration-200"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            Math.round(
-                              (repoProgress.scanned / Math.max(1, repoProgress.total)) * 100,
-                            ),
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {repoResult && (
-              <RepoScanReport result={repoResult} onClose={() => setRepoResult(null)} />
-            )}
-
             {webSearch && mentionsUrl(followUpInput) && (
               <button
                 type="button"
@@ -1709,14 +1722,21 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                         {
                           id: 'menu-repo',
                           Icon: Github,
-                          label: githubConnected ? 'GitHub connected' : 'Connect GitHub',
+                          // A connector, not an action. It says which state it
+                          // is in and the click changes that state — connect
+                          // when disconnected, disconnect when connected.
+                          // Scanning is not a menu item any more: a repository
+                          // is named in the message, like everything else.
+                          label: githubConnected ? 'GitHub' : 'Connect GitHub',
                           hint: githubConnected
-                            ? 'Paste a repository URL to scan it'
+                            ? 'Connected. Name a repository in your message.'
                             : 'Read your repositories, including private ones',
+                          connector: true,
+                          on: githubConnected,
                           run: () =>
-                            githubConnected ? setRepoPrompt(true) : void connectGithub(),
+                            githubConnected ? void disconnectGithub() : void connectGithub(),
                         },
-                      ].map(({ id, Icon, label, hint, run }) => (
+                      ].map(({ id, Icon, label, hint, run, connector, on }: any) => (
                         <button
                           key={id}
                           id={id}
@@ -1727,11 +1747,33 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                           }}
                           className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f3efe6]"
                         >
-                          <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#5a5a40]" />
-                          <span className="min-w-0">
+                          <Icon
+                            className={`mt-0.5 h-4 w-4 shrink-0 ${
+                              connector && on ? 'text-emerald-600' : 'text-[#5a5a40]'
+                            }`}
+                          />
+                          <span className="min-w-0 flex-1">
                             <span className="block text-xs font-medium text-[#2c2c24]">{label}</span>
                             <span className="block text-[10px] text-[#8a8a75]">{hint}</span>
                           </span>
+                          {/* A connector shows its state and is the control
+                              that changes it. Reading it and toggling it are
+                              the same affordance, so there is no way to be
+                              unsure whether the click connected or scanned. */}
+                          {connector && (
+                            <span
+                              aria-hidden="true"
+                              className={`mt-0.5 flex h-4 w-7 shrink-0 items-center rounded-full px-0.5 transition-colors ${
+                                on ? 'bg-emerald-600' : 'bg-[#d8d2c4]'
+                              }`}
+                            >
+                              <span
+                                className={`h-3 w-3 rounded-full bg-white transition-transform ${
+                                  on ? 'translate-x-3' : 'translate-x-0'
+                                }`}
+                              />
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
