@@ -19,35 +19,60 @@ let aiClient: GoogleGenAI | null = null;
  */
 export async function getAI(): Promise<GoogleGenAI> {
   if (!aiClient) {
-    aiClient = new GoogleGenAI(clientOptions(await getGeminiKey()));
+    aiClient = new GoogleGenAI(clientOptions(assertGeminiKeyShape(await getGeminiKey())));
   }
   return aiClient;
 }
 
 /**
- * The key is supplied twice, deliberately — and the second time is the one
- * that matters in production.
+ * A Gemini API key, checked for shape before it is ever used.
  *
- * Cloud Run always has Application Default Credentials. The SDK falls back to
- * them whenever it does not find an API key on a request, and that fallback
- * fails against generativelanguage.googleapis.com with
+ * Production carried a 106-character value beginning `AQ.Ab8` in
+ * GEMINI_API_KEY version 3 — an OAuth 2.0 access token, not an API key. Every
+ * call then failed with
  *
  *   401 ACCESS_TOKEN_TYPE_UNSUPPORTED
  *   "Expected OAuth 2 access token, login cookie or other valid credential"
  *
- * because the Gemini API does not accept a service-account bearer token. That
- * is precisely what StreamGenerateContent returned on revision
- * perimeter-00042 while the key itself had loaded correctly from version 3.
+ * which is a confusing sentence to read when you believe you configured a key,
+ * and it cost an afternoon. The secret had loaded correctly, billing was on,
+ * the SDK was behaving exactly as documented, and nothing in the stack was
+ * able to say the one useful thing: that the credential was the wrong KIND.
  *
- * Setting `x-goog-api-key` as a default header removes the fallback rather
- * than trusting every code path inside the SDK to reach the same auth branch.
- * The header is checked first and short-circuits: an SDK path that would have
- * reached for ADC finds the key already present and never gets there.
+ * So the shape is asserted here. A key that cannot work is rejected before a
+ * request is made, and the error names what was found — its prefix and length,
+ * never the value (INV-8).
  *
- * This does not weaken INV-8. The value comes from Secret Manager at runtime,
- * exactly as before, is never logged, and never leaves the server — the only
- * change is that it is attached to the request explicitly instead of being
- * derived from client state.
+ * `AIza` + 35 characters is the documented format. This is deliberately a
+ * cheap structural check, not a validity check: whether the key WORKS is
+ * Google's to answer, and readCredentialError already classifies that reply.
+ */
+const GEMINI_KEY_SHAPE = /^AIza[0-9A-Za-z_-]{35}$/;
+
+export class InvalidKeyShapeError extends Error {
+  constructor(readonly prefix: string, readonly length: number) {
+    super(`config_invalid:gemini_key_shape:${prefix}:${length}`);
+    this.name = 'InvalidKeyShapeError';
+  }
+}
+
+export function assertGeminiKeyShape(key: string): string {
+  if (GEMINI_KEY_SHAPE.test(key)) return key;
+  // Six characters is enough to tell an access token from a key and far too
+  // few to be a credential. The length is the other half of the diagnosis.
+  throw new InvalidKeyShapeError(key.slice(0, 6), key.length);
+}
+
+/**
+ * The key is supplied twice: as the SDK's apiKey and as an explicit
+ * x-goog-api-key header.
+ *
+ * Recorded honestly, because the commit that added the header claimed to fix
+ * the 401 above and did not — the value was simply not a key. The header is
+ * kept anyway as defence in depth: it removes the SDK's fallback to
+ * Application Default Credentials, which on Cloud Run always exist and which
+ * the Gemini API does not accept. That fallback was not the cause here, but it
+ * is a real path and closing it costs nothing.
  */
 export function clientOptions(apiKey: string) {
   return {
@@ -321,6 +346,18 @@ export function describeModelFailure(err: unknown): ModelFailure {
   const fault = readCredentialError(err);
   if (fault) {
     return { status: 503, code: fault, message: CREDENTIAL_FAULT_MESSAGE[fault] };
+  }
+
+  if (err instanceof InvalidKeyShapeError) {
+    return {
+      status: 503,
+      code: 'invalid_key_shape',
+      message:
+        `The configured Gemini credential is not an API key. It begins "${err.prefix}" and is ` +
+        `${err.length} characters; a Gemini API key begins "AIza" and is 39. A value beginning ` +
+        '"AQ." or "ya29." is an OAuth access token — get a key from Google AI Studio instead, ' +
+        'and add it as a new version of the GEMINI_API_KEY secret.',
+    };
   }
 
   if (err instanceof ModelTimeoutError) {

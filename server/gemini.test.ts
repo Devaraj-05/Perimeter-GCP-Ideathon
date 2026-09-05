@@ -414,3 +414,74 @@ describe('the API key is attached explicitly, so ADC is never reached', () => {
     }
   });
 });
+
+describe('a credential of the wrong KIND is rejected before it is used', () => {
+  /**
+   * GEMINI_API_KEY version 3 in production held a 106-character value starting
+   * "AQ.Ab8" — an OAuth 2.0 access token. Every call failed with
+   * ACCESS_TOKEN_TYPE_UNSUPPORTED, which is a confusing thing to read when you
+   * believe you configured a key. Nothing in the stack could say the useful
+   * thing: that the credential was the wrong kind.
+   */
+  const REAL_SHAPE = 'AIza' + 'a'.repeat(35);
+
+  it('accepts a correctly shaped key and returns it unchanged', async () => {
+    const { assertGeminiKeyShape } = await import('./gemini');
+    expect(assertGeminiKeyShape(REAL_SHAPE)).toBe(REAL_SHAPE);
+    expect(REAL_SHAPE.length).toBe(39);
+  });
+
+  it('rejects the exact value that reached production', async () => {
+    const { assertGeminiKeyShape } = await import('./gemini');
+    const oauth = 'AQ.Ab8' + 'X'.repeat(100);
+    expect(oauth.length).toBe(106);
+    expect(() => assertGeminiKeyShape(oauth)).toThrow(/gemini_key_shape/);
+  });
+
+  it('rejects the other token formats that get pasted by mistake', async () => {
+    const { assertGeminiKeyShape } = await import('./gemini');
+    for (const bad of [
+      'ya29.a0ARrdaM-notakey',
+      '{"type":"service_account","project_id":"x"}',
+      'PASTE_YOUR_KEY_HERE',
+      '',
+      'AIzaShortOne',
+      'AIza' + 'a'.repeat(36),
+    ]) {
+      expect(() => assertGeminiKeyShape(bad), bad.slice(0, 12)).toThrow();
+    }
+  });
+
+  it('reports the prefix and length, and NEVER the value', async () => {
+    // INV-8. Six characters distinguishes a token from a key and is far too
+    // few to be a credential.
+    const { assertGeminiKeyShape } = await import('./gemini');
+    const secret = 'AQ.Ab8' + 'SUPERSECRETREST'.repeat(6);
+    try {
+      assertGeminiKeyShape(secret);
+      throw new Error('should have thrown');
+    } catch (err: any) {
+      expect(err.message).toContain('AQ.Ab8');
+      expect(err.message).not.toContain('SUPERSECRETREST');
+      expect(err.prefix.length).toBe(6);
+      expect(err.length).toBe(secret.length);
+    }
+  });
+
+  it('describeModelFailure explains what to do about it', async () => {
+    const { describeModelFailure, InvalidKeyShapeError } = await import('./gemini');
+    const f = describeModelFailure(new InvalidKeyShapeError('AQ.Ab8', 106));
+    expect(f.status).toBe(503);
+    expect(f.code).toBe('invalid_key_shape');
+    expect(f.message).toContain('AIza');
+    expect(f.message).toContain('OAuth access token');
+    expect(f.message).toMatch(/AI Studio/);
+  });
+
+  it('is checked before any request, not after a 401 comes back', async () => {
+    // The whole point: a key that cannot work must not cost a round trip and
+    // an error message written by someone who does not know our config.
+    const src = readFileSync(join(process.cwd(), 'server', 'gemini.ts'), 'utf8');
+    expect(src).toContain('assertGeminiKeyShape(await getGeminiKey())');
+  });
+});
