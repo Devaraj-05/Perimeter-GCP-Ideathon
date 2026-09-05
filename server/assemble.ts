@@ -42,6 +42,15 @@ export interface ContextArtifact {
   verdict?: 'clean' | 'suspicious' | 'hostile';
   externalId?: string;
   /**
+   * The Reader's stored observation of this artifact, if any — Amendment M.
+   *
+   * Opaque here on purpose. This module decides zone and taint, and it must
+   * not be able to read anything out of a cached value while doing so: only
+   * server/readerCache.ts interprets it, and only after checking that its
+   * digest matches the artifact's current bytes (INV-21).
+   */
+  cachedObservation?: unknown;
+  /**
    * True when this entry was written by the agent (create_note) rather than
    * typed by the user. createNote() has always recorded createdBy: 'agent'
    * "so it is never mistaken later for something the user wrote themselves" —

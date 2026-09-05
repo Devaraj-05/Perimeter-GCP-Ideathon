@@ -14,6 +14,7 @@ import {
 } from './gemini';
 import { consumeLadder, type StreamChunk } from './plannerStream';
 import { mapPool } from './pool';
+import { readerInput, readCached, toCached } from './readerCache';
 // Type-only: assemble.ts is superseded and must not be reachable at runtime.
 import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
@@ -111,6 +112,11 @@ async function loadContext(uid: string, artifactIds: string[]): Promise<ContextA
           sourceRef: a.sourceRef,
           verdict: a.verdict,
           externalId: a.externalId,
+          // Zone and taint stay derived from the artifact, every turn,
+          // exactly as before (INV-21). This carries the Reader's OUTPUT and
+          // nothing else; carrying trust here would be the taint-laundering
+          // defect this project has already shipped once.
+          cachedObservation: a.readerObservation ?? null,
         });
       });
   }
@@ -282,15 +288,34 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     // Bounded rather than Promise.all over everything: a user with fifty
     // sources would otherwise open fifty concurrent model calls and convert a
     // slow turn into a rate-limited one.
+    let cacheHits = 0;
     const reads = await mapPool(untrusted, READER_CONCURRENCY, async (artifact) => {
+      // Composed once, here, and used both for the digest and for the call.
+      // Building it two ways would make every cache key a lie (INV-21).
+      const text = readerInput(artifact.title, artifact.body);
+
+      const cached = readCached((artifact as any).cachedObservation, text);
+      if (cached) {
+        cacheHits++;
+        return { artifact, output: cached, fromCache: true };
+      }
+
       try {
-        return { artifact, output: await readerRead(artifact.title + '\n\n' + artifact.body) };
+        const output = await readerRead(text);
+        // Write-behind. A failed write costs a re-read next turn and nothing
+        // else, so it must never fail the turn it was trying to speed up.
+        void userRoot(uid)
+          .collection('artifacts')
+          .doc(artifact.id)
+          .set({ readerObservation: toCached(text, output) }, { merge: true })
+          .catch(() => undefined);
+        return { artifact, output, fromCache: false };
       } catch (err: any) {
         // Constitution section 8: a Reader failure degrades, it never falls
         // back to passing raw untrusted text to the Planner. The document is
         // absent from this turn and the user is told.
         console.warn('[airlock] reader failed for ' + artifact.id + ': ' + err?.message);
-        return { artifact, output: null };
+        return { artifact, output: null, fromCache: false };
       }
     });
 
@@ -299,6 +324,12 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     // The audit log is hash-chained, so its writes cannot be concurrent
     // without racing the chain — and the Planner's context has to be identical
     // for identical turns. Only the model calls above are parallel.
+    if (untrusted.length > 0) {
+      console.log(
+        '[airlock] read ' + untrusted.length + ' artifacts, ' + cacheHits + ' from cache',
+      );
+    }
+
     for (const { artifact, output } of reads) {
       if (!output) {
         readerFailures++;
