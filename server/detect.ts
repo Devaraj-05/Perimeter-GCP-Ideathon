@@ -115,9 +115,20 @@ const CONCEALMENT =
  * `[SYSTEM DIRECTIVE]` — which the label form misses because the word before
  * the delimiter is "OVERRIDE", not "ADMIN". That gap was found by corpus
  * payload P03.
+ *
+ * The trailing delimiter is `:` or a hyphen followed by whitespace or the end
+ * of the line — NOT a bare `-`. A bare hyphen matched inside ordinary words:
+ * `admin-only`, `system-level` and `developer-facing` at the start of a line
+ * all fired this signal, and this signal is high-confidence, so fuseVerdict
+ * returned `hostile` before it looked at anything else.
+ *
+ * That was not a scanner problem. This pattern is shared with the live ingest
+ * path, so any fetched page or pasted note containing "Admin-only area" was
+ * classified hostile. A turn label is `SYSTEM:` or `### developer -`; it is
+ * never the first half of a hyphenated adjective.
  */
 const FAKE_SYSTEM_ROLE =
-  /(^|\n)\s*(\[|<|#{1,3}\s*)?\s*(system|assistant|developer|admin)\s*(\]|>)?\s*[:\-]/i;
+  /(^|\n)\s*(\[|<|#{1,3}\s*)?\s*(system|assistant|developer|admin)\s*(\]|>)?\s*(:|-(?=\s|$))/i;
 
 const FAKE_SYSTEM_DIRECTIVE =
   /\[\s*(system|admin|developer|root|override)\b[^\]]*\]|\b(admin|system)\s+(override|directive|mode|command)\b/i;
