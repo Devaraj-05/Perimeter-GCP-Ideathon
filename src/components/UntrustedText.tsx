@@ -92,7 +92,15 @@ type Block =
   | { kind: 'h'; level: 2 | 3; text: string }
   | { kind: 'p'; text: string }
   | { kind: 'ul'; items: string[] }
-  | { kind: 'ol'; items: string[] };
+  | { kind: 'ol'; items: string[] }
+  | { kind: 'code'; text: string; lang: string | null };
+
+/**
+ * A fence's info string is attacker-controlled, so only a bare identifier is
+ * ever displayed. Everything else is dropped rather than shown escaped —
+ * there is no reason to paint an attacker's sentence as a language label.
+ */
+const SAFE_LANG = /^[A-Za-z0-9+#._-]{1,20}$/;
 
 /** Groups lines into blocks. Deliberately tiny: no tables, quotes, or images. */
 function parseBlocks(text: string): Block[] {
@@ -114,8 +122,47 @@ function parseBlocks(text: string): Block[] {
     }
   };
 
+  // Fence state. Lines inside a fence are taken RAW so indentation survives,
+  // and no inline formatting is applied to them at render time.
+  let fence: { char: string; len: number; lang: string | null; body: string[] } | null = null;
+
+  const flushFence = () => {
+    if (fence) {
+      blocks.push({ kind: 'code', text: fence.body.join('\n'), lang: fence.lang });
+      fence = null;
+    }
+  };
+
   for (const line of lines) {
     const t = line.trim();
+
+    if (fence) {
+      // A closer is the same character, at least as long as the opener, and
+      // alone on its line. A shorter or different run inside the block must
+      // not end it early, or the rest of a payload escapes the code context
+      // and gets formatted.
+      const closer = /^(`{3,}|~{3,})$/.exec(t);
+      if (closer && closer[1][0] === fence.char && closer[1].length >= fence.len) {
+        flushFence();
+      } else {
+        fence.body.push(line);
+      }
+      continue;
+    }
+
+    const opener = /^(`{3,}|~{3,})\s*(.*)$/.exec(t);
+    if (opener) {
+      flushPara();
+      flushList();
+      const info = opener[2].trim();
+      fence = {
+        char: opener[1][0],
+        len: opener[1].length,
+        lang: SAFE_LANG.test(info) ? info : null,
+        body: [],
+      };
+      continue;
+    }
 
     if (!t) {
       flushPara();
@@ -159,6 +206,13 @@ function parseBlocks(text: string): Block[] {
 
   flushPara();
   flushList();
+  // An unterminated fence stays code to the end of the text. That is the safe
+  // direction: falling back to paragraphs would apply inline formatting to
+  // text an attacker chose, and an unclosed fence is a known concealment
+  // trick (see server/containment.ts, which discards them for the mirror
+  // reason — there the question is whether a payload is QUOTED, here it is
+  // whether it gets FORMATTED).
+  flushFence();
   return blocks;
 }
 
@@ -187,6 +241,28 @@ export const UntrustedText: React.FC<UntrustedTextProps> = ({
             <h4 key={i} className="mt-1 text-sm font-semibold text-[#434338]">
               {renderInline(b.text, `h${i}`)}
             </h4>
+          );
+        }
+
+        if (b.kind === 'code') {
+          // <pre><code> of an escaped string: no resource is loaded, nothing
+          // is clickable, nothing runs. React escapes the text, and the text
+          // is passed as a child rather than through renderInline, so the
+          // code shown is the code the model emitted.
+          return (
+            <div
+              key={i}
+              className="overflow-hidden rounded-lg border border-[#e5e0d3] bg-[#fbf9f2]"
+            >
+              {b.lang && (
+                <div className="border-b border-[#e5e0d3] px-3 py-1 font-mono text-[10px] text-[#8a8a75]">
+                  {b.lang}
+                </div>
+              )}
+              <pre className="overflow-x-auto px-3 py-2.5">
+                <code className="font-mono text-xs leading-relaxed text-[#2c2c24]">{b.text}</code>
+              </pre>
+            </div>
           );
         }
 
