@@ -24,7 +24,18 @@ export const githubRouter = Router();
 /** Typed, generic, and never the provider's own words (INV-10). */
 function userFacing(code: string): [number, string] {
   const table: Record<string, [number, string]> = {
-    oauth_not_configured: [503, 'GitHub is not configured on this deployment.'],
+    oauth_not_configured: [
+      503,
+      'GitHub is not configured on this deployment: set GITHUB_CLIENT_ID and GITHUB_OAUTH_REDIRECT.',
+    ],
+    encryption_key_missing: [
+      503,
+      'GitHub is not configured on this deployment: GOOGLE_OAUTH_ENC_KEY is missing, and stored tokens cannot be sealed without it.',
+    ],
+    client_secret_missing: [
+      503,
+      'GitHub is not configured on this deployment: the OAuth client secret is missing.',
+    ],
     bad_state: [400, 'That connection link was not valid.'],
     state_expired: [400, 'That connection link expired. Start again.'],
     token_exchange_failed: [502, 'GitHub did not complete the connection.'],

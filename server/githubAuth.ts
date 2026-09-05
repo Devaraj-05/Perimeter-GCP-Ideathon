@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { adminDb } from './auth';
-import { getGitHubClientSecret } from './secrets';
+import { getGitHubClientSecret, getOAuthEncryptionKey } from './secrets';
 import { seal, open } from './tokencrypto';
 
 /**
@@ -54,6 +54,28 @@ function redirectUri(): string {
   return uri;
 }
 
+/**
+ * Throws unless every value this connection needs is present.
+ *
+ * clientId() and redirectUri() throw on their own; the encryption key and the
+ * client secret are resolved lazily elsewhere and would otherwise go unnoticed
+ * until the callback.
+ */
+async function assertConfigured(): Promise<void> {
+  clientId();
+  redirectUri();
+  try {
+    await getOAuthEncryptionKey();
+  } catch {
+    throw new GitHubAuthError('encryption_key_missing');
+  }
+  try {
+    await getGitHubClientSecret();
+  } catch {
+    throw new GitHubAuthError('client_secret_missing');
+  }
+}
+
 function stateRef(nonce: string) {
   return adminDb().collection('oauth_states').doc(nonce);
 }
@@ -69,6 +91,16 @@ function connectionRef(uid: string) {
  * and binds that uid to a single-use nonce.
  */
 export async function beginConnect(uid: string): Promise<string> {
+  // Everything this connection needs, checked BEFORE the user is sent to
+  // GitHub. The encryption key is only used at the end, when the token comes
+  // back to be sealed — so a missing one used to fail after the round trip and
+  // surface as "that connection link was not valid", sending the operator to
+  // look at the state nonce instead of at a key that was never configured.
+  //
+  // Failing here costs the user a click. Failing there costs them a consent
+  // screen, a redirect, and a wrong diagnosis.
+  await assertConfigured();
+
   const nonce = randomBytes(32).toString('base64url');
 
   await stateRef(nonce).set({
