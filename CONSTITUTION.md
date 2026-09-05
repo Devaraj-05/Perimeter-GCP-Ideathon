@@ -466,8 +466,15 @@ was to scan only the surfaces an agent is built to obey — `AGENTS.md`, `CLAUDE
 instead, with the cost understood: source code that legitimately mentions "ignore previous
 instructions" will fire patterns, and security repositories will fire many. This repository will
 report findings in `server/corpus.ts`, and that is correct behaviour, not a bug. The mitigation
-is ordering, not suppression — agent-instruction files are scanned and reported first, so a real
-finding is never buried under noise from a test fixture.
+is ordering and labelling, never suppression. Every match is reported; each is classified by the
+file's role and the match's syntactic position, so a payload in a fixture's template literal
+reads as *quoted* while the same text unquoted in an `AGENTS.md` reads as *live*. A poisoned
+agent-instruction file is what the scan exists to find, and it is never buried under a test
+fixture.
+
+That classification is deterministic — file paths and grammar, no model — so INV-18 is unchanged
+by it. It also adds no detection power: it re-ranks what the patterns already found, and a fence
+is a rendering instruction rather than a barrier.
 
 **7. Corpus payload.** A repository fixture whose `AGENTS.md` carries instruction text, so the
 claim that a poisoned agent-instruction file surfaces first is tested rather than asserted.

@@ -654,7 +654,7 @@ ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Res
       kind: 'ingest',
       zone: 'UNTRUSTED',
       decision: 'allow',
-      reason: `repo_scanned:${result.findings.length > 0 ? 'findings' : 'clean'}`,
+      reason: `repo_scanned:${result.verdict}`,
       invariant: 'INV-18',
       detail: {
         repo: result.repo,
@@ -664,6 +664,10 @@ ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Res
         stoppedBy: result.stoppedBy,
         // Counts only. The excerpts stay in the response and are never stored.
         findingCount: result.findings.length,
+        live: result.tierCounts.live,
+        active: result.tierCounts.active,
+        quoted: result.tierCounts.quoted,
+        weak: result.tierCounts.weak,
       },
     });
 

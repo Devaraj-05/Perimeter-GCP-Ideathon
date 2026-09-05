@@ -102,8 +102,24 @@ export interface IngestRunResult {
  * `excerpt` is attacker-authored text. It renders through UntrustedText and
  * never any other way (INV-9).
  */
+/** Where a match sits syntactically. Mirrors ContainmentKind in server/containment.ts. */
+export type ContainmentKind =
+  | 'none'
+  | 'fenced_code'
+  | 'inline_code'
+  | 'blockquote'
+  | 'quoted_span'
+  | 'code_string'
+  | 'code_comment';
+
+/** How much a match matters. Mirrors FindingTier in server/triage.ts. */
+export type FindingTier = 'live' | 'active' | 'quoted' | 'weak';
+
 export interface Match {
   signal: string;
+  /** Optional: only the repository scanner sets these. */
+  containment?: ContainmentKind;
+  tier?: FindingTier;
   start: number;
   end: number;
   /** 1-based. */

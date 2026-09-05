@@ -1,6 +1,8 @@
-import { ShieldAlert, ShieldCheck, X, Github, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldAlert, ShieldCheck, ShieldQuestion, X, Github, AlertTriangle } from 'lucide-react';
 import { InjectionReport } from './InjectionReport';
-import type { RepoScanResult } from '../lib/perimeterApi';
+import type { RepoScanResult, RepoFinding, RepoVerdict } from '../lib/perimeterApi';
+import type { FindingTier } from '../types';
 
 /**
  * A repository injection scan — INV-18 (Amendment I).
@@ -8,12 +10,117 @@ import type { RepoScanResult } from '../lib/perimeterApi';
  * Answers one question and refuses the others. This can tell you a repository
  * contains a prompt injection and quote it; it cannot tell you what the
  * repository does, because nothing in the path that produced this ever ran a
- * model. That is the feature's boundary, not a gap to fill later.
+ * model.
  *
- * The coverage line is load-bearing. A scan stopped by a cap says which cap
- * and how many files went unread, because a partial scan that reads as a clean
- * bill of health is worse than no scan at all.
+ * The grouping is the point. An earlier version rendered every finding as
+ * `hostile`, so scanning this project's own repo showed 31 red results — a
+ * test corpus, a threat model and a README, all reported as attacks. What
+ * matters is not whether text LOOKS like an injection but whether anything
+ * would obey it, so findings are grouped by that and the strongest group is
+ * the only one open by default.
+ *
+ * Nothing is hidden. Quoted and weak collapse behind a count that is always
+ * visible.
  */
+
+const VERDICT_STYLE: Record<RepoVerdict, { icon: typeof ShieldAlert; className: string }> = {
+  injection_found: { icon: ShieldAlert, className: 'text-rose-600' },
+  review: { icon: ShieldQuestion, className: 'text-amber-600' },
+  discussion_only: { icon: ShieldCheck, className: 'text-[#5a5a40]' },
+  clean: { icon: ShieldCheck, className: 'text-emerald-600' },
+};
+
+const TIER_COPY: Record<FindingTier, { label: string; hint: string }> = {
+  live: {
+    label: 'In a file an agent obeys',
+    hint: 'AGENTS.md, CLAUDE.md, .cursorrules and CI config are read as instructions by construction. An injection here is executed, not quoted.',
+  },
+  active: {
+    label: 'Reads as an instruction to an AI',
+    hint: 'Unquoted, in a file an agent would read as context but is not built to follow. Worth a human look.',
+  },
+  quoted: {
+    label: 'Quoted or demonstrated',
+    hint: 'Inside a code fence, a string literal or a comment — or in a test or fixture. Demonstrated, not deployed. A fence is a rendering instruction, not a barrier, so this is a ranking rather than a guarantee.',
+  },
+  weak: {
+    label: 'Weak signals only',
+    hint: 'Patterns that cannot justify a verdict on their own — an outbound link, an HTML comment.',
+  },
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  agent_instructions: 'agent instructions',
+  ci_config: 'CI config',
+  documentation: 'documentation',
+  test: 'test',
+  fixture: 'fixture',
+  source: 'source',
+  data: 'data',
+  other: 'file',
+};
+
+const TIER_ORDER: FindingTier[] = ['live', 'active', 'quoted', 'weak'];
+
+function TierGroup({
+  tier,
+  findings,
+  defaultOpen,
+}: {
+  tier: FindingTier;
+  findings: RepoFinding[];
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (findings.length === 0) return null;
+
+  const copy = TIER_COPY[tier];
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full cursor-pointer items-baseline justify-between gap-2 rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] px-3 py-2 text-left hover:bg-[#f3efe6]"
+      >
+        <span className="text-xs font-medium text-[#2c2c24]">
+          {copy.label}
+          <span className="ml-1.5 font-normal text-[#8a8a75]">
+            {findings.length} file{findings.length === 1 ? '' : 's'}
+          </span>
+        </span>
+        <span className="shrink-0 text-[10px] text-[#8a8a75]">{open ? 'hide' : 'show'}</span>
+      </button>
+
+      {open && (
+        <>
+          <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-[#8a8a75]">{copy.hint}</p>
+          <div className="mt-2 space-y-2">
+            {findings.map((f) => (
+              <div key={f.path}>
+                <p className="mb-1 px-1 font-mono text-[10px] text-[#8a8a75]">
+                  {f.path} &middot; {ROLE_LABEL[f.role] ?? f.role}
+                  {f.structureUnreliable && (
+                    <span className="ml-1.5 text-amber-700">
+                      markup does not close — positions not trusted
+                    </span>
+                  )}
+                </p>
+                <InjectionReport
+                  title={f.path}
+                  verdict={tier === 'live' || tier === 'active' ? 'hostile' : 'suspicious'}
+                  matches={f.matches}
+                  onClose={() => undefined}
+                />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function RepoScanReport({
   result,
   onClose,
@@ -21,8 +128,10 @@ export function RepoScanReport({
   result: RepoScanResult;
   onClose: () => void;
 }) {
-  const files = result.findings.length;
-  const attempts = result.findings.reduce((n, f) => n + f.matches.length, 0);
+  const style = VERDICT_STYLE[result.verdict] ?? VERDICT_STYLE.clean;
+  const Icon = style.icon;
+
+  const byTier = (tier: FindingTier) => result.findings.filter((f) => f.tier === tier);
 
   return (
     <div className="mt-3 rounded-xl border border-[#e5e0d3] bg-white p-4">
@@ -32,7 +141,7 @@ export function RepoScanReport({
           <div className="min-w-0">
             <p className="text-sm font-medium text-[#2c2c24]">
               {result.repo}
-              <span className="ml-1.5 font-normal text-[11px] text-[#8a8a75]">
+              <span className="ml-1.5 text-[11px] font-normal text-[#8a8a75]">
                 {result.defaultBranch}
               </span>
             </p>
@@ -58,42 +167,29 @@ export function RepoScanReport({
         </div>
       ))}
 
-      <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] px-3 py-2">
-        {attempts > 0 ? (
-          <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600" />
-        ) : (
-          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
-        )}
-        <p className="text-xs text-[#2c2c24]">
-          {attempts > 0
-            ? `${attempts} injection attempt${attempts === 1 ? '' : 's'} across ${files} file${
-                files === 1 ? '' : 's'
-              }.`
-            : 'No injection attempts found in the files that were read.'}
-        </p>
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#e5e0d3] bg-[#fbf9f2] px-3 py-2.5">
+        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.className}`} />
+        <p className="text-xs text-[#2c2c24]">{result.headline}</p>
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-[#5a5a40]">
-        Nothing in this scan reached a model. The files were fetched, matched against fixed
-        patterns, and discarded &mdash; so a repository full of instructions had nothing here to
-        instruct. It also means this cannot tell you what the code does, only where the
-        injections are.
+        Nothing in this scan reached a model. Files were fetched, matched against fixed patterns,
+        and discarded &mdash; so a repository full of instructions had nothing here to instruct. It
+        also means this cannot tell you what the code does, only where the injections are.
       </p>
 
-      <div className="mt-3 space-y-2">
-        {result.findings.map((f) => (
-          // Reuses the same panel a single attachment gets, so a finding in a
-          // repository and a finding in a pasted note read identically.
-          <div key={f.path}>
-            <InjectionReport
-              title={f.path}
-              verdict="hostile"
-              matches={f.matches}
-              onClose={() => undefined}
-            />
-          </div>
-        ))}
-      </div>
+      {/* Strongest group open, the rest collapsed behind a visible count.
+          Nothing is hidden: a finding the user cannot see is one they cannot
+          judge, which is why the earlier deletion of weak matches was wrong. */}
+      {TIER_ORDER.map((tier, i) => (
+        <div key={tier}>
+          <TierGroup
+            tier={tier}
+            findings={byTier(tier)}
+            defaultOpen={i === TIER_ORDER.findIndex((t) => byTier(t).length > 0)}
+          />
+        </div>
+      ))}
     </div>
   );
 }

@@ -28,6 +28,22 @@ import type { Match } from '../types';
  * no script, whatever the excerpt contains.
  */
 
+/**
+ * Where a match sits, in plain language. Fixed copy; no model writes this.
+ *
+ * Shown because "inside a code fence" is the difference between a repository
+ * that contains an attack and one that documents attacks — and the user can
+ * only judge that if they are told which they are looking at.
+ */
+const CONTAINMENT_COPY: Record<string, string> = {
+  fenced_code: 'inside a code block',
+  inline_code: 'inside a code span',
+  blockquote: 'inside a quotation',
+  quoted_span: 'inside quotation marks',
+  code_string: 'inside a string literal',
+  code_comment: 'inside a comment',
+};
+
 /** Plain-language reading of each signal. Fixed copy; no model writes this. */
 const SIGNAL_COPY: Record<string, string> = {
   instruction_override: 'Tries to cancel the assistant’s existing instructions.',
@@ -110,6 +126,11 @@ export function InjectionReport({
                 {m.signal}
               </span>
               <span className="text-[11px] text-[#8a8a75]">line {m.line}</span>
+              {m.containment && m.containment !== 'none' && (
+                <span className="rounded bg-[#f3efe6] px-1.5 py-0.5 text-[10px] text-[#5a5a40]">
+                  {CONTAINMENT_COPY[m.containment] ?? m.containment}
+                </span>
+              )}
               {m.hidden && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-amber-700">
                   <EyeOff className="h-3 w-3" />

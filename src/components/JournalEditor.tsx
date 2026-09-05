@@ -1542,10 +1542,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                       <span className="truncate font-mono">{repoProgress.path || 'reading…'}</span>
                       <span className="shrink-0 tabular-nums">
                         {repoProgress.scanned} / {repoProgress.total}
-                        {repoProgress.findings > 0 && (
+                        {repoProgress.live > 0 ? (
                           <span className="ml-1.5 font-medium text-rose-700">
-                            {repoProgress.findings} found
+                            {repoProgress.live} live
                           </span>
+                        ) : (
+                          repoProgress.findings > 0 && (
+                            <span className="ml-1.5 text-[#8a8a75]">
+                              {repoProgress.findings} to triage
+                            </span>
+                          )
                         )}
                       </span>
                     </div>

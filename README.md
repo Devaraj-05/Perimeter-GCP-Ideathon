@@ -255,11 +255,22 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   image is built from `dependencies` only. Said out loud because a security submission that
   makes a reviewer discover this themselves has already lost the argument.
 
-- **Whole-tree scanning finds false positives, and this repository is one.** Source code that
-  legitimately contains "ignore previous instructions" fires the pattern, so scanning Perimeter
-  itself reports findings in `server/corpus.ts` — a file of deliberate attack payloads. That is
-  correct behaviour rather than a bug. The narrower option, scanning only agent-instruction
-  files and issues, was considered and rejected; the mitigation is ordering, not suppression.
+- **A pattern match is not an injection, and the scan says which it is.** Any AI-security repo,
+  any LLM paper, any post about prompt injection is full of text that looks like an attack. The
+  scan asks the question that actually matters — *would anything obey this?* — by classifying
+  each match on the file's role and the match's syntactic position. Measured on this repository:
+  44 files carry at least one pattern match, and the verdict is **0 live, 1 active, 21 quoted,
+  22 weak**. `server/corpus.ts` is still reported; it is labelled *quoted*, because a payload
+  in a template literal in a fixture is demonstrated rather than deployed.
+
+  Nothing is deleted. An earlier version dropped weak matches outright, which was the right
+  instinct wired the wrong way: a finding the user cannot see is one they cannot judge. Weak
+  findings are reported, collapsed behind a visible count.
+
+  The honest limits: a fence is a rendering instruction and not a barrier, so wrapping a payload
+  in one buys the *quoted* tier — the tier's own copy says so. File role is path-based, so
+  `tests/fixtures/` is a free demotion for anyone who wants it. And this adds no detection
+  power: it re-ranks what the patterns already found.
 
 - **A bad `GITHUB_TOKEN` costs one request, not the scan.** A token GitHub rejects is dropped
   after the first refusal and both fetch paths retry without it. Measured with a deliberately
@@ -281,13 +292,6 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   server. A header claiming more data than the archive holds ends the read rather than seeking
   past the buffer — tested, because an archive is content anyone can publish.
 
-- **The scan drops `offdomain_url` findings.** That signal asks whether a link points away from
-  a source's own domain — a real question about a fetched web page, a meaningless one about a
-  README, where linking outward is the point. Left in, it produced eight of the thirteen matches
-  on this project's own README and buried the two that mattered. It is the only signal filtered,
-  it is the weakest one by the project's own weighting, and no signal that can justify a hostile
-  verdict on its own is ever dropped — asserted in `reposcan.test.ts`.
-
 - **Gmail runs unverified.** `gmail.readonly` is a Google *restricted* scope; production
   verification needs a security assessment and weeks of review. The consent screen is in
   **testing** mode, so it works only for explicitly listed test users and shows Google's
@@ -305,7 +309,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 501 unit tests, no infrastructure needed
+npm test                      # 591 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

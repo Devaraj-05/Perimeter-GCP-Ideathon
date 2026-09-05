@@ -1,5 +1,11 @@
 import { apiFetch, authedHeaders } from './apiClient';
-import { Source, Artifact, IngestRunResult, Match } from '../types';
+import {
+  Source,
+  Artifact,
+  IngestRunResult,
+  Match,
+  type FindingTier,
+} from '../types';
 
 /**
  * Client for the ingest gateway. Note there is no "write artifact" call:
@@ -191,10 +197,30 @@ export async function resolveLocation(
   return location;
 }
 
-/** One finding: a file, and every place a signal fired inside it. */
+/** Where an agent would encounter a file. Mirrors FileRole in server/triage.ts. */
+export type FileRole =
+  | 'agent_instructions'
+  | 'ci_config'
+  | 'documentation'
+  | 'test'
+  | 'fixture'
+  | 'source'
+  | 'data'
+  | 'other';
+
+export type RepoVerdict = 'injection_found' | 'review' | 'discussion_only' | 'clean';
+
+/** One finding: a file, its role, and every place a signal fired inside it. */
 export interface RepoFinding {
   path: string;
+  role: FileRole;
+  /** The strongest tier among this file's matches. */
+  tier: FindingTier;
+  score: number;
+  highConfidence: string[];
   matches: Match[];
+  /** The file's markup does not close, so positions were not trusted. */
+  structureUnreliable?: boolean;
 }
 
 export interface RepoScanResult {
@@ -206,6 +232,14 @@ export interface RepoScanResult {
   stoppedBy: 'complete' | 'max_files' | 'max_bytes' | 'time' | 'rate_limit';
   /** The sentence the UI shows. Never phrased as a clean bill of health. */
   coverage: string;
+  /**
+   * What the scan concluded about injections — separate from coverage, which
+   * is about how much was read. A scan stopped by a cap and finding nothing is
+   * "nothing in what was read", never "clean".
+   */
+  verdict: RepoVerdict;
+  headline: string;
+  tierCounts: Record<FindingTier, number>;
   /** Conditions worth knowing that did not stop the scan, e.g. a rejected token. */
   warnings?: string[];
   findings: RepoFinding[];
@@ -216,6 +250,8 @@ export interface ScanProgress {
   total: number;
   path: string;
   findings: number;
+  /** Surfaced separately so a real hit is visible the moment it lands. */
+  live: number;
 }
 
 /**
