@@ -293,3 +293,84 @@ describe('streaming and stopping — Amendment L', () => {
     expect((await runChatTurn('hi', [], deps)).failure!.stage).toBe('send');
   });
 });
+
+describe('attachments and findings ride with the turn', () => {
+  it('puts attachments on the user message', async () => {
+    const { deps } = harness();
+    const r = await runChatTurn('explain this', [], deps, {
+      attachments: [{ id: 'a1', title: 'document.pdf', kind: 'file' }],
+    });
+    expect(r.turns[0].role).toBe('user');
+    expect(r.turns[0].attachments).toEqual([{ id: 'a1', title: 'document.pdf', kind: 'file' }]);
+  });
+
+  it('omits the field entirely when there are none', async () => {
+    // So an old saved turn and a new one with no attachments are identical.
+    const r = await runChatTurn('hi', [], harness().deps);
+    expect(r.turns[0]).not.toHaveProperty('attachments');
+  });
+
+  it('inserts a perimeter message per finding, right after the user turn', async () => {
+    const { deps } = harness();
+    const r = await runChatTurn('explain', [], deps, {
+      findings: [
+        { title: 'a.pdf', verdict: 'hostile', matches: [{ signal: 's', line: 1, excerpt: 'x' }] },
+        { title: 'b.pdf', verdict: 'suspicious', matches: [] },
+      ],
+    });
+    expect(r.turns.map((t) => t.role)).toEqual(['user', 'perimeter', 'perimeter', 'model']);
+    expect(r.turns[1].finding!.title).toBe('a.pdf');
+  });
+
+  it('shows the finding before the model has been called', async () => {
+    // It needs no model. Making the user wait for one to be told what is in
+    // their own document would be gratuitous.
+    const { deps, log } = harness();
+    await runChatTurn('x', [], deps, {
+      findings: [{ title: 'a.pdf', verdict: 'hostile', matches: [] }],
+    });
+    expect(log.indexOf('paint:2')).toBeLessThan(log.indexOf('send'));
+  });
+
+  it('never sends a perimeter message to the model', async () => {
+    // Our own text about the conversation, not part of it. Feeding it back
+    // would let the Planner reason about — or contradict — the scan.
+    let sawRoles: string[] = [];
+    const { deps } = harness({
+      send: async (turns) => {
+        sawRoles = turns.map((t) => t.role);
+        return REPLY;
+      },
+    });
+    await runChatTurn('x', [], deps, {
+      findings: [{ title: 'a.pdf', verdict: 'hostile', matches: [] }],
+    });
+    expect(sawRoles).toEqual(['user']);
+  });
+
+  it('still persists the perimeter messages', async () => {
+    // They are part of the transcript the user reads back.
+    let saved: string[] = [];
+    const { deps } = harness({
+      save: async (turns) => {
+        saved = turns.map((t) => t.role);
+      },
+    });
+    await runChatTurn('x', [], deps, {
+      findings: [{ title: 'a.pdf', verdict: 'hostile', matches: [] }],
+    });
+    expect(saved).toEqual(['user', 'perimeter', 'model']);
+  });
+
+  it('rolls perimeter messages back with the user turn on a send failure', async () => {
+    const { deps } = harness({
+      send: async () => {
+        throw new Error('503');
+      },
+    });
+    const r = await runChatTurn('x', [], deps, {
+      findings: [{ title: 'a.pdf', verdict: 'hostile', matches: [] }],
+    });
+    expect(r.turns).toEqual([]);
+  });
+});

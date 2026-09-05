@@ -2,12 +2,47 @@ export type CategoryType = 'Personal' | 'Career & Ambition' | 'Mindfulness & Gra
 
 export type ReflectionMode = 'companion' | 'brainstorm' | 'socratic' | 'gratitude_wellness' | 'executive_summary';
 
+/** What the user attached to a turn. Shown inside their own message. */
+export interface TurnAttachment {
+  id: string;
+  title: string;
+  kind: 'file' | 'link' | 'note' | 'repo';
+}
+
+/**
+ * A deterministic finding, rendered as a message rather than a panel.
+ *
+ * Carried as STRUCTURE, not as a formatted string. The excerpts are attacker
+ * text; interpolating them into markdown would let a document choose how its
+ * own poisoning is displayed. The renderer emits them as plain React children,
+ * exactly as the report panel did before it.
+ */
+export interface TurnFinding {
+  title: string;
+  verdict: 'clean' | 'suspicious' | 'hostile';
+  matches: {
+    signal: string;
+    line: number;
+    excerpt: string;
+    hidden?: boolean;
+  }[];
+}
+
 export interface TurnMessage {
   id: string;
-  role: 'user' | 'model';
+  /**
+   * 'perimeter' is us: text we wrote, from the deterministic scanner, never
+   * from a model. It renders in the conversation like any other message so the
+   * surface reads as a chat, and it is labelled so a reader can tell which
+   * sentences the application stands behind and which a model produced from
+   * attacker-influenced input.
+   */
+  role: 'user' | 'model' | 'perimeter';
   text: string;
   timestamp: string;
   modelUsed?: string;
+  attachments?: TurnAttachment[];
+  finding?: TurnFinding;
 }
 
 export interface JournalEntry {

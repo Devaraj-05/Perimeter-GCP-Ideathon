@@ -1,4 +1,4 @@
-import type { TurnMessage } from '../types';
+import type { TurnMessage, TurnAttachment, TurnFinding } from '../types';
 import type { ThreatEvent } from './agentApi';
 
 /**
@@ -65,7 +65,7 @@ export interface RunTurnDeps {
   /** True when the user pressed stop. Distinguished from a failure. */
   isAbort?: (err: unknown) => boolean;
   /** Injectable so tests are deterministic. */
-  newId?: (role: 'user' | 'model') => string;
+  newId?: (role: 'user' | 'model' | 'perimeter') => string;
   nowIso?: () => string;
 }
 
@@ -83,7 +83,7 @@ export interface RunTurnResult {
  * wrong node. The "What's in it" button can fire immediately after a manual
  * send, so this is reachable rather than theoretical.
  */
-export function defaultNewId(role: 'user' | 'model'): string {
+export function defaultNewId(role: 'user' | 'model' | 'perimeter'): string {
   const suffix =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -96,10 +96,23 @@ const messageOf = (err: unknown, fallback: string): string => {
   return typeof m === 'string' && m.trim() ? m : fallback;
 };
 
+export interface TurnExtras {
+  /** Shown inside the user's own message. */
+  attachments?: TurnAttachment[];
+  /**
+   * Deterministic scan results for those attachments. Each becomes a
+   * 'perimeter' message in the transcript, immediately, before the model has
+   * been called — it needs no model and there is no reason to make the user
+   * wait for one to be told what was found in their own document.
+   */
+  findings?: TurnFinding[];
+}
+
 export async function runChatTurn(
   text: string,
   priorTurns: TurnMessage[],
   deps: RunTurnDeps,
+  extras: TurnExtras = {},
 ): Promise<RunTurnResult> {
   const newId = deps.newId ?? defaultNewId;
   const nowIso = deps.nowIso ?? (() => new Date().toISOString());
@@ -109,15 +122,27 @@ export async function runChatTurn(
     role: 'user',
     text,
     timestamp: nowIso(),
+    ...(extras.attachments?.length ? { attachments: extras.attachments } : {}),
   };
 
-  const withUser = [...priorTurns, userTurn];
+  const perimeterTurns: TurnMessage[] = (extras.findings ?? []).map((finding) => ({
+    id: newId('perimeter'),
+    role: 'perimeter' as const,
+    text: '',
+    timestamp: nowIso(),
+    finding,
+  }));
+
+  const withUser = [...priorTurns, userTurn, ...perimeterTurns];
   deps.onTurns(withUser);
 
   let streamed = '';
   let reply: ChatReply;
   try {
-    reply = await deps.send(withUser, (delta) => {
+    // The model never sees a 'perimeter' message. Those are our own text about
+    // the conversation, not part of it, and feeding them back would let the
+    // Planner reason about — or contradict — the deterministic scan.
+    reply = await deps.send(withUser.filter((t) => t.role !== 'perimeter'), (delta) => {
       streamed += delta;
       deps.onStreamingText?.(streamed);
     });

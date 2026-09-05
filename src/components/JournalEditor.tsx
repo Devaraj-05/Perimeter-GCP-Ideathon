@@ -56,11 +56,11 @@ import {
 } from '../lib/perimeterApi';
 import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
-import { InjectionReport } from './InjectionReport';
 import { RepoScanReport } from './RepoScanReport';
 import { UntrustedText } from './UntrustedText';
 import { ChatTranscript } from './ChatTranscript';
 import { runChatTurn, type TurnStage } from '../lib/chatTurn';
+import { isSilentFinding } from '../lib/findingMessage';
 import { reflectGroundedStream } from '../lib/reflect';
 import { ChatAborted } from '../lib/chatStream';
 
@@ -194,13 +194,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     {
       id: string;
       title: string;
+      kind: 'file' | 'link' | 'note' | 'repo';
       verdict: 'clean' | 'suspicious' | 'hostile';
       /** Where each signal fired. Empty is a real answer: nothing matched. */
       matches: Match[];
     }[]
   >([]);
-  /** Which attachment's evidence panel is open, if any. */
-  const [reportFor, setReportFor] = useState<string | null>(null);
   /** A repository scan in flight, and its result. Never persisted (INV-18). */
   const [repoPrompt, setRepoPrompt] = useState(false);
   const [repoRef, setRepoRef] = useState('');
@@ -397,7 +396,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       const r = await ingestFile(file);
       setAttachments((prev) => [
         ...prev,
-        { id: r.artifactId, title: r.title, verdict: r.verdict, matches: r.matches ?? [] },
+        { id: r.artifactId, title: r.title, kind: 'file' as const, verdict: r.verdict, matches: r.matches ?? [] },
       ]);
       onAttached?.();
     } catch (err: any) {
@@ -437,6 +436,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         ...messages.map((m) => ({
           id: m.artifactId,
           title: m.title,
+          kind: 'note' as const,
           verdict: m.verdict,
           matches: m.matches ?? [],
         })),
@@ -483,6 +483,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         {
           id: r.artifactId,
           title: offer.kind === 'link' ? (r as any).url ?? offer.text : (r as any).title ?? 'Pasted text',
+          kind: offer.kind === 'link' ? ('link' as const) : ('note' as const),
           verdict: r.verdict,
           matches: r.matches ?? [],
         },
@@ -514,6 +515,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         {
           id: r.artifactId,
           title: attachMenu === 'link' ? (r as any).url ?? value : (r as any).title ?? 'Pasted note',
+          kind: attachMenu === 'link' ? ('link' as const) : ('note' as const),
           verdict: r.verdict,
           matches: r.matches ?? [],
         },
@@ -774,7 +776,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         added.push(r.artifactId);
         setAttachments((prev) => [
           ...prev,
-          { id: r.artifactId, title: r.url ?? url, verdict: r.verdict, matches: r.matches ?? [] },
+          { id: r.artifactId, title: r.url ?? url, kind: 'link' as const, verdict: r.verdict, matches: r.matches ?? [] },
         ]);
       } catch (err: any) {
         // A refused link is information, not a failure: the guard saying no is
@@ -806,20 +808,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     );
   };
 
-  /**
-   * "What's in it" — the ONLY one of the two chip buttons that runs a model.
-   *
-   * The question is a fixed literal. A model that has just read a poisoned
-   * document must never get to compose the question we put to the user, so the
-   * text is ours and only the answer is the model's. The answer still arrives
-   * through the airlock: the Reader holds no tools, and the turn is tainted
-   * because an artifact contributed to it.
-   */
-  const summariseAttachment = (artifactId: string) =>
-    handleSendFollowUp(undefined, {
-      text: 'What is in this document? Describe what it says.',
-      grounding: [artifactId],
-    });
 
   // Handle Follow-up in Multi-Turn dialogue
   /**
@@ -898,7 +886,32 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         },
         onStreamingText: setStreamingText,
         isAbort: (err) => err instanceof ChatAborted,
+      },
+      {
+        // What the user attached rides in THEIR message, and what the scan
+        // found becomes a Perimeter message right after it — both only once
+        // they have actually asked something.
+        attachments: attachments.map((a) => ({
+          id: a.id,
+          title: a.title,
+          kind: a.kind,
+        })),
+        findings: attachments
+          .map((a) => ({
+            title: a.title,
+            verdict: a.verdict,
+            matches: (a.matches ?? []).map((m) => ({
+              signal: m.signal,
+              line: m.line,
+              excerpt: m.excerpt,
+              hidden: m.hidden,
+            })),
+          }))
+          .filter((f) => !isSilentFinding(f)),
       });
+
+      // Consumed by this turn. They live in the transcript now.
+      if (!outcome.failure) setAttachments([]);
 
       if (outcome.reply) {
         setLastTurnEvents(outcome.reply.threatEvents);
@@ -1428,49 +1441,26 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               <div ref={turnsEndRef} />
             </div>
 
-            {/* Attachments (Amendment F).
-                Chips sit above the composer so a hostile verdict is visible
-                BEFORE the question is asked, not after the answer arrives. */}
+            {/* Attachments, waiting for a prompt — Amendment F.
+                No verdict and no action buttons. Both used to appear the
+                instant a file finished uploading, which meant the application
+                announced a conclusion and offered two questions before the
+                user had asked anything at all. The screening still happens on
+                upload; what it found is reported in the CONVERSATION, once the
+                user sends something, as a message we author from the
+                deterministic scan. */}
             {attachments.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {attachments.map((a) => (
                   <span
                     key={a.id}
-                    className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${
-                      a.verdict === 'hostile'
-                        ? 'border-rose-300 bg-rose-50 text-rose-900'
-                        : a.verdict === 'suspicious'
-                          ? 'border-amber-300 bg-amber-50 text-amber-900'
-                          : 'border-[#e5e0d3] bg-white text-[#434338]'
-                    }`}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#e5e0d3] bg-white px-2 py-1 text-[11px] text-[#434338]"
                   >
                     <Paperclip className="h-3 w-3 shrink-0" />
                     <span className="truncate">{a.title}</span>
-                    <span className="shrink-0 font-medium uppercase">{a.verdict}</span>
-                    {/*
-                      Fixed chrome. These labels are string literals and both
-                      buttons render for every verdict, because a model that
-                      just read a poisoned document must never get to compose
-                      the question we put to the user. "Shall I summarise this
-                      and send it to the address in the footer?" is an attack,
-                      and it would be wearing our own interface.
-                    */}
-                    <button
-                      onClick={() => setReportFor(reportFor === a.id ? null : a.id)}
-                      className="shrink-0 cursor-pointer rounded border border-current px-1.5 py-0.5 font-medium opacity-80 hover:opacity-100"
-                    >
-                      Show me the injections
-                    </button>
-                    <button
-                      onClick={() => void summariseAttachment(a.id)}
-                      disabled={isGenerating}
-                      className="shrink-0 cursor-pointer rounded border border-current px-1.5 py-0.5 font-medium opacity-80 hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      What's in it
-                    </button>
                     <button
                       onClick={() => setAttachments((p) => p.filter((x) => x.id !== a.id))}
-                      title="Remove from this view"
+                      title="Remove"
                       className="shrink-0 cursor-pointer opacity-60 hover:opacity-100"
                     >
                       <X className="h-3 w-3" />
@@ -1479,20 +1469,6 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 ))}
               </div>
             )}
-
-            {reportFor &&
-              (() => {
-                const a = attachments.find((x) => x.id === reportFor);
-                if (!a) return null;
-                return (
-                  <InjectionReport
-                    title={a.title}
-                    verdict={a.verdict}
-                    matches={a.matches}
-                    onClose={() => setReportFor(null)}
-                  />
-                );
-              })()}
 
             {attachMenu && (
               <div className="mt-3 rounded-xl border border-[#d8cfae] bg-[#fbf6e6] p-3">

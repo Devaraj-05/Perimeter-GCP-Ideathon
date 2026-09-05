@@ -1,7 +1,81 @@
 import React, { useState, memo } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Paperclip, Link2, FileText, Github, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { UntrustedText } from './UntrustedText';
-import type { TurnMessage } from '../types';
+import { findingHeadline, findingFooter, describeSignal } from '../lib/findingMessage';
+import type { TurnMessage, TurnAttachment, TurnFinding } from '../types';
+
+const ATTACHMENT_ICON = {
+  file: FileText,
+  link: Link2,
+  note: Paperclip,
+  repo: Github,
+} as const;
+
+/**
+ * What the user attached, shown inside their own message.
+ *
+ * No verdict here. A verdict on the user's own bubble, before they have asked
+ * anything, is the application talking over them — and it appeared for every
+ * upload whether or not they wanted it.
+ */
+function Attachments({ items }: { items: TurnAttachment[] }) {
+  return (
+    <div className="mb-2 flex flex-wrap justify-end gap-1.5">
+      {items.map((a) => {
+        const Icon = ATTACHMENT_ICON[a.kind] ?? Paperclip;
+        return (
+          <span
+            key={a.id}
+            className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#6b6b52] bg-[#4a4a38] px-2 py-1 text-[11px] text-stone-200"
+          >
+            <Icon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{a.title}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A finding, in the conversation — not a panel beside it.
+ *
+ * Every word of the framing comes from src/lib/findingMessage.ts. The excerpts
+ * are attacker text and are rendered as PLAIN CHILDREN, not through the
+ * markdown subset: React escapes them, and nothing reinterprets a document's
+ * own characters while quoting that document back.
+ */
+function Finding({ finding }: { finding: TurnFinding }) {
+  const hostile = finding.matches.length > 0;
+  const Icon = hostile ? ShieldAlert : ShieldCheck;
+
+  return (
+    <div className="max-w-[90%] text-sm leading-relaxed text-[#2c2c24] sm:max-w-[82%]">
+      <p className="flex items-start gap-2">
+        <Icon
+          className={`mt-0.5 h-4 w-4 shrink-0 ${hostile ? 'text-rose-600' : 'text-emerald-600'}`}
+        />
+        <span>{findingHeadline(finding)}</span>
+      </p>
+
+      {finding.matches.map((m, i) => (
+        <div key={i} className="mt-2 ml-6 border-l-2 border-rose-300 pl-3">
+          <p className="text-[11px] text-[#8a8a75]">
+            line {m.line} &middot; {describeSignal(m.signal)}
+            {m.hidden && <span className="ml-1 text-amber-700">not visible when rendered</span>}
+          </p>
+          <p className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[#2c2c24]">
+            {m.excerpt}
+          </p>
+        </div>
+      ))}
+
+      {findingFooter(finding) && (
+        <p className="mt-2.5 ml-6 text-[11px] text-[#5a5a40]">{findingFooter(finding)}</p>
+      )}
+    </div>
+  );
+}
 
 /**
  * The settled transcript — S5.
@@ -39,6 +113,25 @@ function TranscriptImpl({ turns }: Props) {
     <>
       {turns.map((turn, index) => {
                 const isUser = turn.role === 'user';
+
+                // A finding is a message, not a panel. It sits in the flow
+                // like any other turn and is labelled Perimeter, because a
+                // reader has to be able to tell which sentences the
+                // application stands behind and which a model produced from
+                // attacker-influenced input.
+                if (turn.role === 'perimeter' && turn.finding) {
+                  return (
+                    <div key={turn.id || index} className="flex flex-col items-start">
+                      <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#8a8a75]">
+                        <span className="font-medium text-[#5a5a40]">Perimeter</span>
+                        <span>&bull;</span>
+                        <span>deterministic scan, no model</span>
+                      </div>
+                      <Finding finding={turn.finding} />
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={turn.id || index}
@@ -58,6 +151,10 @@ function TranscriptImpl({ turns }: Props) {
                           : ''}
                       </span>
                     </div>
+
+                    {turn.attachments && turn.attachments.length > 0 && (
+                      <Attachments items={turn.attachments} />
+                    )}
 
                     <div
                       className={`relative group max-w-[90%] sm:max-w-[82%] rounded-2xl p-4 text-sm leading-relaxed ${
