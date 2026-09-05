@@ -384,6 +384,12 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
   --member="serviceAccount:$SA" --role="roles/datastore.user"
 
 # Deploy. The label is required for challenge verification.
+# --set-env-vars REPLACES THE ENTIRE ENVIRONMENT. Every variable the service
+# needs must appear in this one command, every time. A deploy that omits one
+# deletes it -- and a follow-up `gcloud run services update` is not a fix,
+# because your next deploy undoes it. Keep this command as the single source
+# of truth for what the service runs, and add each optional integration's
+# variables to it as you enable them.
 gcloud run deploy perimeter \
   --source . --region asia-south1 --allow-unauthenticated \
   --labels dev-tutorial=cloud-run-ai-challenge \
@@ -393,6 +399,44 @@ gcloud run deploy perimeter \
 # Rules
 firebase deploy --only firestore:rules
 ```
+
+### Rotating the Gemini key
+
+Order matters. Disabling the old version before the new one is serving takes the
+service down, and repointing with `gcloud run services update` is reverted by the
+next deploy.
+
+1. Add the new version. Never paste a key -- pipe it, so nothing can truncate it
+   or double-paste it:
+
+   ```bash
+   gcloud services enable generativelanguage.googleapis.com
+   gcloud services api-keys create --display-name=perimeter-gemini \
+     --api-target=service=generativelanguage.googleapis.com
+   KEY=$(gcloud services api-keys list \
+     --filter="displayName=perimeter-gemini" --format="value(name)" | head -1)
+   gcloud services api-keys get-key-string "$KEY" --format="value(keyString)" \
+     | tr -d '\\n' | gcloud secrets versions add GEMINI_API_KEY --data-file=-
+   ```
+
+2. Verify the shape before deploying. It must print `AIzaSy` and `39`:
+
+   ```bash
+   gcloud secrets versions access N --secret=GEMINI_API_KEY \
+     | awk '{printf "prefix=%s length=%d\\n", substr($0,1,6), length($0)}'
+   ```
+
+3. Change the version number **in the deploy command above**, then deploy.
+4. Confirm the log line `Gemini key loaded ... versions/N` names the new version.
+5. Only then disable the old version.
+
+**A value that is not an API key is rejected before any request is made.** A
+Gemini key is `AIza` plus 35 characters. A value beginning `AQ.` or `ya29.` is an
+OAuth access token, and Google answers one with
+`401 ACCESS_TOKEN_TYPE_UNSUPPORTED: Expected OAuth 2 access token` -- a sentence
+that reads like the opposite of the problem. `assertGeminiKeyShape` in
+`server/gemini.ts` catches it first and reports the prefix and the length, never
+the value.
 
 That deploy is enough for everything the security argument rests on: the journal,
 multi-turn chat, the airlock, the broker, the approval queue, the Perimeter Log and the
@@ -404,7 +448,8 @@ you use it — a missing secret is reported as a config error, not a silent wron
 gcloud secrets create MAPS_API_KEY --replication-policy=automatic
 echo -n "YOUR_MAPS_KEY" | gcloud secrets versions add MAPS_API_KEY --data-file=-
 gcloud secrets add-iam-policy-binding MAPS_API_KEY   --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
-#   ...then add to --set-env-vars:
+#   ...then add to the --set-env-vars of the deploy command above.
+#   It replaces the whole environment, so it must list everything:
 #   MAPS_KEY_SECRET=projects/PROJECT_ID/secrets/MAPS_API_KEY/versions/1
 
 # Optional — Amendment H, read-only Gmail over OAuth (INV-16, INV-17).
@@ -418,7 +463,8 @@ echo -n "YOUR_OAUTH_CLIENT_SECRET" |   gcloud secrets versions add GOOGLE_CLIENT
 for S_NAME in GOOGLE_OAUTH_ENC_KEY GOOGLE_CLIENT_SECRET; do
   gcloud secrets add-iam-policy-binding "$S_NAME"     --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
 done
-#   ...then add to --set-env-vars:
+#   ...then add to the --set-env-vars of the deploy command above.
+#   It replaces the whole environment, so it must list everything:
 #   GOOGLE_OAUTH_ENC_KEY_SECRET=projects/PROJECT_ID/secrets/GOOGLE_OAUTH_ENC_KEY/versions/1
 #   GOOGLE_CLIENT_SECRET_SECRET=projects/PROJECT_ID/secrets/GOOGLE_CLIENT_SECRET/versions/1
 #   GOOGLE_CLIENT_ID=<your OAuth client id>
@@ -433,7 +479,8 @@ echo -n "YOUR_GITHUB_OAUTH_CLIENT_SECRET" | \
   gcloud secrets versions add GITHUB_CLIENT_SECRET --data-file=-
 gcloud secrets add-iam-policy-binding GITHUB_CLIENT_SECRET \
   --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
-#   ...then add to --set-env-vars:
+#   ...then add to the --set-env-vars of the deploy command above.
+#   It replaces the whole environment, so it must list everything:
 #   GITHUB_CLIENT_SECRET_SECRET=projects/PROJECT_ID/secrets/GITHUB_CLIENT_SECRET/versions/1
 #   GITHUB_CLIENT_ID=<your OAuth app client id>
 #   GITHUB_OAUTH_REDIRECT=https://<your-run-domain>/api/github/callback
