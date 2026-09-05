@@ -12,6 +12,34 @@ export default defineConfig(() => {
       },
     },
     server: {
+      /**
+       * Local frontend against a real backend.
+       *
+       * The dashboard itself needs no proxy: journal history, entries and
+       * saves go straight to Firestore from the client SDK, under the same
+       * rules production enforces. Only /api/* — chat, ingest, repo scan,
+       * GitHub — needs a server.
+       *
+       * Opt-in by env var rather than a hardcoded default, because the target
+       * is PRODUCTION: anything ingested through this proxy is written to the
+       * real Firestore and spends the real Gemini quota. A proxy that pointed
+       * at production without being asked to would be a trap.
+       *
+       *   PERIMETER_API=https://perimeter-914890039877.asia-south1.run.app npx vite
+       *
+       * Firebase ID tokens are issued per project, not per origin, so a token
+       * minted at localhost verifies against the deployed requireAuth exactly
+       * as one minted at the run.app domain does.
+       */
+      proxy: process.env.PERIMETER_API
+        ? {
+            '/api': {
+              target: process.env.PERIMETER_API,
+              changeOrigin: true,
+              secure: true,
+            },
+          }
+        : undefined,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

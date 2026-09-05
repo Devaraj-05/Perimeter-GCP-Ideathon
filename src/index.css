@@ -44,6 +44,15 @@
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --dur-fast: 120ms;
     --dur-base: 220ms;
+    /* Scroll reveals want a longer beat than a hover or a panel. */
+    --dur-slow: 320ms;
+
+    /* List rows — a fill, never a border.
+       A history rail reads as one surface with a highlight moving through it.
+       Two tokens rather than one so hover and selected can never be mistaken
+       for each other: hover is a whisper, selected is a resting state. */
+    --row-hover: rgba(90, 90, 64, 0.06);
+    --row-active: #e7e2d5;
   }
 
   html {
@@ -216,5 +225,115 @@
   button:active,
   [role="button"]:active {
     transform: none !important;
+  }
+}
+
+/*
+ * Floating chrome — Apple's translucent material, not an opaque strip.
+ *
+ * A navbar or a sticky group header is a layer that content passes UNDER, so
+ * the page reads as continuous and the chrome reads as hovering above it. A
+ * 1px divider says "two boxes"; a blurred layer with a fading scroll edge says
+ * "one surface, one thing floating on it".
+ */
+@layer utilities {
+  .chrome-blur {
+    background: rgba(252, 250, 247, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /* Sidebar chrome sits on the sidebar ground, not the page ground. */
+  .chrome-blur-sidebar {
+    background: rgba(243, 239, 230, 0.82);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  /* Content fades out where it meets floating chrome, instead of colliding
+     with a hard rule. Applied to the SCROLLING element, not the chrome. */
+  .scroll-edge {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 12px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 12px,
+      #000 calc(100% - 12px),
+      transparent 100%
+    );
+  }
+
+  /*
+   * Scroll reveal.
+   *
+   * Starts hidden and is released by adding .is-in, which an
+   * IntersectionObserver sets. Distinct from .anim-rise, which fires on mount
+   * — a landing section three screens down should arrive when it is reached,
+   * not finish animating before anyone sees it.
+   */
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity var(--dur-slow) var(--ease-out),
+      transform var(--dur-slow) var(--ease-out);
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+  .reveal-1 { transition-delay: 60ms; }
+  .reveal-2 { transition-delay: 120ms; }
+  .reveal-3 { transition-delay: 180ms; }
+}
+
+/*
+ * Reduced transparency — Apple's third accessibility signal, alongside reduced
+ * motion and increased contrast. Someone who has asked for less translucency
+ * gets a solid surface, not a slightly-less-blurry one.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .chrome-blur {
+    background: var(--bg-natural);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .chrome-blur-sidebar {
+    background: var(--sidebar-natural);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .chrome-blur,
+  .chrome-blur-sidebar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid var(--text-primary);
+  }
+}
+
+/*
+ * The reveal must collapse too. The block above this one covers animations and
+ * transitions globally, but .reveal starts at opacity 0 — left alone, reduced
+ * motion would hide the content permanently rather than showing it instantly.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .reveal.is-in {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .scroll-edge {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }

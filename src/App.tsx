@@ -181,7 +181,10 @@ export default function App() {
       // Same treatment as the email path. This previously showed err.message,
       // which is Firebase's own wording and carries internal detail (INV-10) —
       // the test written for the new path caught it on the old one.
-      console.error('Google Sign-In failed:', err?.code);
+      // The code, always. The generic fallback is reached exactly when the
+      // table has no entry, and without the code in the console there is no
+      // way to learn which one to add.
+      console.error('Google Sign-In failed:', err?.code, '(see describeAuthError)');
       setAuthError(describeAuthError(err));
     } finally {
       setAuthLoading(false);
@@ -222,7 +225,7 @@ export default function App() {
       // describeAuthError, never err.message: Firebase messages carry internal
       // detail and sometimes the address itself (INV-10). The code is logged,
       // the credential never is.
-      console.error('Email sign-in failed:', err?.code);
+      console.error('Email sign-in failed:', err?.code, '(see describeAuthError)');
       setAuthError(describeAuthError(err));
     } finally {
       setAuthLoading(false);

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Shield, Lock, BrainCircuit, ScrollText, CheckCircle2, Mail } from 'lucide-react';
+import { Shield, Lock, Mail, Github, BookOpen } from 'lucide-react';
+import { HowItWorks } from './landing/HowItWorks';
+import { Problem, Invariants, Refusal, Verification, Limits } from './landing/Sections';
 
 interface LandingPageProps {
   onSignIn: () => void;
@@ -17,26 +19,6 @@ interface LandingPageProps {
   notice?: string | null;
 }
 
-const PILLARS = [
-  {
-    Icon: BrainCircuit,
-    title: 'Reflect with Gemini',
-    body: 'Multi-turn journalling across five modes. Every entry stays isolated to your own account in Cloud Firestore.',
-    foot: 'Five reflection modes',
-  },
-  {
-    Icon: Shield,
-    title: 'A boundary the model cannot cross',
-    body: 'External content is read by a model with no tools bound. An injected instruction lands with nothing to call.',
-    foot: 'The airlock, enforced in code',
-  },
-  {
-    Icon: ScrollText,
-    title: 'Visible, and verifiable',
-    body: 'Every decision is written to a tamper-evident chain. See what was refused, and verify the log in one click.',
-    foot: 'Hash-chained audit log',
-  },
-];
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onSignIn,
@@ -250,32 +232,63 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
-        <div className="mt-16 grid grid-cols-1 gap-5 md:grid-cols-3">
-          {PILLARS.map(({ Icon, title, body, foot }, i) => (
-            <div
-              key={title}
-              className={`anim-rise anim-rise-${i + 1} flex flex-col justify-between rounded-2xl border border-[#e5e0d3] bg-white p-6 shadow-[0_1px_2px_rgba(58,53,40,0.06)]`}
-            >
-              <div className="space-y-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#e5e0d3] bg-[#f3efe6] text-[#5a5a40]">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="font-serif text-lg font-medium text-[#2c2c24]">{title}</h3>
-                <p className="text-sm leading-relaxed text-[#434338]">{body}</p>
-              </div>
-              <div className="mt-4 flex items-center gap-1.5 border-t border-[#f0ede6] pt-4 text-xs text-[#8a8a75]">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#5a5a40]" />
-                <span>{foot}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* The three pillar cards used to sit here. They said, in three
+            boxes, what the sections below now demonstrate: the attack, the
+            architecture, the rules, a refusal, the evidence, and the limits.
+            A landing page for this product that omits the airlock diagram is
+            omitting the reason the product exists. */}
       </main>
 
-      <footer className="border-t border-[#e5e0d3] bg-white py-5">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 text-center text-xs text-[#8a8a75] sm:flex-row">
-          <span>Perimeter · Firebase Auth · Cloud Firestore · Gemini · Google Cloud Run</span>
-          <span>Owner-bound data, server-verified, tamper-evident by design.</span>
+      <Problem />
+      <HowItWorks />
+      <Invariants />
+      <Refusal />
+      <Verification />
+      <Limits />
+
+      <footer className="border-t border-[#e5e0d3] bg-white py-10">
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-sm">
+              <p className="font-serif text-base font-semibold text-[#2c2c24]">Perimeter</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-[#8a8a75]">
+                A journal that reads your untrusted world and shows you every attempt that world
+                makes to hijack its AI.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-x-8 gap-y-3 text-xs">
+              <a
+                href="https://github.com/Devaraj-05/Perimeter-GCP-Ideathon"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 text-[#5a5a40] underline-offset-4 hover:underline"
+              >
+                <Github className="h-3.5 w-3.5" />
+                Source
+              </a>
+              <a
+                href="https://github.com/Devaraj-05/Perimeter-GCP-Ideathon/blob/main/CONSTITUTION.md"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 text-[#5a5a40] underline-offset-4 hover:underline"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Engineering constitution
+              </a>
+              <a
+                href="#how-it-works"
+                className="text-[#5a5a40] underline-offset-4 hover:underline"
+              >
+                How it works
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-2 border-t border-[#f0ede6] pt-6 text-[11px] text-[#8a8a75] sm:flex-row sm:items-center sm:justify-between">
+            <span>Firebase Auth · Cloud Firestore · Gemini · Google Cloud Run</span>
+            <span>Owner-bound data, server-verified, tamper-evident by design.</span>
+          </div>
         </div>
       </footer>
     </div>

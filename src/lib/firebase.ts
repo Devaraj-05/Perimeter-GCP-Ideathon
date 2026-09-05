@@ -133,6 +133,18 @@ export function describeAuthError(err: unknown): string {
       'Email and password sign-in is not enabled for this project yet.',
     'auth/popup-closed-by-user': 'The sign-in window closed before finishing.',
     'auth/popup-blocked': 'Your browser blocked the sign-in window.',
+    // Firebase authorises `localhost` by default and NOT `127.0.0.1`: they are
+    // different origin strings to the OAuth flow even though they resolve to
+    // the same machine. This cost a round trip during local testing, and
+    // "please try again" was wrong advice for it — retrying a domain that is
+    // not on the list fails identically every time.
+    'auth/unauthorized-domain':
+      'This address is not an authorised sign-in domain for the Firebase project. Open the app at http://localhost:5173 rather than 127.0.0.1, or add this domain under Authentication → Settings → Authorized domains.',
+    'auth/invalid-api-key': 'The Firebase web config in this build is not valid.',
+    'auth/account-exists-with-different-credential':
+      'An account already exists for that email using a different sign-in method. Try Google.',
+    'auth/requires-recent-login': 'Please sign in again to continue.',
+    'auth/internal-error': 'Firebase rejected the request. Check the browser console for the code.',
   };
 
   return table[code] ?? 'Could not sign you in. Please try again.';

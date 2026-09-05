@@ -1663,9 +1663,15 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               </div>
             )}
 
+            {/* The composer, as one field.
+                The + button, the Web toggle, the textarea and the send button
+                were four separate bordered controls sitting in a row, which
+                read as a toolbar rather than as somewhere to type. They are
+                now one bordered surface that takes the focus ring as a whole,
+                the way a chat input does. */}
             <form
               onSubmit={handleSendFollowUp}
-              className="mt-4 pt-3 border-t border-[#f0ede6] flex items-center gap-2"
+              className="mt-4 flex items-center gap-2 rounded-2xl border border-[#e5e0d3] bg-white p-2 transition-shadow focus-within:border-[#5a5a40] focus-within:shadow-[0_0_0_3px_rgba(90,90,64,0.14)]"
             >
               {/* One entry point instead of four.
                   Four bare icons beside the composer read as a toolbar and
@@ -1692,7 +1698,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   title="Add something for it to read"
                   aria-haspopup="menu"
                   aria-expanded={plusOpen}
-                  className="inline-flex h-[42px] w-[42px] cursor-pointer items-center justify-center rounded-xl border border-[#e5e0d3] bg-white text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
+                  className="inline-flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-xl text-[#5a5a40] transition-colors hover:bg-[#f3efe6] disabled:opacity-50"
                 >
                   {attaching ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1795,10 +1801,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                     : 'Web search off — links you type are ignored'
                 }
                 aria-pressed={webSearch}
-                className={`inline-flex h-[42px] shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium transition-colors ${
+                className={`inline-flex h-[38px] shrink-0 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-colors ${
                   webSearch
-                    ? 'border-[#5a5a40] bg-[#5a5a40] text-white'
-                    : 'border-[#e5e0d3] bg-white text-[#8a8a75] hover:bg-[#f3efe6]'
+                    ? 'bg-[#5a5a40] text-white'
+                    : 'text-[#8a8a75] hover:bg-[#f3efe6]'
                 }`}
               >
                 <Globe className="h-4 w-4" />
@@ -1813,13 +1819,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 onPaste={(e) => onComposerPaste(e.clipboardData.getData('text'))}
                 placeholder={turns.length === 0 ? "What is on your mind? Or add something with + and ask about it…" : "Ask a follow-up, or add another angle…"}
                 disabled={isGenerating}
-                className="flex-1 rounded-xl border border-[#e5e0d3] bg-[#f8f6f0] px-4 py-2.5 text-xs sm:text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:bg-white focus:border-[#5a5a40] focus:outline-hidden transition-colors"
+                className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-sm text-[#2c2c24] placeholder:text-[#8a8a75] focus:shadow-none focus:outline-hidden"
               />
               <button
                 id="send-followup-btn"
                 type="submit"
                 disabled={isGenerating || !followUpInput.trim()}
-                className="inline-flex items-center justify-center rounded-xl bg-[#5a5a40] p-2.5 text-white hover:bg-[#484833] disabled:opacity-40 transition-colors cursor-pointer"
+                className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#5a5a40] text-white transition-colors hover:bg-[#484833] disabled:bg-[#e5e0d3] disabled:text-[#8a8a75]"
                 title="Send follow-up"
               >
                 <Send className="h-4 w-4" />

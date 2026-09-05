@@ -3,7 +3,10 @@ import { User } from 'firebase/auth';
 import {
   Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert,
   KeyRound, ScrollText, Swords, MoreHorizontal, Menu, X, Gauge,
+  ChevronDown,
 } from 'lucide-react';
+import { Logo } from './Logo';
+import { ProfileMenu } from './ProfileMenu';
 
 /**
  * Application chrome.
@@ -102,15 +105,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   //
   // "Attack it" is the one that matters. It is a dare rather than a noun, and a
   // dare is the only label a stranger reliably clicks.
-  const primary: Item[] = [
+  /**
+   * Everything that inspects the running system, in one menu.
+   *
+   * Ordered by what a first-time reader should open first: what came in, what
+   * the agent may do, what it refused. The last three are useful but not on
+   * that path, and a divider separates them.
+   */
+  const inspect: Item[] = [
     { id: 'sources-btn', label: 'What it reads', Icon: Github, onClick: onOpenSources },
-    { id: 'redteam-btn', label: 'Attack it', Icon: Swords, onClick: onOpenRedTeam, accent: true },
     { id: 'permissions-btn', label: 'What it can do', Icon: KeyRound, onClick: onOpenPermissions },
     { id: 'perimeter-log-btn', label: 'What it refused', Icon: ScrollText, onClick: onOpenLog },
-  ];
-
-  // Behind the overflow: useful, but not on the critical path.
-  const overflow: Item[] = [
     { id: 'insights-btn', label: 'Insights', Icon: BarChart3, onClick: onOpenInsights },
     { id: 'threat-feed-btn', label: 'Activity', Icon: ShieldAlert, onClick: onOpenThreatFeed },
     { id: 'security-btn', label: 'How this is secured', Icon: ShieldCheck, onClick: onOpenSecurity },
@@ -125,26 +130,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e5e0d3] bg-white px-3 py-2 text-sm font-medium text-[#434338] transition-colors hover:bg-[#f3efe6] hover:text-[#2c2c24]';
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#e5e0d3] bg-[#fcfaf7]/85 backdrop-blur-md">
+    <header className="chrome-blur sticky top-0 z-30">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        {/* Brand. The subtitle is decorative and is the first thing to go. */}
+        {/* Brand.
+            One drawn mark and one word. The tagline and the model badge both
+            left this row: a subtitle nobody reads and a build detail beside a
+            product name were two things competing with the actions. The badge
+            now lives in the account menu, where a session property belongs. */}
         <div className="flex min-w-0 shrink items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#5a5a40]">
-            <Sparkles className="h-[18px] w-[18px] text-amber-300" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-serif text-lg font-semibold tracking-tight text-[#2c2c24]">
-                Perimeter
-              </span>
-              <span className="hidden shrink-0 rounded-md border border-[#e5e0d3] bg-[#f3efe6] px-1.5 py-0.5 text-[11px] font-medium text-[#5a5a40] xl:inline">
-                Gemini 3.6 Flash
-              </span>
-            </div>
-            <p className="hidden truncate text-xs text-[#8a8a75] lg:block">
-              Secure journal &amp; agent workspace
-            </p>
-          </div>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#5a5a40] text-[#f3efe6]">
+            <Logo className="h-[19px] w-[19px]" />
+          </span>
+          <span className="truncate font-serif text-lg font-semibold tracking-[-0.01em] text-[#2c2c24]">
+            Perimeter
+          </span>
         </div>
 
         {user && (
@@ -162,46 +161,54 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="lg:hidden">New</span>
               </button>
 
-              {primary.map(({ id, label, Icon, onClick, accent }) => (
-                <button
-                  key={id}
-                  id={id}
-                  onClick={onClick}
-                  title={label}
-                  className={
-                    accent
-                      ? 'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition-colors hover:bg-rose-100'
-                      : ghost
-                  }
-                >
-                  <Icon className={`h-4 w-4 ${accent ? '' : 'text-[#5a5a40]'}`} />
-                  <span className="hidden xl:inline">{label}</span>
-                </button>
-              ))}
+              {/* "Attack it" keeps its own colour and stays a sibling.
+                  It is the one control a stranger must be able to see without
+                  opening anything — a dare is the only label that reliably
+                  gets clicked, and burying it in a menu would hide the point
+                  of the product. */}
+              <button
+                id="redteam-btn"
+                onClick={onOpenRedTeam}
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition-colors hover:bg-rose-100"
+              >
+                <Swords className="h-4 w-4" />
+                Attack it
+              </button>
 
-              {/* Overflow */}
+              {/* Everything else that inspects the system, behind one LABELLED
+                  control.
+                  Four icon buttons whose text only appeared at xl: meant that
+                  at every laptop width this row was anonymous glyphs. One word
+                  a reader can act on beats four they have to hover to identify. */}
               <div className="relative shrink-0" ref={moreRef}>
                 <button
+                  id="inspect-btn"
                   onClick={() => setMoreOpen((v) => !v)}
-                  title="More"
                   aria-haspopup="menu"
                   aria-expanded={moreOpen}
                   className={ghost}
                 >
-                  <MoreHorizontal className="h-4 w-4 text-[#5a5a40]" />
+                  <ScrollText className="h-4 w-4 text-[#5a5a40]" />
+                  Inspect
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-[#8a8a75] transition-transform ${moreOpen ? 'rotate-180' : ''}`}
+                  />
                 </button>
                 {moreOpen && (
                   <div
                     role="menu"
-                    className="anim-panel absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white shadow-[0_24px_60px_rgba(58,53,40,0.16)]"
+                    style={{ transformOrigin: 'top right' }}
+                    className="anim-panel absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-[#e5e0d3] bg-white shadow-[0_24px_60px_rgba(58,53,40,0.16)]"
                   >
-                    {overflow.map(({ id, label, Icon, onClick }) => (
+                    {inspect.map(({ id, label, Icon, onClick }, i) => (
                       <button
                         key={id}
                         id={id}
                         role="menuitem"
                         onClick={run(onClick)}
-                        className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left text-sm text-[#434338] transition-colors hover:bg-[#f3efe6]"
+                        className={`flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[#434338] transition-colors hover:bg-[#f3efe6] ${
+                          i === 3 ? 'border-t border-[#f0ede6]' : ''
+                        }`}
                       >
                         <Icon className="h-4 w-4 shrink-0 text-[#5a5a40]" />
                         {label}
@@ -211,39 +218,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
 
-              <div className="mx-1 h-6 w-px shrink-0 bg-[#e5e0d3]" />
-
-              <div className="flex shrink-0 items-center gap-2.5">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt=""
-                    className="h-8 w-8 rounded-full border border-[#d8d2c2] object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#e5e0d3] bg-[#f3efe6] text-xs font-medium text-[#5a5a40]">
-                    {(user.displayName || user.email || 'U')[0].toUpperCase()}
-                  </div>
-                )}
-                <div className="hidden text-left text-xs 2xl:block">
-                  <div className="max-w-[130px] truncate font-medium text-[#2c2c24]">
-                    {user.displayName || user.email?.split('@')[0]}
-                  </div>
-                  <div className="text-[11px] text-[#8a8a75]">
-                    {entryCount} {entryCount === 1 ? 'entry' : 'entries'}
-                  </div>
-                </div>
-                <button
-                  id="sign-out-btn"
-                  onClick={onSignOut}
-                  title="Sign out"
-                  aria-label="Sign out"
-                  className="shrink-0 rounded-lg p-2 text-[#8a8a75] transition-colors hover:bg-[#f3efe6] hover:text-[#2c2c24]"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
+              <ProfileMenu
+                user={user}
+                entryCount={entryCount}
+                modelLabel="Gemini 3.6 Flash"
+                onSignOut={onSignOut}
+              />
             </div>
 
             {/* ---------- Mobile trigger ---------- */}
@@ -310,7 +290,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              {[...primary, ...overflow].map(({ id, label, Icon, onClick, accent }) => (
+              {/* Mobile keeps every action flat and reachable: a sheet has the
+                  room a 64px bar does not, so nothing is nested behind a
+                  second tap. "Attack it" is prepended so it stays first here
+                  too. */}
+              {[
+                {
+                  id: 'redteam-btn-m',
+                  label: 'Attack it',
+                  Icon: Swords,
+                  onClick: onOpenRedTeam,
+                  accent: true,
+                },
+                ...inspect,
+              ].map(({ id, label, Icon, onClick, accent }: Item) => (
                 <button
                   key={id}
                   onClick={run(onClick)}
