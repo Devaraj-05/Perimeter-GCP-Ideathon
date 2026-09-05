@@ -66,6 +66,10 @@ export async function beginConnect(uid: string): Promise<string> {
     uid,
     createdAt: Date.now(),
     used: false,
+    // oauth_states is shared with the GitHub connection (Amendment J).
+    // Recording which provider minted a nonce is what stops one resolving to
+    // an identity under the other.
+    provider: 'gmail',
   });
 
   const params = new URLSearchParams({
@@ -96,9 +100,19 @@ export async function consumeState(nonce: string): Promise<string> {
   const snap = await stateRef(nonce).get();
   if (!snap.exists) throw new GmailError('bad_state');
 
-  const data = snap.data() as { uid?: string; createdAt?: number; used?: boolean };
+  const data = snap.data() as {
+    uid?: string;
+    createdAt?: number;
+    used?: boolean;
+    provider?: string;
+  };
   await stateRef(nonce).delete().catch(() => undefined);
 
+  // A nonce issued for the GitHub connection must not resolve to an identity
+  // here. Nothing exploitable followed while this was missing — the code
+  // exchange would fail — but a nonce resolving to a uid under the wrong
+  // provider is the shape INV-17 exists to prevent.
+  if (data.provider !== 'gmail') throw new GmailError('bad_state');
   if (data.used === true) throw new GmailError('bad_state');
   if (!data.uid) throw new GmailError('bad_state');
   if (!data.createdAt || Date.now() - data.createdAt > STATE_TTL_MS) {

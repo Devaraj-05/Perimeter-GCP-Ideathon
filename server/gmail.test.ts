@@ -42,6 +42,13 @@ describe('INV-17 — identity never comes from the callback request', () => {
     expect(GMAIL).toMatch(/createdAt\s*>\s*STATE_TTL_MS/);
   });
 
+  it('will not consume a nonce issued for another provider', () => {
+    // oauth_states is shared with the GitHub connection (Amendment J).
+    // A GitHub nonce must not resolve to a uid here.
+    expect(GMAIL).toContain("provider: 'gmail'");
+    expect(GMAIL).toContain("data.provider !== 'gmail'");
+  });
+
   it('the nonce is generated with a CSPRNG, not Math.random', () => {
     expect(GMAIL).toMatch(/randomBytes\(32\)/);
     expect(GMAIL).not.toContain('Math.random');
