@@ -52,6 +52,8 @@ constitution.
   internal paths.
 - **INV-11** Outbound fetches are HTTPS-only, resolve to public unicast addresses, are size- and
   time-capped, and do not auto-follow redirects.
+- **INV-20** A streamed reply is preceded by its taint verdict, and a partial reply is never
+  persisted. See Amendment L.
 
 ## §3 Secure coding standards
 
@@ -544,3 +546,57 @@ Limits, next to the unverified Gmail scope.
 
 **7. Corpus payload.** A repository fixture whose `README.md` carries an injection addressed to
 a code-review assistant, added in the plan that implements the ingest.
+
+---
+
+## Amendment L — Streaming the reply (adopted 2026-09-05)
+
+Adopted **before** the streaming code was written, per §9. The chat reply may reach the browser
+incrementally rather than in one response.
+
+**1. Data flows.** No new source and no new sink. The same Planner output reaches the same
+renderer; only the delivery changes, from one JSON body to a sequence of NDJSON records over the
+same authenticated POST. NDJSON rather than SSE for the reason established by Amendment I's scan
+progress: `EventSource` cannot set an `Authorization` header, and INV-3 requires a verified token
+on every request.
+
+**2. New untrusted input?** No. Model output was already model-derived text under INV-9 and is
+still rendered by the same component.
+
+**3. New egress path?** No.
+
+**4. New secret?** No.
+
+**5. New Firestore paths?** No. The turn is written once, complete, exactly as before — a partial
+reply is never persisted.
+
+**6. New invariant.**
+
+> **INV-20** — A streamed reply is preceded by its taint verdict. `turnTaint` is computed from
+> the assembled Planner context before generation begins, so it is sent as the first record of
+> the stream, and no token of model text is written to the response before it. Until the stream
+> completes, the turn is rendered as provisional and is not persisted.
+>
+> This is **stronger** than the atomic delivery it replaces. Previously the verdict and the text
+> arrived together and the user read both at once; now the warning is on screen before the first
+> attacker-influenceable character is painted.
+
+**On the fallback ladder (§6), which streaming complicates.** Once a token has been written to
+the response it cannot be withdrawn, so a mid-stream failure cannot fall through to the next
+model without showing the user two different answers stitched together. The ladder therefore
+resolves **before** the first token is emitted: an attempt is committed only once its first chunk
+arrives, and a failure before that point falls to the next model normally. A failure after it
+ends the turn with an error record rather than silently switching models. The ladder itself is
+unchanged — §6 fixes those four identifiers and this amendment does not touch them.
+
+**On tool calls.** The broker and executor still see the complete response. Text deltas are
+forwarded for display as they arrive; function calls are accumulated and processed only once
+generation has finished, so INV-4 and INV-6 are untouched — no tool is proposed, authorised or
+executed on a partial response.
+
+**On abandonment.** A client that disconnects mid-stream aborts generation. Nothing is persisted,
+which is the same outcome as a failed turn today.
+
+**7. Corpus payload.** None. This changes transport, not what any model reads or what any tool
+does, and a payload exercising neither would be theatre. The existing corpus runs unchanged
+through the non-streaming path, which remains the tested contract for the red-team console.
