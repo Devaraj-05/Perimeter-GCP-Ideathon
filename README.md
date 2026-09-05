@@ -239,6 +239,14 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   requires a human click and the log still records the attempt.
 - **An injection can still corrupt a summary.** Schema-constrained output is still output. This is
   why derived content stays tainted and is marked in the UI.
+- **The Gemini free tier is 20 requests per model per day, and one chat turn costs several.**
+  Screening an attachment, reading it, and answering are separate calls, so a question with two
+  attachments spends four. Roughly five interactions a day before the project is out of quota.
+  The application now says so — it reads the retry delay Google supplies and distinguishes a
+  per-minute limit, where waiting works, from the daily cap, where it does not and billing is
+  the only answer. Telling a user to retry when the quota returns tomorrow is worse than saying
+  nothing.
+
 - **Rate limiting is per-instance** (in-memory). With `--max-instances 4` the effective limit is
   4×. Stated rather than implied away.
 - **The chain detects edits, not truncation of its own tail.** Removing the most recent N events
@@ -355,7 +363,7 @@ npm install
 cp .env.example .env          # put a Gemini API key in GEMINI_API_KEY
 npm run dev                   # unified server, http://localhost:3000
 
-npm test                      # 617 unit tests, no infrastructure needed
+npm test                      # 622 unit tests, no infrastructure needed
 npm run test:rules            # 80 emulator tests: 66 rules + 14 end-to-end egress
 npm run replay                # the two corpus tables above
 ```

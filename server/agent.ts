@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { requireAuth, AuthedRequest, adminDb } from './auth';
-import { getAI, MODEL_FALLBACK_LADDER, isRecoverable } from './gemini';
+import { getAI, MODEL_FALLBACK_LADDER, isRecoverable, readQuotaError } from './gemini';
 // Type-only: assemble.ts is superseded and must not be reachable at runtime.
 import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
@@ -422,6 +422,21 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       contextIds: contextIds,
     });
   } catch (err: any) {
+    // A spent quota is not "unavailable, please retry". Google says which
+    // wall was hit and when it lifts, and the difference between waiting a
+    // minute and enabling billing is the whole of the user's next action.
+    const quota = readQuotaError(err);
+    if (quota) {
+      console.error('[agent] chat blocked by quota. daily:', quota.daily);
+      return res.status(429).json({
+        error: quota.daily
+          ? 'The Gemini free-tier daily quota for this project is spent (20 requests per model). It resets tomorrow, or enable billing on the API to lift it.'
+          : `Gemini is rate-limiting this project. Try again in about ${quota.retryAfterSeconds ?? 60} seconds.`,
+        code: quota.daily ? 'quota_daily' : 'quota_rate',
+        retryAfterSeconds: quota.retryAfterSeconds,
+      });
+    }
+
     console.error('[agent] chat failed:', err?.message);
     res.status(500).json({ error: 'The assistant is unavailable. Please retry.' });
   }

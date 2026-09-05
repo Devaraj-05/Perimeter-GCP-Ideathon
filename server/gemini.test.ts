@@ -153,3 +153,72 @@ describe('§8 — every model call is bounded', () => {
     expect(LADDER_BUDGET_MS).toBeGreaterThan(MODEL_ATTEMPT_TIMEOUT_MS);
   });
 });
+
+describe('quota exhaustion is told apart from every other failure', () => {
+  /**
+   * Taken from a real Cloud Run log line. Google answers a spent quota with
+   * the exact retry delay and whether the cap was per-minute or per-DAY, and
+   * both were discarded — so a free-tier daily limit reached the user as
+   * "the assistant is unavailable, please retry". Retrying was the one thing
+   * that could not work.
+   */
+  const DAILY_429 = JSON.stringify({
+    error: {
+      code: 429,
+      message:
+'        You exceeded your current quota. Quota exceeded for metric: ' +
+'        generativelanguage.googleapis.com/generate_content_free_tier_requests, ' +
+'        limit: 20, model: gemini-3.6-flash. Please retry in 24.592505637s.',
+      status: 'RESOURCE_EXHAUSTED',
+      details: [
+        {
+          quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier',
+        },
+        { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '24s' },
+      ],
+    },
+  });
+
+  it('recognises a quota error', async () => {
+    const { readQuotaError } = await import('./gemini');
+    expect(readQuotaError(new Error(DAILY_429))).not.toBeNull();
+  });
+
+  it('reads the retry delay Google supplied, rounded up', async () => {
+    const { readQuotaError } = await import('./gemini');
+    expect(readQuotaError(new Error(DAILY_429))!.retryAfterSeconds).toBe(24);
+  });
+
+  it('knows a DAILY cap from a per-minute one', async () => {
+    // The difference is whether the answer is "wait a minute" or "enable
+    // billing", and they are not interchangeable advice.
+    const { readQuotaError } = await import('./gemini');
+    expect(readQuotaError(new Error(DAILY_429))!.daily).toBe(true);
+
+    const perMinute = JSON.stringify({
+      error: {
+        code: 429,
+        status: 'RESOURCE_EXHAUSTED',
+        message: 'Quota exceeded. Please retry in 3s.',
+        details: [{ quotaId: 'GenerateRequestsPerMinutePerProject' }],
+      },
+    });
+    expect(readQuotaError(new Error(perMinute))!.daily).toBe(false);
+    expect(readQuotaError(new Error(perMinute))!.retryAfterSeconds).toBe(3);
+  });
+
+  it('is not fooled by an unrelated failure', async () => {
+    const { readQuotaError } = await import('./gemini');
+    expect(readQuotaError(new Error('503 UNAVAILABLE: high demand'))).toBeNull();
+    expect(readQuotaError(new Error('API key not valid'))).toBeNull();
+    expect(readQuotaError(undefined)).toBeNull();
+  });
+
+  it('survives a quota error with no delay in it', async () => {
+    // Absent structure must produce null rather than NaN, or the UI renders
+    // "try again in NaN seconds".
+    const { readQuotaError } = await import('./gemini');
+    const bare = readQuotaError(new Error('RESOURCE_EXHAUSTED'))!;
+    expect(bare.retryAfterSeconds).toBeNull();
+  });
+});

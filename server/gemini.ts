@@ -115,6 +115,50 @@ export async function withDeadline<T>(
   }
 }
 
+/**
+ * Quota exhaustion, told apart from every other 429.
+ *
+ * Google answers a spent quota with the exact time to wait and whether the
+ * limit was per-minute or per-DAY. Both were discarded, so a free-tier daily
+ * limit — 20 requests per model — surfaced to the user as "the assistant is
+ * unavailable, please retry". Retrying was the one thing that could not work:
+ * the quota does not come back for hours.
+ *
+ * A chat turn costs several requests (classifyL2 on each ingest, a Reader per
+ * artifact, then the Planner), so twenty is about five interactions. Being
+ * told which wall was hit is the difference between waiting a minute and
+ * enabling billing.
+ */
+export class QuotaExhaustedError extends Error {
+  constructor(
+    readonly model: string,
+    readonly retryAfterSeconds: number | null,
+    readonly daily: boolean,
+  ) {
+    super(`quota_exhausted:${model}`);
+    this.name = 'QuotaExhaustedError';
+  }
+}
+
+/** Reads what Google actually said. Returns null when this is not a quota error. */
+export function readQuotaError(err: unknown): { retryAfterSeconds: number | null; daily: boolean } | null {
+  const raw = String((err as any)?.message ?? '');
+  if (!/RESOURCE_EXHAUSTED|exceeded your current quota/i.test(raw)) return null;
+
+  // The delay arrives either as RetryInfo.retryDelay ("24s") or in the prose
+  // ("Please retry in 24.59s"). Prefer the structured one.
+  let retryAfterSeconds: number | null = null;
+  const structured = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(raw);
+  const prose = /retry in (\d+(?:\.\d+)?)s/i.exec(raw);
+  const found = structured?.[1] ?? prose?.[1];
+  if (found) retryAfterSeconds = Math.ceil(Number(found));
+
+  // PerDay in the quota id is the free tier daily cap. Waiting will not fix it.
+  const daily = /PerDay|free_tier/i.test(raw);
+
+  return { retryAfterSeconds, daily };
+}
+
 export interface FallbackOptions {
   systemInstruction?: string;
   temperature?: number;
@@ -179,6 +223,18 @@ export async function generateContentWithFallback(
       // the real cause under repetition in the logs.
       if (!recoverable) throw err;
     }
+  }
+
+  // Every rung refused. If the reason was quota, say so — a caller told to
+  // "retry" when the daily cap is spent is being given the one instruction
+  // that cannot help.
+  const quota = readQuotaError(lastError);
+  if (quota) {
+    throw new QuotaExhaustedError(
+      MODEL_FALLBACK_LADDER[MODEL_FALLBACK_LADDER.length - 1],
+      quota.retryAfterSeconds,
+      quota.daily,
+    );
   }
 
   throw lastError || new Error('All Gemini fallback models exhausted.');
