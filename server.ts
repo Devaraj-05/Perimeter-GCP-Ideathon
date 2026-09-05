@@ -13,7 +13,6 @@ import { agentRouter } from './server/agent';
 import { internalRouter } from './server/internal';
 import { redteamRouter } from './server/redteam';
 import { secretStatus } from './server/secrets';
-import { locationRouter } from './server/locationRoutes';
 import { gmailRouter } from './server/gmailRoutes';
 import { githubRouter } from './server/githubRoutes';
 import { buildConversationContents, buildSystemInstruction } from './server/conversation';
@@ -64,7 +63,6 @@ app.use('/internal', internalRouter);
 // Adversarial self-testing (Amendment C). Runs the corpus through the real
 // pipeline so a judge can attack the app and watch it hold.
 app.use('/api/redteam', redteamRouter);
-app.use('/api/location', locationRouter);
 app.use('/api/gmail', gmailRouter);
 app.use('/api/github', githubRouter);
 

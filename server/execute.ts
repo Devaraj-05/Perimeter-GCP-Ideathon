@@ -25,8 +25,26 @@ function userRoot(uid: string) {
   return adminDb().collection('users').doc(uid);
 }
 
+/**
+ * How many artifacts a search looks at.
+ *
+ * Named because it is a real limit the caller cannot see. `search_artifacts` is
+ * a substring match, not retrieval: past this window it silently finds nothing,
+ * and the honest fix is semantic search, not a bigger number.
+ */
+const SEARCH_WINDOW = 200;
+
 async function searchArtifacts(uid: string, query: string): Promise<ExecutionResult> {
-  const snap = await userRoot(uid).collection('artifacts').limit(200).get();
+  // The most recent 200, not an arbitrary 200. This is still a substring scan
+  // over a fixed window rather than retrieval, and it will miss things — but an
+  // ordered window misses the OLDEST artifacts, which is a bound a user can
+  // reason about, where an unordered one missed whichever the document ids
+  // happened to exclude.
+  const snap = await userRoot(uid)
+    .collection('artifacts')
+    .orderBy('fetchedAt', 'desc')
+    .limit(SEARCH_WINDOW)
+    .get();
   const needle = query.toLowerCase().slice(0, 200);
 
   const matches = snap.docs

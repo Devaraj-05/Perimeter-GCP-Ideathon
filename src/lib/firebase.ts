@@ -180,17 +180,38 @@ export async function syncUserProfile(user: User): Promise<void> {
 /**
  * Journal Operations (Strict User Isolation: users/{userId}/entries/{entryId})
  */
-export async function fetchUserEntries(userId: string): Promise<JournalEntry[]> {
+/**
+ * How many entries the sidebar loads at once.
+ *
+ * This query had no limit at all, so opening the app read the entire entries
+ * collection — fine at eleven entries, a full-collection read and a very large
+ * payload at five thousand. It is capped now, and `fetchUserEntries` reports
+ * whether it hit the cap rather than silently showing a truncated history:
+ * a list that quietly stops is indistinguishable from data loss.
+ */
+export const ENTRY_PAGE_SIZE = 200;
+
+export interface EntryPage {
+  entries: JournalEntry[];
+  /** True when the cap was reached, so older entries exist and are not shown. */
+  truncated: boolean;
+}
+
+export async function fetchUserEntries(userId: string): Promise<EntryPage> {
   try {
     const entriesRef = collection(db, 'users', userId, 'entries');
-    const q = query(entriesRef, orderBy('updatedAt', 'desc'));
+    // One extra, purely to learn whether more exist. It is dropped before
+    // returning, so the caller never sees an off-by-one page.
+    const q = query(entriesRef, orderBy('updatedAt', 'desc'), limit(ENTRY_PAGE_SIZE + 1));
     const snapshot = await getDocs(q);
-    
+
     const entries: JournalEntry[] = [];
     snapshot.forEach((docSnapshot) => {
       entries.push(docSnapshot.data() as JournalEntry);
     });
-    return entries;
+
+    const truncated = entries.length > ENTRY_PAGE_SIZE;
+    return { entries: truncated ? entries.slice(0, ENTRY_PAGE_SIZE) : entries, truncated };
   } catch (error) {
     console.error('Error fetching user entries from Firestore:', error);
     throw error;

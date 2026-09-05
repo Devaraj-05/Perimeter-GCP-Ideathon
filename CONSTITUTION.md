@@ -212,7 +212,27 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
 
 ---
 
-## Amendment D — Location-aware entries (adopted 2026-09-04)
+## Amendment D — Location-aware entries (adopted 2026-09-04, **WITHDRAWN 2026-09-06**)
+
+> **Withdrawn.** The feature was removed in full: `server/location.ts`, `locationRoutes.ts`, the
+> `/api/location` mount, `getMapsKey`, the `MAPS_KEY_SECRET` binding, the `location` field on an
+> entry, and the composer control.
+>
+> **Why.** Nothing ever read the value back. No tool consumed it, no prompt included it, no view
+> filtered on it, no search used it. It cost an API key, a scoped IAM binding, an outbound host, an
+> invariant and a rate limiter, to store a string that was written and never used. A threat surface
+> that buys nothing is not a neutral cost — it is the kind of thing this document exists to refuse,
+> and it survived four amendments because nobody asked what consumed it.
+>
+> **What is kept.** The reasoning below stands as a record: the checklist was worked correctly and
+> the design was sound. It was the wrong feature, competently built. The amendment is preserved
+> rather than deleted because the history is the evidence that §9 was followed, and deleting an
+> entry from that history to look tidier would be the same instinct as deleting a log line.
+>
+> **INV-12 is retired**, not weakened — it governed a key this deployment no longer holds.
+> The red-team payload that rode in on the location field (`P13`) was not deleted either: it was
+> **repointed at filenames**, which carry the identical property the payload was written to probe —
+> short, metadata-shaped, attacker-chosen, displayed next to the thing they name.
 
 Adopted **before** any location code was written, per §9. A journal entry may carry the place it
 was written. This works §9's checklist in order.
@@ -236,44 +256,6 @@ second copy of it.
 
 **5. New Firestore paths?** No new collection. New optional fields on `users/{uid}/entries/{id}`,
 which is already owner-scoped and covered by existing rules and tests.
-
-**6. New invariant.**
-
-- **INV-12** The Maps key is server-side only. It is never embedded in the client bundle, never
-  returned by an API, and never placed in a URL the browser requests. Any map imagery is proxied
-  same-origin so the key stays on the server *and* the narrowed `img-src` from the INV-9 backstop
-  is not widened to accommodate a feature.
-
-**7. Corpus payload.** A place name carrying an injection attempt is added to the corpus, so the
-claim that the geocoding response is treated as data is tested rather than asserted.
-
----
-
-## Amendment E — Roles and administrative scope (adopted 2026-09-04)
-
-Adopted **before** any RBAC code was written, per §9.
-
-**Why custom claims, and not the document lookup our own directives offer.**
-`CUSTOM_INSTRUCTIONS.md` §3 permits RBAC via `get(/databases/$(db)/documents/users/$(uid)).data.role`.
-In *this* codebase that would be a privilege-escalation hole: `firestore.rules` grants
-`allow write: if isOwner(userId)` on `users/{userId}` so the profile can sync, which means the
-user governed by a `role` field could set it. Self-promotion to administrator in one client
-write.
-
-A Firebase **custom claim** is signed into the ID token by the Admin SDK and cannot be altered by
-the client. That is the difference between a permission and a suggestion.
-
-**1. Data flows.** A claim set out-of-band by an operator → the ID token → `requireAdmin`. No new
-user content is read anywhere in this feature.
-
-**2. New untrusted input?** No.
-
-**3. New egress path?** No.
-
-**4. New secret?** No. Claims are set with existing Admin credentials.
-
-**5. New Firestore paths?** One: `metrics/global`, holding **counters only**. Default-deny with an
-admin-only read and no client write, plus rules tests written first.
 
 **6. New invariant.**
 

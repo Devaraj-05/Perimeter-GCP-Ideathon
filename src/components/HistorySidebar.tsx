@@ -23,6 +23,8 @@ interface HistorySidebarProps {
   onRenameEntry: (entryId: string, title: string) => void;
   isOpen: boolean;
   onToggle: () => void;
+  /** Older entries exist beyond the page that was loaded. */
+  truncated?: boolean;
 }
 
 /** Which entry's row menu is open, if any. */
@@ -84,6 +86,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onRenameEntry,
   isOpen,
   onToggle,
+  truncated = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [menu, setMenu] = useState<MenuState>(null);
@@ -381,6 +384,16 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
                   </div>
                 );
               })
+            )}
+
+            {/* The cap, stated. Loading every entry was an unbounded read; a
+                page that silently stops is the other failure, and the only
+                honest version says which entries are not here. */}
+            {truncated && (
+              <p className="px-2.5 py-3 text-[11px] leading-relaxed text-[#6b6b6b]">
+                Showing your most recent {entries.length} reflections. Older ones are still saved
+                and are not listed here.
+              </p>
             )}
           </div>
         </>

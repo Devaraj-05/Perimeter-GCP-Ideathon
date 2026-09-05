@@ -39,6 +39,8 @@ export default function App() {
 
   // Journal entries & active editor state
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  /** True when older entries exist beyond the page the sidebar loaded. */
+  const [entriesTruncated, setEntriesTruncated] = useState(false);
   const [activeEntry, setActiveEntry] = useState<JournalEntry | null>(null);
   const [entriesLoading, setEntriesLoading] = useState(false);
 
@@ -82,8 +84,11 @@ export default function App() {
     setEntriesLoading(true);
     setSaveError(null);
     try {
-      const userEntries = await fetchUserEntries(currentUser.uid);
+      const { entries: userEntries, truncated } = await fetchUserEntries(currentUser.uid);
       setEntries(userEntries);
+      // Surfaced, not swallowed. A history that quietly stops at 200 is
+      // indistinguishable from data loss to the person who wrote entry 201.
+      setEntriesTruncated(truncated);
 
       // Always open on a blank entry, never on the last one.
       //
@@ -393,6 +398,7 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* History Sidebar */}
         <HistorySidebar
+          truncated={entriesTruncated}
           entries={entries}
         onRenameEntry={handleRenameEntry}
           activeEntryId={activeEntry?.id || null}

@@ -124,16 +124,6 @@ export async function getGeminiKey(): Promise<string> {
   return resolveSecret('gemini', 'GEMINI_KEY_SECRET', 'GEMINI_API_KEY', 'Gemini key');
 }
 
-/**
- * Maps Platform key — Amendment D, INV-12.
- *
- * Server-side only. It is never returned to a client, never embedded in the
- * bundle, and never placed in a URL the browser requests; map imagery is
- * proxied through this server precisely so this value stays here.
- */
-export async function getMapsKey(): Promise<string> {
-  return resolveSecret('maps', 'MAPS_KEY_SECRET', 'MAPS_API_KEY', 'Maps key');
-}
 
 /**
  * The key that encrypts stored OAuth refresh tokens — Amendment H, INV-16.

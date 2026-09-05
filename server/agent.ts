@@ -80,11 +80,29 @@ async function loadUsage(uid: string): Promise<Record<string, number>> {
   return usage;
 }
 
+/**
+ * How much of the user's own writing the Planner sees.
+ *
+ * Ten is a budget, not a guess: every entry is prose that competes for the same
+ * context window as the Reader's observations, and the observations are the
+ * part that cannot be recovered from anywhere else.
+ */
+const HISTORY_LIMIT = 10;
+
 /** Loads the caller's own context: journal entries plus ingested artifacts. */
 async function loadContext(uid: string, artifactIds: string[]): Promise<ContextArtifact[]> {
   const out: ContextArtifact[] = [];
 
-  const entries = await userRoot(uid).collection('entries').limit(10).get();
+  // ORDERED. This was `.limit(10)` with no orderBy, which does not mean "the
+  // ten most recent" — Firestore returns documents in __name__ order, so it
+  // meant ten arbitrary entries chosen by document id. The conversation
+  // appeared to have a memory of the user's writing and did not: it had ten
+  // random pages of it, stable across turns and unrelated to recency.
+  const entries = await userRoot(uid)
+    .collection('entries')
+    .orderBy('updatedAt', 'desc')
+    .limit(HISTORY_LIMIT)
+    .get();
   entries.docs.forEach((d) => {
     const e = d.data() as any;
     out.push({
@@ -99,10 +117,19 @@ async function loadContext(uid: string, artifactIds: string[]): Promise<ContextA
   });
 
   if (artifactIds.length > 0) {
-    const artifacts = await userRoot(uid).collection('artifacts').limit(200).get();
-    artifacts.docs
+    // Fetched BY ID, not scanned. This was `.limit(200)` followed by a filter,
+    // so a user with more than 200 artifacts could attach one that simply was
+    // not in the page that came back — and the failure was silent: no error,
+    // the document was just absent from the turn and the answer was confidently
+    // wrong about a source the user believed they had provided.
+    //
+    // getAll takes the ids we were actually given, so the result cannot depend
+    // on how many artifacts exist.
+    const refs = artifactIds.map((id) => userRoot(uid).collection('artifacts').doc(id));
+    const artifacts = await adminDb().getAll(...refs);
+    artifacts
+      .filter((d) => d.exists)
       .map((d) => d.data() as any)
-      .filter((a) => artifactIds.includes(a.id))
       .forEach((a) => {
         out.push({
           id: a.id,
