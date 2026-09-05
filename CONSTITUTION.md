@@ -54,6 +54,8 @@ constitution.
   time-capped, and do not auto-follow redirects.
 - **INV-20** A streamed reply is preceded by its taint verdict, and a partial reply is never
   persisted. See Amendment L.
+- **INV-21** A cached Reader observation is bound to a digest of the exact bytes it was derived
+  from, and reusing it changes neither zone nor taint. See Amendment M.
 
 ## §3 Secure coding standards
 
@@ -600,3 +602,61 @@ which is the same outcome as a failed turn today.
 **7. Corpus payload.** None. This changes transport, not what any model reads or what any tool
 does, and a payload exercising neither would be theatre. The existing corpus runs unchanged
 through the non-streaming path, which remains the tested contract for the red-team console.
+
+---
+
+## Amendment M — Caching what the Reader saw (adopted 2026-09-05)
+
+Adopted **before** the cache was written, per §9. A Reader observation may be stored on the
+artifact it describes and reused on later turns.
+
+**Why.** The airlock reads every untrusted artifact on every turn. Amendment L's concurrency
+divided that cost; it did not remove it. A user with eighteen connected sources pays eighteen
+model calls to ask a second question about the same eighteen documents, and the answer cannot
+differ, because an artifact's text does not change after ingest.
+
+**1. Data flows.** No new source and no new sink. The Reader's typed output already travelled
+from the Reader to the Planner; it now also travels to Firestore and back. It is the same value,
+in the same zone, read by the same component.
+
+**2. New untrusted input?** No — and this is the clause that matters. A cached observation is
+Reader output, which is `UNTRUSTED`-derived, and reading it back does not make it anything else.
+
+**3. New egress path?** No.
+
+**4. New secret?** No.
+
+**5. New Firestore paths?** No new path. Two new **fields** on `users/{uid}/artifacts/{id}`,
+which already denies the client both read of other users' data and *all* writes
+(`allow write: if false`). No rules change, so none is smuggled in under a performance
+improvement.
+
+**6. New invariant.**
+
+> **INV-21** — A cached Reader observation is bound to the exact bytes it was derived from. The
+> cache key is a digest of the precise string the Reader was given, so an artifact whose text
+> differs in any way cannot be served an observation of different text.
+>
+> Reuse changes nothing else. A cached observation enters the turn in the same zone, with the
+> same taint, and through the same code path as a freshly computed one. It never becomes
+> first-party, never suppresses a taint check, and is never treated as evidence that a document
+> was screened *this* turn — it is evidence that these exact bytes were screened, which is the
+> same claim.
+
+**The risk this invariant exists to close.** This project has already shipped one taint-laundering
+defect: `createdBy: 'agent'` was written to entries and never read back, so an agent-authored note
+returned on a later turn as untainted first-party text. A stored Reader observation has exactly
+that shape — a value computed in one turn, trusted in the next — and would be a second instance
+of the same bug if the zone or the taint were reconstructed from the cache rather than from the
+artifact. They are not: only `output` is cached. Zone and taint are derived, every turn, from the
+artifact's own `trust` field as they were before.
+
+**On the instruction-attempt log.** A `reader` perimeter event is written when an observation
+reports an instruction attempt. That event says an attempt exists in a document the user has in
+context, which remains true on a cache hit, so it is still written — the log records what is in
+the conversation, not how many times a model was called. Counting model calls is a metrics
+question and this is not the metrics system.
+
+**7. Corpus payload.** None. This changes when a value is computed, not what any model reads or
+what any tool does. The existing corpus runs unchanged through the same Reader; a payload that
+exercised only the cache would be testing Firestore.
