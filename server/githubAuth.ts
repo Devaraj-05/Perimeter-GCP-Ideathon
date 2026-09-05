@@ -156,29 +156,57 @@ export async function consumeState(nonce: string): Promise<string> {
 
 /** Exchanges the authorization code and stores the access token, encrypted. */
 export async function completeConnect(uid: string, code: string): Promise<void> {
+  // Resolved OUTSIDE the try, deliberately.
+  //
+  // These three used to sit inside it, so a Secret Manager failure — a missing
+  // secret, a missing IAM binding — was caught and reported as
+  // token_exchange_failed. That sends the operator to look at GitHub for a
+  // request that never reached GitHub. A configuration failure and a provider
+  // rejection need different actions, so they get different codes.
+  const id = clientId();
+  const redirect = redirectUri();
+  let secret: string;
+  try {
+    secret = await getGitHubClientSecret();
+  } catch {
+    throw new GitHubAuthError('client_secret_missing');
+  }
+
   let json: any;
+  let status = 0;
   try {
     const res = await fetch(GITHUB_TOKEN, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
-        client_id: clientId(),
-        client_secret: await getGitHubClientSecret(),
+        client_id: id,
+        client_secret: secret,
         code,
-        redirect_uri: redirectUri(),
+        redirect_uri: redirect,
       }),
       signal: AbortSignal.timeout(10_000),
     });
+    status = res.status;
     json = await res.json();
     if (!res.ok) throw new Error('token_exchange_status');
   } catch {
     // The request body carries the client secret; nothing derived from it may
-    // propagate (INV-8, INV-10).
+    // propagate to a caller (INV-8, INV-10). The status is safe and is the
+    // difference between "GitHub refused us" and "we never reached GitHub".
+    console.error('[github] exchange failed, http status:', status || 'no response');
     throw new GitHubAuthError('token_exchange_failed');
   }
 
   const access = typeof json?.access_token === 'string' ? json.access_token : '';
-  if (!access) throw new GitHubAuthError('no_access_token');
+  if (!access) {
+    // GitHub answers a bad secret or a spent code with HTTP 200 and an error
+    // body, so this branch is the common failure rather than an edge case.
+    // The code is GitHub's own and names the fault; it is logged, never
+    // rendered, because this page is reachable by anyone with a URL.
+    const reason = typeof json?.error === 'string' ? json.error : 'no_access_token_in_response';
+    console.error('[github] exchange returned nothing usable:', reason);
+    throw new GitHubAuthError('no_access_token');
+  }
 
   await connectionRef(uid).set({
     accessToken: await seal(access),
