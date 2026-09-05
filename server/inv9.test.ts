@@ -62,8 +62,34 @@ describe('INV-9 — untrusted and model-derived text is never rendered as HTML',
   });
 
   it('assistant turn output routes through the safe renderer', () => {
+    // The transcript moved out of JournalEditor into ChatTranscript (S5), and
+    // this guard caught the move rather than the move slipping past it. It is
+    // pinned to whichever file renders a turn, not to a file name that
+    // happened to be right once.
+    const transcript = files.find((f) => f.path.endsWith('ChatTranscript.tsx'));
+    expect(transcript, 'ChatTranscript.tsx must exist').toBeDefined();
+    expect(transcript!.body).toContain('<UntrustedText text={turn.text} />');
+  });
+
+  it('no turn text is ever interpolated into a resource attribute', () => {
+    // The first draft of this test forbade `{turn.text}` outright and failed,
+    // because a user turn renders as <p>{turn.text}</p> — a plain JSX child,
+    // which React escapes and which is safe. Forbidding a safe pattern is how
+    // a guard gets loosened until it means nothing, so the claim is narrowed
+    // to the sinks that actually load something.
+    const SINK = /(href|src|srcSet|action|formAction|poster|data)\s*=\s*\{[^}]*(turn|streamingText|reply)/;
+    const offenders = files.filter((f) => SINK.test(f.body));
+    expect(
+      offenders.map((f) => f.path),
+      'model-derived text must never become the source of a request',
+    ).toEqual([]);
+  });
+
+  it('the streamed reply is rendered by the safe renderer too', () => {
+    // Amendment L. A streaming turn is model-derived text arriving a token at
+    // a time; INV-9 does not pause while it is incomplete.
     const editor = files.find((f) => f.path.endsWith('JournalEditor.tsx'));
     expect(editor).toBeDefined();
-    expect(editor!.body).toContain('<UntrustedText text={turn.text} />');
+    expect(editor!.body).toContain('<UntrustedText text={streamingText} />');
   });
 });
