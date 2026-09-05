@@ -167,6 +167,23 @@ let tokenRejected = false;
 /** Why the current scan is running without authentication, if it is. */
 let tokenWarning: string | null = null;
 
+/**
+ * Records that GitHub refused the configured token.
+ *
+ * Both fetch paths need this. The archive path did not have it, so a bad token
+ * made the ONE-request download fail and silently drop the scan onto the
+ * 121-request fallback — which then went anonymous correctly and immediately
+ * ran out of hourly budget. The symptom was a scan that stopped halfway with a
+ * message about a token, and the cause was the fast path not knowing what the
+ * slow path already did.
+ */
+function markTokenRejected(): void {
+  tokenRejected = true;
+  tokenWarning =
+    'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan ran anonymously. Public repositories still scan in full. Generate a new token when convenient: a classic one needs no scopes at all.';
+  console.warn('[github] GITHUB_TOKEN rejected; continuing anonymously');
+}
+
 export function githubAuthWarning(): string | null {
   return tokenWarning;
 }
@@ -206,7 +223,7 @@ function usableToken(): string | undefined {
   }
   if (tokenRejected) {
     tokenWarning =
-      'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan continued anonymously at 60 requests an hour. Generate a new token: a classic one needs no scopes at all for public repositories.';
+      'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan ran anonymously. Public repositories still scan in full. Generate a new token when convenient: a classic one needs no scopes at all.';
     return undefined;
   }
   return raw;
@@ -281,10 +298,7 @@ async function ghFetch(path: string, accept: string): Promise<Response> {
     // Public repositories are readable without a token, so failing outright
     // would be a strictly worse outcome than never configuring one.
     if (token && /bad credentials|requires authentication/i.test(detail)) {
-      tokenRejected = true;
-      tokenWarning =
-        'GitHub rejected GITHUB_TOKEN as bad credentials, so the scan continued anonymously at 60 requests an hour. Generate a new token: a classic one needs no scopes at all for public repositories.';
-      console.warn('[github] GITHUB_TOKEN rejected; continuing anonymously');
+      markTokenRejected();
       return ghFetch(path, accept);
     }
 
@@ -499,6 +513,17 @@ export async function fetchTarball(
 
   if (!res) throw new IngestError('Could not reach GitHub.', true);
 
+  // A refused credential must not cost us the fast path. Without this the
+  // archive request threw, the scanner fell back to fetching 121 files one at
+  // a time, and THAT path went anonymous — correct, but 121 requests against a
+  // 60-per-hour budget, so the scan stopped halfway. Dropping the token here
+  // keeps the whole repository in a single download.
+  if ((res.status === 401 || res.status === 403) && token) {
+    markTokenRejected();
+    // usableToken() returns undefined once rejected, so this recursion sends
+    // no credential and cannot repeat.
+    return fetchTarball(repoRef, branch, maxBytes);
+  }
   if (res.status === 404) {
     throw new IngestError('Repository or branch not found, or it is private.', false);
   }

@@ -261,11 +261,10 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   correct behaviour rather than a bug. The narrower option, scanning only agent-instruction
   files and issues, was considered and rejected; the mitigation is ordering, not suppression.
 
-- **A bad `GITHUB_TOKEN` degrades to anonymous rather than failing.** A value that is not a
-  GitHub token is never sent at all; one GitHub rejects as bad credentials is dropped after the
-  first refusal and the scan continues at the 60/hour anonymous limit. Either way the report
-  carries a warning saying so, because a silent downgrade hides a real configuration fault
-  behind a thinner set of results.
+- **A bad `GITHUB_TOKEN` costs one request, not the scan.** A token GitHub rejects is dropped
+  after the first refusal and both fetch paths retry without it. Measured with a deliberately
+  invalid token: **124 of 124 files, complete, in 3 seconds**. The report still carries a warning
+  saying the credential was refused, because a silent downgrade hides a real configuration fault.
 
 - **A repository scan reads the whole repo in one request, so `GITHUB_TOKEN` is optional.** The
   scanner downloads the archive rather than fetching a blob per file. Measured on this project's
