@@ -1386,7 +1386,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-6">
+      <div className="flex flex-1 flex-col p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-6">
         {/* The conversation IS the journal.
             The mode picker and the separate "write your entry" textarea were
             removed: two input areas on one screen is confusing, and the theme
@@ -1462,7 +1462,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             (bringing outside content in) was unreachable until the user had
             already written something and pressed Reflect. */}
         {(
-          <div className="rounded-2xl border border-[#e5e0d3] bg-white p-5 shadow-2xs space-y-5">
+          <div className="flex flex-1 flex-col rounded-2xl border border-[#e5e0d3] bg-white p-5 shadow-2xs space-y-5">
             {turns.length > 0 && (
               <div className="flex items-center justify-between border-b border-[#f0ede6] pb-3">
                 <h3 className="font-serif text-base font-semibold text-[#2c2c24] flex items-center gap-2">
@@ -1475,7 +1475,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               </div>
             )}
 
-            <div className="space-y-4">
+            {/* Grows to fill the card, so the composer sits at the BOTTOM of
+                the panel rather than floating under an empty conversation. A
+                new chat opened with the input at the top of the screen, which
+                is the one place a chat input never is. */}
+            <div className="flex flex-1 flex-col justify-end space-y-4">
               <ChatTranscript turns={turns} />
 
               {/* The provisional turn — Amendment L, INV-20.
