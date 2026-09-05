@@ -57,7 +57,7 @@ import { extractUrls, mentionsUrl } from '../lib/urls';
 import { ThreatEvent } from '../lib/agentApi';
 import { UntrustedText } from './UntrustedText';
 import { ChatTranscript } from './ChatTranscript';
-import { runChatTurn, type TurnStage } from '../lib/chatTurn';
+import { runChatTurn, defaultNewId, type TurnStage } from '../lib/chatTurn';
 import { findRepoReference } from '../lib/repoRef';
 import {
   repoSummaryText,
@@ -227,6 +227,38 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   // Set from the stream's first record, BEFORE any text is painted (INV-20).
   const [streamingTaint, setStreamingTaint] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  /**
+   * Puts the Reader's findings into the conversation.
+   *
+   * These used to go to the perimeter log and nowhere else, so the person the
+   * attempt was aimed at learned about it only by opening a panel and going
+   * looking. "Shows you, live, every attempt" cannot rest on the user knowing
+   * where to look.
+   *
+   * Appended as `perimeter` turns — our text, from our copy table, about a
+   * document a model has just read. The model does not get to describe the
+   * document that may have poisoned it.
+   */
+  const emitReaderFindings = (findings: { sourceRef: string; excerpt: string }[]) => {
+    if (findings.length === 0) return;
+    setTurns((prev) => [
+      ...prev,
+      ...findings.map((f) => ({
+        id: defaultNewId('perimeter'),
+        role: 'perimeter' as const,
+        text: '',
+        timestamp: new Date().toISOString(),
+        finding: {
+          title: f.sourceRef,
+          verdict: 'hostile' as const,
+          detectedBy: 'reader' as const,
+          matches: [{ signal: 'reader_instruction_attempt', excerpt: f.excerpt }],
+        },
+      })),
+    ]);
+    setHasUnsavedChanges(true);
+  };
   const [isListening, setIsListening] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastTurnEvents, setLastTurnEvents] = useState<ThreatEvent[]>([]);
@@ -593,7 +625,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 groundingArtifactIds,
               },
               {
-                onMeta: (m) => setStreamingTaint(m.turnTaint),
+                onMeta: (m) => {
+                  setStreamingTaint(m.turnTaint);
+                  // INV-20 ordering, used for what it is worth: the Reader has
+                  // already run, so what it found goes on screen BEFORE the first
+                  // token of the answer it is about.
+                  emitReaderFindings(m.readerFindings);
+                },
                 onDelta,
                 signal: controller.signal,
               },
@@ -894,7 +932,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
             },
             {
               // INV-20: this fires before the first delta, always.
-              onMeta: (m) => setStreamingTaint(m.turnTaint),
+              onMeta: (m) => {
+                setStreamingTaint(m.turnTaint);
+                // INV-20 ordering, used for what it is worth: the Reader has
+                // already run, so what it found goes on screen BEFORE the first
+                // token of the answer it is about.
+                emitReaderFindings(m.readerFindings);
+              },
               onDelta,
               signal: controller.signal,
             },

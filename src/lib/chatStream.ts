@@ -22,9 +22,22 @@ export interface ChatStreamResult {
   timestamp?: string;
 }
 
+export interface ReaderFinding {
+  sourceRef: string;
+  excerpt: string;
+}
+
 export interface ChatStreamHandlers {
-  /** The taint verdict. Always delivered before the first delta. */
-  onMeta?: (meta: { turnTaint: boolean; contextIds: string[] }) => void;
+  /**
+   * The taint verdict AND what the Reader found, both delivered before the
+   * first delta (INV-20). The Reader has already run by then, so the warning
+   * can be on screen before the answer it is about.
+   */
+  onMeta?: (meta: {
+    turnTaint: boolean;
+    contextIds: string[];
+    readerFindings: ReaderFinding[];
+  }) => void;
   onDelta?: (text: string) => void;
   signal?: AbortSignal;
 }
@@ -50,6 +63,14 @@ export function makeStreamReducer(handlers: ChatStreamHandlers) {
         handlers.onMeta?.({
           turnTaint: event.turnTaint === true,
           contextIds: Array.isArray(event.contextIds) ? event.contextIds : [],
+          // Coerced, not trusted: a malformed record must not become a
+          // finding with an undefined excerpt rendered at the user.
+          readerFindings: (Array.isArray(event.readerFindings) ? event.readerFindings : [])
+            .filter((f: unknown) => f && typeof f === 'object')
+            .map((f: { sourceRef?: unknown; excerpt?: unknown }) => ({
+              sourceRef: typeof f.sourceRef === 'string' ? f.sourceRef : 'a document',
+              excerpt: typeof f.excerpt === 'string' ? f.excerpt : '',
+            })),
         });
         return;
       }

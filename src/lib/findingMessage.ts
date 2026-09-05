@@ -17,6 +17,7 @@ import type { TurnFinding } from '../types';
 
 const SIGNAL_COPY: Record<string, string> = {
   instruction_override: 'an instruction to disregard earlier instructions',
+  reader_instruction_attempt: 'text addressing the AI directly',
   fake_system_role: 'text impersonating a system or developer message',
   concealment_request: 'a request to hide something from you',
   exfiltration_request: 'a request to send data somewhere',
@@ -40,6 +41,15 @@ export function findingHeadline(finding: TurnFinding): string {
   const n = finding.matches.length;
   const name = finding.title;
 
+  // The Reader read the whole document and judged it. That is a different
+  // claim from "a pattern matched at byte 412", and saying it in the pattern
+  // scanner's voice would dress a model's opinion as a measurement.
+  if (finding.detectedBy === 'reader') {
+    return n === 1
+      ? `The model that read ${name} reports it contains an instruction aimed at me. Here is the part it flagged:`
+      : `The model that read ${name} reports ${n} places where it is addressed as an AI. Here is what it flagged:`;
+  }
+
   if (n === 0) {
     // Deliberately not "this document is safe". Nothing was matched; that is a
     // statement about our patterns, not about the document.
@@ -57,6 +67,9 @@ export function findingHeadline(finding: TurnFinding): string {
  */
 export function findingFooter(finding: TurnFinding): string {
   if (finding.matches.length === 0) return '';
+  if (finding.detectedBy === 'reader') {
+    return 'That model holds no tools, so the instruction had nothing to call. It is reported here because you are the one it was aimed at — not only written to the log.';
+  }
   return 'None of it reached anything that can act. The model that read this document holds no tools, and any tool call arising from this turn needs your explicit confirmation.';
 }
 

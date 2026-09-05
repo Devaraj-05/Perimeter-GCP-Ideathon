@@ -20,9 +20,23 @@ export interface TurnAttachment {
 export interface TurnFinding {
   title: string;
   verdict: 'clean' | 'suspicious' | 'hostile';
+  /**
+   * Which detector found this.
+   *
+   * 'patterns' is the deterministic scanner: fixed regexes with a byte offset,
+   * so it can quote a line number and cannot be talked out of a match.
+   *
+   * 'reader' is the model inside the airlock — the only component that
+   * actually READ the document. It catches what patterns miss, but it is a
+   * judgement rather than a match, so it has no line number and the UI says
+   * which one spoke. Collapsing the two would claim determinism for a model's
+   * opinion.
+   */
+  detectedBy?: 'patterns' | 'reader';
   matches: {
     signal: string;
-    line: number;
+    /** Absent for a Reader finding: there is no offset behind a judgement. */
+    line?: number;
     excerpt: string;
     hidden?: boolean;
   }[];

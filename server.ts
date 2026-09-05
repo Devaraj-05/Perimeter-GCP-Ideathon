@@ -129,7 +129,10 @@ app.post('/api/gemini/reflect', requireAuth, async (req: AuthedRequest, res: Res
     // verdict is a constant — but it is still sent first and in the same
     // shape, because a client that has to know which route answered it in
     // order to parse the stream is a client that will eventually get it wrong.
-    res.write(JSON.stringify({ type: 'meta', turnTaint: false, contextIds: [] }) + '\n');
+    res.write(
+      JSON.stringify({ type: 'meta', turnTaint: false, contextIds: [], readerFindings: [] }) +
+        '\n',
+    );
 
     const { text, modelUsed } = await generateContentStreamWithFallback(
       contents,

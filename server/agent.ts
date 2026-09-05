@@ -305,6 +305,21 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
     const observations: { segmentId: string; sourceRef: string | null; output: ReaderOutput }[] = [];
     let readerFailures = 0;
 
+    /**
+     * What the Reader found, on its way to the USER — not only to the log.
+     *
+     * The Reader is the only component that actually reads the document, which
+     * makes its finding the strongest attempt signal in the system. It was
+     * written to the perimeter log and nowhere else, so the person the attempt
+     * was aimed at learned about it only by opening a panel and going looking.
+     *
+     * "Shows you, live, every attempt" cannot rest on the user knowing to look.
+     * These are emitted with the taint verdict, BEFORE any model text, because
+     * they are already known by then (INV-20) — the warning arrives ahead of
+     * the answer it is about.
+     */
+    const readerFindings: { sourceRef: string; excerpt: string }[] = [];
+
     // Read the artifacts CONCURRENTLY, bounded.
     //
     // This was a for-await loop: one Gemini round trip per connected source,
@@ -396,6 +411,16 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
             detectedBy: 'reader',
           },
         }).catch(() => undefined);
+
+        // The excerpt is the attacker's own words, capped at 200 chars
+        // upstream. It travels as data and is rendered as a plain child by
+        // the client (INV-9); nothing here composes prose about it, because a
+        // sentence written by a model that just read a poisoned document is
+        // the one sentence that document should not get to influence.
+        readerFindings.push({
+          sourceRef: artifact.sourceRef ?? artifact.title ?? 'an attached document',
+          excerpt: output.instruction_attempt_excerpt ?? '',
+        });
       }
     }
 
@@ -448,7 +473,9 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       // Proxies that buffer would defeat the entire point.
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders?.();
-      res.write(JSON.stringify({ type: 'meta', turnTaint, contextIds }) + '\n');
+      res.write(
+        JSON.stringify({ type: 'meta', turnTaint, contextIds, readerFindings }) + '\n',
+      );
     }
 
     const { response, modelUsed } = wantsStream
@@ -575,6 +602,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       turnTaint,
       threatEvents,
       contextIds: contextIds,
+      readerFindings,
     };
 
     if (wantsStream) {

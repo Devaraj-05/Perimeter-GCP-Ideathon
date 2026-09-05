@@ -61,7 +61,8 @@ function Finding({ finding }: { finding: TurnFinding }) {
       {finding.matches.map((m, i) => (
         <div key={i} className="mt-2 ml-6 border-l-2 border-rose-300 pl-3">
           <p className="text-[11px] text-[#6b6b6b]">
-            line {m.line} &middot; {describeSignal(m.signal)}
+            {typeof m.line === 'number' ? `line ${m.line} · ` : ''}
+            {describeSignal(m.signal)}
             {m.hidden && <span className="ml-1 text-amber-700">not visible when rendered</span>}
           </p>
           <p className="mt-0.5 whitespace-pre-wrap break-words font-mono text-xs text-[#1a1a1a]">
@@ -143,7 +144,15 @@ function TranscriptImpl({ turns }: Props) {
                       <div className="mb-1 flex items-center gap-2 px-1 text-[11px] text-[#6b6b6b]">
                         <span className="font-medium text-[#1a1a1a]">Perimeter</span>
                         <span>&bull;</span>
-                        <span>deterministic scan, no model</span>
+                        {/* Which detector spoke. A pattern match and a model's
+                            judgement are different kinds of claim and the
+                            reader deserves to know which one they are being
+                            shown. */}
+                        <span>
+                          {turn.finding.detectedBy === 'reader'
+                            ? 'read by a model that holds no tools'
+                            : 'deterministic scan, no model'}
+                        </span>
                       </div>
                       <Finding finding={turn.finding} />
                     </div>
