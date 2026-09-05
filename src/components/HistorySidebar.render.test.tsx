@@ -99,6 +99,22 @@ describe('an entry without a title still says something useful', () => {
     expect(html).not.toContain('Untitled');
   });
 
+  it('treats the stored placeholder as no title at all', () => {
+    // JournalEditor.tsx:541 WRITES 'Untitled Reflection' when an entry has no
+    // name, so the sidebar sees a real title and the fallback never fired —
+    // which is why the rail was a column of identical rows on screen even
+    // after the fallback was added. That file already treats the same string
+    // as "not yet titled" when deciding whether to auto-name; this agrees.
+    const html = render([
+      entry({
+        title: 'Untitled Reflection',
+        turns: [{ id: 't', role: 'user', text: 'what does this repo do', timestamp: 'T' }],
+      }),
+    ]);
+    expect(html).toContain('what does this repo do');
+    expect(html).not.toContain('Untitled Reflection');
+  });
+
   it('prefers a real title over the fallback', () => {
     const html = render([
       entry({
@@ -152,6 +168,16 @@ describe('an entry without a title still says something useful', () => {
     const html = render([entry({ title: '<img src="https://attacker.example/x.png">' })]);
     expect(html).not.toMatch(/<img/i);
     expect(html).toContain('&lt;img');
+  });
+});
+
+describe('the primary action lives with the list it creates into', () => {
+  it('is labelled, not a bare plus', () => {
+    // It used to be a bare + here and a labelled button in the navbar: the
+    // same action twice, one of them unlabelled.
+    const html = render([]);
+    expect(html).toContain('New Reflection');
+    expect(html).toContain('id="sidebar-new-entry-btn"');
   });
 });
 

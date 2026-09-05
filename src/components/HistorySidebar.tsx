@@ -50,9 +50,18 @@ const CATEGORIES: ('All' | CategoryType)[] = [
  * Display only. Nothing is written back: a real title arriving later must be
  * able to replace this, and persisting a guess would prevent that.
  */
+/**
+ * The literal string JournalEditor writes when a reflection has no name yet
+ * (JournalEditor.tsx:541). It is a placeholder, not a title — that file
+ * already treats it as "not yet titled" in two places when deciding whether to
+ * auto-name an entry, and the sidebar has to agree, or the rail shows a column
+ * of identical rows for entries that each say something different.
+ */
+const PLACEHOLDER_TITLE = 'Untitled Reflection';
+
 function entryLabel(entry: JournalEntry): string {
   const title = entry.title?.trim();
-  if (title) return title;
+  if (title && title !== PLACEHOLDER_TITLE) return title;
 
   const firstSaid = entry.turns?.find((t) => t.role === 'user')?.text?.trim();
   if (firstSaid) {
@@ -154,23 +163,28 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       {/* Sidebar Top Header */}
       <div className="p-4 border-b border-[#e5e0d3] flex items-center justify-between bg-[#f3efe6]">
         {isOpen ? (
-          <div className="flex items-center justify-between w-full">
+          <div className="w-full space-y-3">
             <div className="flex items-center gap-2">
-              <BookOpen className="h-4 w-4 text-[#5a5a40]" />
+              <BookOpen className="h-4 w-4 shrink-0 text-[#5a5a40]" />
               <h2 className="font-serif text-sm font-semibold text-[#2c2c24]">
                 Journal History
               </h2>
-              <span className="rounded-full bg-white border border-[#e5e0d3] px-2 py-0.5 text-[10px] font-medium text-[#5a5a40]">
+              <span className="rounded-full border border-[#e5e0d3] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5a5a40]">
                 {entries.length}
               </span>
             </div>
+            {/* The primary action, where the list it creates into lives.
+                It used to be a bare + here AND a labelled button in the
+                navbar: the same action twice, one of them unlabelled. Full
+                width and named, so there is one obvious way to start. */}
             <button
               id="sidebar-new-entry-btn"
               onClick={onNewEntry}
-              className="p-1.5 rounded-lg bg-[#5a5a40] text-white hover:bg-[#484833] transition-colors cursor-pointer"
+              className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#5a5a40] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#484833]"
               title="Start a new reflection"
             >
               <Plus className="h-4 w-4" />
+              New Reflection
             </button>
           </div>
         ) : (

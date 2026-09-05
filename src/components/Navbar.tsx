@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import {
-  Plus, ShieldCheck, BarChart3, LogOut, Sparkles, Github, ShieldAlert,
-  KeyRound, ScrollText, Swords, MoreHorizontal, Menu, X, Gauge,
+  Plus, ShieldCheck, BarChart3, LogOut, Github, ShieldAlert,
+  KeyRound, ScrollText, Swords, Menu, X, Gauge,
   ChevronDown,
 } from 'lucide-react';
 import { Logo } from './Logo';
@@ -150,16 +150,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <>
             {/* ---------- Desktop ---------- */}
             <div className="ml-auto hidden items-center gap-2 md:flex">
-              <button
-                id="new-reflection-btn"
-                onClick={onNewEntry}
-                title="Start a fresh reflection"
-                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#5a5a40] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#484833]"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="hidden lg:inline">New Reflection</span>
-                <span className="lg:hidden">New</span>
-              </button>
+              {/* "New Reflection" moved to the sidebar header.
+                  It was here AND as a bare + in the sidebar — the same action
+                  twice, and the one next to the list it creates into is the
+                  one that belongs. */}
 
               {/* "Attack it" keeps its own colour and stays a sibling.
                   It is the one control a stranger must be able to see without
