@@ -159,6 +159,50 @@ export function readQuotaError(err: unknown): { retryAfterSeconds: number | null
   return { retryAfterSeconds, daily };
 }
 
+/**
+ * Credential failures, told apart from each other and from everything else.
+ *
+ * Sibling of readQuotaError and written for the same reason. Every failure
+ * that was not a quota error reached the user as "The assistant is
+ * unavailable. Please retry." — which is true, useless, and wrong about the
+ * remedy: retrying fixes none of these. An invalid key, a disabled API and a
+ * key blocked by its own restrictions are three different operator actions,
+ * and the message has to say which.
+ *
+ * Returns null for anything it cannot name. A classifier that guesses is how
+ * the generic message became misleading in the first place.
+ */
+export type CredentialFault = 'invalid_key' | 'api_disabled' | 'key_restricted';
+
+export function readCredentialError(err: unknown): CredentialFault | null {
+  const raw = String((err as any)?.message ?? '');
+  if (!raw) return null;
+
+  // Quota owns RESOURCE_EXHAUSTED. Two classifiers firing on one error means
+  // the second message overwrites the first and the advice is wrong again.
+  if (/RESOURCE_EXHAUSTED|exceeded your current quota/i.test(raw)) return null;
+
+  // Checked most specific first: a restricted key also mentions the API, and
+  // a disabled API also mentions permission.
+  if (/API_KEY_SERVICE_BLOCKED|method .* are blocked/i.test(raw)) return 'key_restricted';
+  if (/SERVICE_DISABLED|has not been used in project|or it is disabled/i.test(raw)) {
+    return 'api_disabled';
+  }
+  if (/API_KEY_INVALID|API key not valid/i.test(raw)) return 'invalid_key';
+
+  return null;
+}
+
+/** The operator action for each fault. Shown to the user, not just logged. */
+export const CREDENTIAL_FAULT_MESSAGE: Record<CredentialFault, string> = {
+  invalid_key:
+    'The Gemini API key this deployment is using is not valid. Locally that usually means .env still holds the placeholder; in production it means GEMINI_KEY_SECRET points at a bad or disabled secret version.',
+  api_disabled:
+    'The Generative Language API is not enabled on this project. Enable it, then retry — the key itself is fine.',
+  key_restricted:
+    'This Gemini API key is blocked by its own API restrictions. Allow the Generative Language API on the key, or use a key without that restriction.',
+};
+
 export interface FallbackOptions {
   systemInstruction?: string;
   temperature?: number;

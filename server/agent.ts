@@ -1,7 +1,14 @@
 import { Router, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { requireAuth, AuthedRequest, adminDb } from './auth';
-import { getAI, MODEL_FALLBACK_LADDER, isRecoverable, readQuotaError } from './gemini';
+import {
+  getAI,
+  MODEL_FALLBACK_LADDER,
+  isRecoverable,
+  readQuotaError,
+  readCredentialError,
+  CREDENTIAL_FAULT_MESSAGE,
+} from './gemini';
 // Type-only: assemble.ts is superseded and must not be reachable at runtime.
 import type { ContextArtifact } from './assemble';
 import { read as readerRead, ReaderOutput } from './reader';
@@ -437,7 +444,21 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       });
     }
 
-    console.error('[agent] chat failed:', err?.message);
+    // Nor is a bad credential. An invalid key, a disabled API and a key
+    // blocked by its own restrictions each need a different operator action,
+    // and "please retry" is wrong advice for all three.
+    const fault = readCredentialError(err);
+    if (fault) {
+      console.error('[agent] chat blocked by credential fault:', fault);
+      return res.status(503).json({
+        error: CREDENTIAL_FAULT_MESSAGE[fault],
+        code: fault,
+      });
+    }
+
+    // Whatever is left is genuinely unclassified, so log enough to name it
+    // next time rather than only the message (INV-8: the stack, never the key).
+    console.error('[agent] chat failed:', err?.name, err?.message, err?.stack);
     res.status(500).json({ error: 'The assistant is unavailable. Please retry.' });
   }
 });

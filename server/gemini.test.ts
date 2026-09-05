@@ -222,3 +222,81 @@ describe('quota exhaustion is told apart from every other failure', () => {
     expect(bare.retryAfterSeconds).toBeNull();
   });
 });
+
+describe('a credential failure names itself', () => {
+  /**
+   * The generic 500 — "The assistant is unavailable. Please retry." — was
+   * reached by every failure that was not a quota error. An invalid key, a
+   * disabled API and a restricted key are three different operator actions,
+   * and collapsing them into one sentence sent the operator to the logs each
+   * time. Retrying works for none of them.
+   *
+   * Bodies below are the shapes Google actually returns; the placeholder case
+   * is the one this project hit, from an unfilled `.env`.
+   */
+  const INVALID_KEY = JSON.stringify({
+    error: {
+      code: 400,
+      message: 'API key not valid. Please pass a valid API key.',
+      status: 'INVALID_ARGUMENT',
+      details: [{ reason: 'API_KEY_INVALID' }],
+    },
+  });
+
+  const SERVICE_DISABLED = JSON.stringify({
+    error: {
+      code: 403,
+      message:
+        'Generative Language API has not been used in project 12345 before or it is disabled.',
+      status: 'PERMISSION_DENIED',
+      details: [{ reason: 'SERVICE_DISABLED' }],
+    },
+  });
+
+  const KEY_RESTRICTED = JSON.stringify({
+    error: {
+      code: 403,
+      message:
+        'Requests to this API generativelanguage.googleapis.com method ' +
+        'google.ai.generativelanguage.v1beta.GenerativeService.GenerateContent are blocked.',
+      status: 'PERMISSION_DENIED',
+      details: [{ reason: 'API_KEY_SERVICE_BLOCKED' }],
+    },
+  });
+
+  it('recognises an invalid key', async () => {
+    const { readCredentialError } = await import('./gemini');
+    expect(readCredentialError(new Error(INVALID_KEY))).toBe('invalid_key');
+  });
+
+  it('recognises a disabled API, which is not the same as a bad key', async () => {
+    // "Enable the API" and "replace the key" are different actions.
+    const { readCredentialError } = await import('./gemini');
+    expect(readCredentialError(new Error(SERVICE_DISABLED))).toBe('api_disabled');
+  });
+
+  it('recognises a key blocked by its own restrictions', async () => {
+    const { readCredentialError } = await import('./gemini');
+    expect(readCredentialError(new Error(KEY_RESTRICTED))).toBe('key_restricted');
+  });
+
+  it('catches a placeholder that never was a key', async () => {
+    // The literal case: an unfilled .env sends "PASTE_YOUR_KEY_HERE" to
+    // Google, which answers API_KEY_INVALID like any other bad string.
+    const { readCredentialError } = await import('./gemini');
+    expect(readCredentialError(new Error('API_KEY_INVALID'))).toBe('invalid_key');
+  });
+
+  it('does not claim a quota error or a transient one', async () => {
+    // These already have handlers. Two classifiers must not both fire, or the
+    // second message overwrites the first and the advice is wrong again.
+    const { readCredentialError, readQuotaError } = await import('./gemini');
+    expect(readCredentialError(new Error('503 UNAVAILABLE: high demand'))).toBeNull();
+    const daily = JSON.stringify({
+      error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota.' },
+    });
+    expect(readCredentialError(new Error(daily))).toBeNull();
+    expect(readQuotaError(new Error(INVALID_KEY))).toBeNull();
+    expect(readCredentialError(undefined)).toBeNull();
+  });
+});
