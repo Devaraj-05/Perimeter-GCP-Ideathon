@@ -396,9 +396,31 @@ gcloud run deploy perimeter \
   --service-account "$SA" \
   --set-env-vars="GEMINI_KEY_SECRET=projects/PROJECT_ID/secrets/GEMINI_API_KEY/versions/1,NODE_ENV=production"
 
-# Rules
-firebase deploy --only firestore:rules
+# Rules and indexes. Indexes are declared in firestore.indexes.json; it is
+# empty today because every query is single-field ordered, and it exists so the
+# first composite query is a reviewed deploy rather than a production console
+# link.
+firebase deploy --only firestore:rules,firestore:indexes
 ```
+
+### Environment variables
+
+Set on the service via `--set-env-vars` (which REPLACES the whole set — list everything each
+deploy, or a variable silently disappears). Secrets are `--set-secrets`, resolved by Cloud Run.
+
+| Variable | Required | What it does |
+|---|---|---|
+| `GEMINI_KEY_SECRET` | yes | Secret Manager path to the Gemini API key, version-pinned. |
+| `NODE_ENV` | yes | `production`. |
+| `GOOGLE_CLOUD_PROJECT` | on Cloud Run | Project id; set automatically by Cloud Run. |
+| `CHAT_RATE_LIMIT_PER_HOUR` | no (60) | Per-user model-call budget. Enforced in Firestore, shared across instances. |
+| `NOTE_ / FILE_ / GMAIL_ / REPOSCAN_ / REDTEAM_RATE_LIMIT_PER_HOUR` | no | Per-surface budgets, same mechanism. |
+| `READER_CONCURRENCY` | no (6) | How many artifacts the airlock reads in parallel per turn. |
+| `ARTIFACT_RETENTION_DAYS` | no (keep forever) | Days before an ingested artifact expires. Unset = nothing expires, and Settings says so. Entries are never affected (Amendment O). |
+| `GEMINI_EMBED_MODEL` | no (`text-embedding-004`) | Embedding model for semantic search. Changing it makes stored vectors unrankable until re-ingested (Amendment P). |
+| `SCHEDULER_SERVICE_ACCOUNT` / `SCHEDULER_AUDIENCE` | for scheduled jobs | Identity the `/internal/*` jobs must present. See `docs/scheduler-setup.md`. |
+
+Optional integrations (Gmail, GitHub) add their own — see the sections below.
 
 ### Rotating the Gemini key
 

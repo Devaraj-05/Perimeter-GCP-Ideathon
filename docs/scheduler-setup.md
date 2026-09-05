@@ -72,6 +72,20 @@ gcloud scheduler jobs create http perimeter-ingest \
 
 Every six hours. Cloud Scheduler's free tier covers three jobs per month.
 
+## 4b. The retention sweep (optional — Amendment O)
+
+The same identity drives a second job that deletes expired artifacts. It is a no-op unless
+`ARTIFACT_RETENTION_DAYS` is set on the service, so it is safe to create before choosing a policy.
+Skip it entirely if you keep everything.
+
+```bash
+gcloud scheduler jobs create http perimeter-retention   --project "$PROJECT" --location "$REGION"   --schedule="0 3 * * *"   --time-zone="Asia/Kolkata"   --uri="${SERVICE_URL}/internal/retention"   --http-method=POST   --oidc-service-account-email="${SCHED_SA}"   --oidc-token-audience="${SERVICE_URL}"   --attempt-deadline=540s
+```
+
+Once daily. It deletes only artifacts (ingested external content) whose `expiresAt` has passed,
+and their segments — never journal entries (INV-24). The `403 from the wrong identity` check above
+applies to this endpoint identically; it shares `requireScheduler`.
+
 ## 5. Verify
 
 Force a run and read the result:
