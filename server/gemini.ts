@@ -172,7 +172,11 @@ export function readQuotaError(err: unknown): { retryAfterSeconds: number | null
  * Returns null for anything it cannot name. A classifier that guesses is how
  * the generic message became misleading in the first place.
  */
-export type CredentialFault = 'invalid_key' | 'api_disabled' | 'key_restricted';
+export type CredentialFault =
+  | 'not_configured'
+  | 'invalid_key'
+  | 'api_disabled'
+  | 'key_restricted';
 
 export function readCredentialError(err: unknown): CredentialFault | null {
   const raw = String((err as any)?.message ?? '');
@@ -181,6 +185,11 @@ export function readCredentialError(err: unknown): CredentialFault | null {
   // Quota owns RESOURCE_EXHAUSTED. Two classifiers firing on one error means
   // the second message overwrites the first and the advice is wrong again.
   if (/RESOURCE_EXHAUSTED|exceeded your current quota/i.test(raw)) return null;
+
+  // Thrown by resolveSecret BEFORE any request is made, so no classifier that
+  // reads Google's response can ever see it. This is the failure that reached
+  // production: a revision with neither variable set.
+  if (/^config_missing:/.test(raw)) return 'not_configured';
 
   // Checked most specific first: a restricted key also mentions the API, and
   // a disabled API also mentions permission.
@@ -195,6 +204,8 @@ export function readCredentialError(err: unknown): CredentialFault | null {
 
 /** The operator action for each fault. Shown to the user, not just logged. */
 export const CREDENTIAL_FAULT_MESSAGE: Record<CredentialFault, string> = {
+  not_configured:
+    'This deployment has no Gemini credential configured. Either GEMINI_KEY_SECRET is unset, or it is set and Secret Manager could not be read — the server log line beginning "[secrets]" says which.',
   invalid_key:
     'The Gemini API key this deployment is using is not valid. Locally that usually means .env still holds the placeholder; in production it means GEMINI_KEY_SECRET points at a bad or disabled secret version.',
   api_disabled:

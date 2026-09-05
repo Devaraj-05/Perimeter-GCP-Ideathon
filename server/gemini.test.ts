@@ -287,6 +287,17 @@ describe('a credential failure names itself', () => {
     expect(readCredentialError(new Error('API_KEY_INVALID'))).toBe('invalid_key');
   });
 
+  it('recognises a deployment that has no key configured at all', async () => {
+    // The real Cloud Run failure: revision 00038 had neither GEMINI_KEY_SECRET
+    // nor GEMINI_API_KEY, so resolveSecret threw before anything reached
+    // Google. Nothing that classifies Google's RESPONSES can catch a failure
+    // that never made a request, and the user got the generic message.
+    const { readCredentialError } = await import('./gemini');
+    expect(
+      readCredentialError(new Error('config_missing:GEMINI_KEY_SECRET_or_GEMINI_API_KEY')),
+    ).toBe('not_configured');
+  });
+
   it('does not claim a quota error or a transient one', async () => {
     // These already have handlers. Two classifiers must not both fire, or the
     // second message overwrites the first and the advice is wrong again.
