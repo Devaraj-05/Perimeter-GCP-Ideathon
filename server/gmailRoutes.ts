@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, AuthedRequest } from './auth';
-import { checkRateLimit } from './ratelimit';
+import { checkRateLimitShared } from './ratelimit';
 import { logEvent } from './perimeterLog';
 import {
   beginConnect,
@@ -134,7 +134,7 @@ gmailRouter.get('/callback', async (req: Request, res: Response) => {
 gmailRouter.post('/ingest', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
-    const limit = checkRateLimit(`gmail:${uid}`, Number(process.env.GMAIL_RATE_LIMIT_PER_HOUR) || 10);
+    const limit = await checkRateLimitShared(`gmail:${uid}`, Number(process.env.GMAIL_RATE_LIMIT_PER_HOUR) || 10);
     if (!limit.allowed) {
       res.setHeader('Retry-After', String(limit.retryAfterSeconds));
       return res.status(429).json({

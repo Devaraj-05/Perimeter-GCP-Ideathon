@@ -7,7 +7,7 @@ import { buildReaderRequest, assertReaderHasNoTools } from './reader';
 import { assertPublicHttpUrl, isBlockedAddress } from './fetchurl';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
-import { checkRateLimit } from './ratelimit';
+import { checkRateLimitShared } from './ratelimit';
 import { recordRedteamRun, readMetrics } from './metrics';
 import { requireAdmin } from './auth';
 import { decideProposal } from './broker';
@@ -357,7 +357,7 @@ redteamRouter.post('/run', requireAuth, async (req: AuthedRequest, res: Response
 redteamRouter.post('/run-custom', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
-    const limit = checkRateLimit(`redteam-custom:${uid}`, Number(process.env.REDTEAM_RATE_LIMIT_PER_HOUR) || 20);
+    const limit = await checkRateLimitShared(`redteam-custom:${uid}`, Number(process.env.REDTEAM_RATE_LIMIT_PER_HOUR) || 20);
     if (!limit.allowed) {
       res.setHeader('Retry-After', String(limit.retryAfterSeconds));
       return res.status(429).json({

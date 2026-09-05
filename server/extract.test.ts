@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { sniffKind, extractTextFromFile, ExtractError, MAX_FILE_BYTES } from './extract';
+import { sniffKind, extractTextFromFile, looksLikeText, ExtractError, MAX_FILE_BYTES } from './extract';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -37,25 +37,35 @@ describe('type comes from the bytes, never from the caller', () => {
   });
 
   it.each([
-    ['plain text', Buffer.from('Just some text, honestly')],
-    ['HTML', Buffer.from('<!doctype html><script>alert(1)</script>')],
-    ['a shell script', Buffer.from('#!/bin/sh\nrm -rf /')],
     ['a ZIP (PK header)', Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0])],
     ['an ELF binary', Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 0])],
-    ['empty-ish', Buffer.from([0x00])],
-  ])('refuses %s rather than guessing', (_label, bytes) => {
+    ['a NUL byte', Buffer.from([0x00])],
+  ])('refuses %s — binary that is not a recognised type', (_label, bytes) => {
     expect(() => sniffKind(bytes)).toThrow(ExtractError);
   });
 
-  it('a file merely NAMED like a PDF is still refused', () => {
-    // The whole point: only the leading bytes decide.
-    const notReallyPdf = Buffer.from('<html>totally a pdf</html>');
-    expect(() => sniffKind(notReallyPdf)).toThrow(ExtractError);
+  it('classifies text as text, not as the type it may pretend to be', () => {
+    // The security principle is unchanged: only the leading bytes decide a
+    // BINARY type. What changed is the fallback for content matching no binary
+    // signature — read as text now rather than refused, because text still
+    // routes through the airlock like any other document.
+    for (const t of [
+      'Just some text, honestly',
+      '<!doctype html><script>alert(1)</script>',
+      '#!/bin/sh',
+    ]) {
+      expect(sniffKind(Buffer.from(t)).kind).toBe('text');
+    }
   });
 
-  it('does not accept %PDF appearing later in the file', () => {
-    const smuggled = Buffer.from('GARBAGE%PDF-1.7');
-    expect(() => sniffKind(smuggled)).toThrow(ExtractError);
+  it('an HTML file claiming to be a PDF is text, never a PDF', () => {
+    // Content does not get to lie about its type. It is not a PDF; it is text.
+    expect(sniffKind(Buffer.from('<html>totally a pdf</html>')).kind).toBe('text');
+  });
+
+  it('does not accept %PDF appearing later in the file as a PDF', () => {
+    // Still not a PDF — the signature must lead. It is now read as text.
+    expect(sniffKind(Buffer.from('GARBAGE%PDF-1.7')).kind).toBe('text');
   });
 });
 
@@ -77,10 +87,12 @@ describe('size and emptiness are checked before any model call', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('refuses an unsupported type without calling the model', async () => {
+  it('refuses an unsupported binary type without calling the model', async () => {
     const spy = vi.fn();
     vi.stubGlobal('fetch', spy);
-    const err = await extractTextFromFile(Buffer.from('plain text')).catch((e) => e);
+    // Plain text would now be accepted, so the fixture has to be genuinely
+    // binary — a NUL byte, no matching signature — to exercise the refusal.
+    const err = await extractTextFromFile(Buffer.from([0x00, 0x01, 0x02, 0xff])).catch((e) => e);
     expect(err.code).toBe('unsupported_file_type');
     expect(spy).not.toHaveBeenCalled();
   });
@@ -112,5 +124,45 @@ describe('the transcriber is Reader-class: it holds no tools', () => {
 
   it('the transcription instruction tells the model it is transcribing, not obeying', () => {
     expect(EXTRACT).toMatch(/transcribing, not following/i);
+  });
+});
+
+describe('plain text — the format a user pastes the contents of anyway', () => {
+  const buf = (s: string) => Buffer.from(s, 'utf8');
+
+  it('recognises text once the binary signatures have all missed', () => {
+    expect(sniffKind(buf('# Notes\n\nordinary markdown')).kind).toBe('text');
+    expect(sniffKind(buf('a,b,c\n1,2,3')).kind).toBe('text');
+    expect(sniffKind(buf('{"k":"v"}')).kind).toBe('text');
+  });
+
+  it('reads text directly, with no model call', async () => {
+    // The transcription path would need a mocked Gemini; this one must not
+    // reach it at all. If it did, this test would throw trying to call the API.
+    const out = await extractTextFromFile(buf('just some notes'));
+    expect(out.kind).toBe('text');
+    expect(out.text).toBe('just some notes');
+  });
+
+  it('still refuses a binary that is not a recognised type', () => {
+    // The principle holds: unknown-and-binary is refused, not guessed. A NUL
+    // byte is the tell.
+    const binary = Buffer.from([0x01, 0x02, 0x00, 0x03, 0xff, 0xfe]);
+    expect(looksLikeText(binary)).toBe(false);
+    expect(() => sniffKind(binary)).toThrow(ExtractError);
+  });
+
+  it('refuses invalid UTF-8 rather than mangling it into text', () => {
+    const invalid = Buffer.from([0xc3, 0x28, 0xa0, 0xa1]); // not valid UTF-8
+    expect(looksLikeText(invalid)).toBe(false);
+  });
+
+  it('an all-whitespace text file is empty, not content', async () => {
+    await expect(extractTextFromFile(buf('   \n\t  '))).rejects.toThrow(ExtractError);
+  });
+
+  it('a PDF is still a PDF, not text', () => {
+    // The text branch is a fallback and must never shadow a real signature.
+    expect(sniffKind(Buffer.from('%PDF-1.7 rest', 'latin1')).kind).toBe('pdf');
   });
 });

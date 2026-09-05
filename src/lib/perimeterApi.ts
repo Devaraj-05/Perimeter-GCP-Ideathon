@@ -102,7 +102,7 @@ export interface FileIngestResult {
   artifactId: string;
   segmentId: string;
   title: string;
-  kind: 'pdf' | 'image';
+  kind: 'pdf' | 'image' | 'text';
   verdict: 'clean' | 'suspicious' | 'hostile';
   /** Optional so a response cached before this field existed cannot break the panel. */
   matches?: Match[];

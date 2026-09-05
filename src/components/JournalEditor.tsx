@@ -1640,7 +1640,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+                  accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/plain,text/markdown,text/csv,.txt,.md,.csv,.json,.log"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];

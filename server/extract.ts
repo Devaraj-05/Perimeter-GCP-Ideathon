@@ -20,7 +20,7 @@ import { generateContentWithFallback } from './gemini';
 /** 5MB. express.json is at 10mb and base64 inflates by ~33%, so this fits. */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-export type DetectedKind = 'pdf' | 'image';
+export type DetectedKind = 'pdf' | 'image' | 'text';
 
 export class ExtractError extends Error {
   constructor(public readonly code: string) {
@@ -64,7 +64,41 @@ export function sniffKind(bytes: Buffer): { kind: DetectedKind; mime: string } {
     return { kind: 'image', mime: 'image/webp' };
   }
 
+  // Text has no magic bytes, so it is the LAST resort, not the first guess:
+  // only after every binary signature has missed, and only if the content is
+  // convincingly text. A corrupt binary must still be refused, not smuggled
+  // through as "text" — the "we could not tell" -> "we will try it as X" trap.
+  if (looksLikeText(b)) {
+    return { kind: 'text', mime: 'text/plain' };
+  }
+
   throw new ExtractError('unsupported_file_type');
+}
+
+/**
+ * Is this convincingly a text file?
+ *
+ * Strict on purpose. A NUL byte means binary; anything else is decoded as
+ * UTF-8 and checked for a high ratio of printable characters. This covers
+ * .txt, .md, .csv, .json and source files — the plain-text formats a user
+ * pastes the contents of anyway — without ever accepting a mangled PDF.
+ */
+export function looksLikeText(bytes: Buffer): boolean {
+  const sample = bytes.subarray(0, 4096);
+  if (sample.length === 0) return false;
+  if (sample.includes(0x00)) return false; // a NUL byte is the binary tell
+
+  const decoded = sample.toString('utf8');
+  // The replacement character means the bytes were not valid UTF-8.
+  if (decoded.includes(String.fromCharCode(0xfffd))) return false;
+
+  let printable = 0;
+  for (const ch of decoded) {
+    const c = ch.codePointAt(0)!;
+    // Printable, or ordinary whitespace (tab, newline, carriage return).
+    if (c >= 0x20 || c === 0x09 || c === 0x0a || c === 0x0d) printable++;
+  }
+  return printable / decoded.length > 0.9;
 }
 
 const TRANSCRIBE_INSTRUCTION = `You transcribe documents and images. Output ONLY the text that
@@ -90,6 +124,16 @@ export async function extractTextFromFile(
   if (bytes.length > MAX_FILE_BYTES) throw new ExtractError('file_too_large');
 
   const { kind, mime } = sniffKind(bytes);
+
+  // A text file needs no transcription — it is already text. Reading the bytes
+  // directly is cheaper, avoids a model call, and cannot fail the way a
+  // transcription can. It is still untrusted content: the caller routes it
+  // through the same ingest and airlock path as any other document.
+  if (kind === 'text') {
+    const decoded = bytes.toString('utf8').trim();
+    if (!decoded) throw new ExtractError('no_text_found');
+    return { text: decoded.slice(0, 20_000), kind, mime };
+  }
 
   let text: string;
   try {

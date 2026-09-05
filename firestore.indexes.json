@@ -1,0 +1,5 @@
+{
+  "//": "Firestore composite indexes. A single-field ordered query needs no entry here; a query that ORDERS and FILTERS on different fields does, and without it the query fails IN PRODUCTION with a console link rather than at build or test time. This file exists so that failure is a reviewed change, not a surprise.",
+  "indexes": [],
+  "fieldOverrides": []
+}

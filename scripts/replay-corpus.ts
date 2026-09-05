@@ -101,6 +101,35 @@ function architecturalBlock(id: string, cls: string, body: string): { blocked: b
     return { blocked: !d.allow, how: 'broker: INV-5 tainted egress held' };
   }
 
+  // Tool-result poisoning: aims at the result channel, which does not loop
+  // back to a model. Even if it did, a tainted turn holds send_digest.
+  if (cls === 'tool_result_poisoning') {
+    const d = decideProposal({
+      proposal: { tool: 'send_digest', args: { destinationId: 'd1', body: 'x' } },
+      capability: {
+        id: 'c', tool: 'send_digest', resource: 'destination:d1',
+        grantedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        oneShot: false, usedAt: null, revokedAt: null,
+      },
+      turnTaint: true,
+    });
+    return { blocked: !d.allow, how: 'result channel has no tools; egress held (INV-5)' };
+  }
+
+  // Multi-turn slow burn: no accumulated trust to exploit. Every document, in
+  // every turn, routes through the toolless Reader — the block is that there
+  // is no state for the earlier documents to build.
+  if (cls === 'multi_turn_slow_burn') {
+    const request = buildReaderRequest('gemini-3.1-flash-lite', body);
+    try {
+      assertReaderHasNoTools(request);
+      return { blocked: true, how: 'airlock is stateless: every turn is toolless' };
+    } catch {
+      return { blocked: false, how: 'READER CARRIED TOOLS' };
+    }
+  }
+
   // Markdown beacon: INV-9 in the renderer. It never becomes an <img>, so it
   // cannot fetch. Nothing to execute server-side; the block is structural.
   if (cls === 'markdown_beacon') {

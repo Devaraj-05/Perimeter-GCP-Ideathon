@@ -36,12 +36,20 @@ function getAdminApp(): App {
   if (initError) throw initError;
 
   try {
-    adminApp = getApps().length
-      ? getApps()[0]
-      : initializeApp({
-          credential: applicationDefault(),
-          projectId: PROJECT_ID,
-        });
+    if (getApps().length) {
+      adminApp = getApps()[0];
+      return adminApp;
+    }
+    // Against the Firestore emulator there is no ADC to load, and none is
+    // needed: firebase-admin routes to the emulator on FIRESTORE_EMULATOR_HOST
+    // regardless of credential. Calling applicationDefault() there would throw
+    // on a machine that has never authenticated, so the emulator path
+    // initialises with a project id alone. This branch is gated on an env var
+    // Cloud Run never sets — production always takes the credentialled path.
+    adminApp =
+      process.env.FIRESTORE_EMULATOR_HOST
+        ? initializeApp({ projectId: PROJECT_ID })
+        : initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID });
     return adminApp;
   } catch (err: any) {
     initError = err instanceof Error ? err : new Error(String(err));

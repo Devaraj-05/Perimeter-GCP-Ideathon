@@ -7,7 +7,7 @@ import { safeFetch } from './fetchurl';
 import { createSegment, SourceType } from './segments';
 import { logEvent } from './perimeterLog';
 import { PerimeterViolation } from './segments';
-import { checkRateLimit } from './ratelimit';
+import { checkRateLimitShared } from './ratelimit';
 import { extractTextFromFile, ExtractError, MAX_FILE_BYTES } from './extract';
 import { scanRepository } from './reposcan';
 
@@ -451,7 +451,7 @@ ingestRouter.post('/link', requireAuth, async (req: AuthedRequest, res: Response
 ingestRouter.post('/note', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
-    const limit = checkRateLimit(`note:${uid}`, Number(process.env.NOTE_RATE_LIMIT_PER_HOUR) || 60);
+    const limit = await checkRateLimitShared(`note:${uid}`, Number(process.env.NOTE_RATE_LIMIT_PER_HOUR) || 60);
     if (!limit.allowed) {
       res.setHeader('Retry-After', String(limit.retryAfterSeconds));
       return res.status(429).json({
@@ -515,7 +515,7 @@ ingestRouter.post('/note', requireAuth, async (req: AuthedRequest, res: Response
 ingestRouter.post('/file', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
-    const limit = checkRateLimit(`file:${uid}`, Number(process.env.FILE_RATE_LIMIT_PER_HOUR) || 20);
+    const limit = await checkRateLimitShared(`file:${uid}`, Number(process.env.FILE_RATE_LIMIT_PER_HOUR) || 20);
     if (!limit.allowed) {
       res.setHeader('Retry-After', String(limit.retryAfterSeconds));
       return res.status(429).json({
@@ -622,7 +622,7 @@ ingestRouter.post('/file', requireAuth, async (req: AuthedRequest, res: Response
 ingestRouter.post('/repo-scan', requireAuth, async (req: AuthedRequest, res: Response) => {
   const uid = req.uid!;
   try {
-    const limit = checkRateLimit(
+    const limit = await checkRateLimitShared(
       `reposcan:${uid}`,
       Number(process.env.REPOSCAN_RATE_LIMIT_PER_HOUR) || 10,
     );

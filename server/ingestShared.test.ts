@@ -67,6 +67,6 @@ describe('the note route does not privilege pasted text', () => {
   });
 
   it('rate-limits on its own bucket', () => {
-    expect(SRC).toMatch(/checkRateLimit\(`note:\$\{uid\}`/);
+    expect(SRC).toMatch(/checkRateLimitShared\(`note:\$\{uid\}`/);
   });
 });

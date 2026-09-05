@@ -27,7 +27,7 @@ import { createSandboxDestination, listDestinations, listDeliveries } from './de
 import { toFunctionDeclarations, getToolSpec, DEFAULT_ALLOWED_TOOLS } from './tools';
 import { executeTool } from './execute';
 import { writeAudit } from './audit';
-import { checkRateLimit } from './ratelimit';
+import { checkRateLimitShared } from './ratelimit';
 
 /**
  * Agent Runtime - Amendment B.1.
@@ -278,7 +278,7 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
 
     // Per-user quota on model calls. An authenticated user looping this route
     // can drain the project's Gemini quota for everyone else.
-    const limit = checkRateLimit(uid, Number(process.env.CHAT_RATE_LIMIT_PER_HOUR) || 60);
+    const limit = await checkRateLimitShared(uid, Number(process.env.CHAT_RATE_LIMIT_PER_HOUR) || 60);
     if (!limit.allowed) {
       res.setHeader('Retry-After', String(limit.retryAfterSeconds));
       const minutes = Math.ceil(limit.retryAfterSeconds / 60);
