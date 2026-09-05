@@ -278,18 +278,28 @@ is what the app *enforces at runtime*, visibly, in the Red Team console and the 
   unknown. Google documents them as safe to ship in client code, and ours necessarily does —
   it is in `dist/`, because the browser needs it to reach Firebase at all.
 
-  One is the current key. The other is the key of `gen-lang-client-0060098211`, the original AI
-  Studio project this application migrated away from; it survives in git history because the
-  config line changed. Neither is removed from the repository: deleting the current one breaks
-  the application, and rewriting history to erase a public-by-design value would break every
-  clone for no security benefit.
+  One is the current key, for `perimeter-507310`. **It stays.** Firebase Auth is what it is for,
+  the browser cannot reach Firebase without it, and it is the only key the built bundle ships.
+
+  The other belongs to `gen-lang-client-0060098211`, the original AI Studio project this
+  application migrated away from. It survives in git history because the config line changed at
+  `382121c`; it appears in no source file, and this application authenticates against a
+  different project entirely — `.firebaserc` and `firebase-applet-config.json` agree on that.
+
+  Neither is removed from the repository. Deleting the current one breaks the application, and
+  rewriting history to erase a public-by-design value would break every clone for no security
+  benefit.
 
   **Public is not the same as unrestricted, and that is the part worth acting on.** An
-  unrestricted Firebase web key can be used to create accounts in your Auth tenant and burn
-  Identity Toolkit quota. The current key is restricted by HTTP referrer to the Cloud Run domain
-  and localhost; the abandoned project's key should be deleted outright, because a live key on a
-  project nobody is watching is the worse of the two problems and it is not the one the alert
-  draws your eye to.
+  unrestricted Firebase web key can be used to create accounts in a project's Auth tenant and
+  burn Identity Toolkit quota. The current key is restricted by HTTP referrer to the Cloud Run
+  domain and localhost.
+
+  The abandoned project's key is a separate question and a smaller one. It is worth checking
+  whether Identity Toolkit is still enabled on `gen-lang-client-0060098211`; if it is, restrict or
+  delete **that key** — an operation inside that project, which does not touch this one and is
+  not the same as deleting a project. If nothing is enabled there, the key is inert and the
+  alert can simply be dismissed.
 
   `server/inv8.test.ts` now scans **git history**, not only tracked files. Its own docstring
   said a key survives in history after the file is deleted, and then it checked only the present
