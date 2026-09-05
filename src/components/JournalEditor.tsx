@@ -59,6 +59,7 @@ import { ThreatEvent } from '../lib/agentApi';
 import { InjectionReport } from './InjectionReport';
 import { RepoScanReport } from './RepoScanReport';
 import { UntrustedText } from './UntrustedText';
+import { runChatTurn, type TurnStage } from '../lib/chatTurn';
 
 interface JournalEditorProps {
   entry: JournalEntry;
@@ -215,6 +216,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Which half failed. A save failure means the reply on screen is not
+  // persisted, and the banner has to say so rather than offering a retry
+  // that would re-ask the model.
+  const [failureStage, setFailureStage] = useState<TurnStage | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -606,52 +611,52 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
 
     try {
       const userPrompt = content.trim();
-      const updatedTurns: TurnMessage[] = [
-        ...turns,
+
+      // Same orchestration as a follow-up, and for the same reason: this
+      // handler carried the identical pair of defects — colliding Date.now()
+      // ids, and one try/catch over both the model call and the write, so a
+      // failed save reported "Gemini reflection request failed" when Gemini
+      // had in fact replied.
+      const outcome = await runChatTurn(
+        userPrompt || 'Please reflect on my journal context.',
+        turns,
         {
-          id: `msg-${Date.now()}-u`,
-          role: 'user',
-          text: userPrompt || 'Please reflect on my journal context.',
-          timestamp: new Date().toISOString(),
+          send: (nextTurns) =>
+            reflectGrounded({
+              content: userPrompt,
+              mode,
+              category,
+              turns: nextTurns,
+              groundingArtifactIds,
+            }),
+          save: async (nextTurns) => {
+            const updated = { ...getCurrentEntryObject(), turns: nextTurns };
+            await onSave(updated);
+            // Name and synthesise the entry from the exchange, once. Inside
+            // save so it cannot run for an exchange that was never persisted.
+            void autoTitle(updated);
+          },
+          onTurns: (nextTurns) => {
+            setTurns(nextTurns);
+            setHasUnsavedChanges(true);
+          },
+          clearInput: () => setHasUnsavedChanges(false),
         },
-      ];
+      );
 
-      setTurns(updatedTurns);
-      setHasUnsavedChanges(true);
-
-      const response = await reflectGrounded({
-        content: userPrompt,
-        mode,
-        category,
-        turns: updatedTurns,
-        groundingArtifactIds,
-      });
-      setLastTurnEvents(response.threatEvents);
-      setLastTurnTainted(response.turnTaint);
-
-      const modelTurn: TurnMessage = {
-        id: `msg-${Date.now()}-m`,
-        role: 'model',
-        text: response.reply,
-        timestamp: response.timestamp,
-        modelUsed: response.modelUsed,
-      };
-
-      const finalTurns = [...updatedTurns, modelTurn];
-      setTurns(finalTurns);
-
-      // Auto-save to Firestore immediately
-      const updated = {
-        ...getCurrentEntryObject(),
-        turns: finalTurns,
-      };
-      await onSave(updated);
-      setHasUnsavedChanges(false);
-      // Name and synthesise the entry from the exchange, once. The chat is now
-      // the only input, so this is where an entry earns its title.
-      void autoTitle(updated);
+      if (outcome.reply) {
+        setLastTurnEvents(outcome.reply.threatEvents);
+        setLastTurnTainted(outcome.reply.turnTaint);
+      }
+      if (outcome.failure) {
+        setErrorMsg(outcome.failure.message);
+        setFailureStage(outcome.failure.stage);
+      } else {
+        setFailureStage(null);
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Gemini reflection request failed.');
+      setFailureStage('send');
     } finally {
       setIsGenerating(false);
     }
@@ -804,24 +809,10 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     const followUpText = override?.text ?? followUpInput.trim();
     if (!followUpText || isGenerating) return;
 
-    if (!override) setFollowUpInput('');
     setErrorMsg(null);
     setIsGenerating(true);
 
     try {
-      const updatedTurns: TurnMessage[] = [
-        ...turns,
-        {
-          id: `msg-${Date.now()}-u`,
-          role: 'user',
-          text: followUpText,
-          timestamp: new Date().toISOString(),
-        },
-      ];
-
-      setTurns(updatedTurns);
-      setHasUnsavedChanges(true);
-
       // Web search — links in YOUR message only.
       //
       // extractUrls is deliberately never applied to a turn, an artifact or an
@@ -830,42 +821,55 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       // primitive aimed wherever they like.
       const extraGrounding = webSearch ? await fetchAndScreenUrls(followUpText) : [];
 
-      const response = await reflectGrounded({
-        content: content.trim(),
-        mode,
-        category,
-        turns: updatedTurns,
-        // Newly fetched ids are merged here rather than waiting for the parent
-        // to refresh: the prop would still be stale on this turn.
-        groundingArtifactIds: [
-          ...groundingArtifactIds,
-          ...extraGrounding,
-          ...(override?.grounding ?? []),
-        ],
+      // Orchestrated in src/lib/chatTurn.ts, where the ordering is tested.
+      // Two data-loss defects lived here when this was inline: the composer
+      // was cleared before the request, and one try/catch covered both the
+      // model call and the write, so a failed save was reported as a failed
+      // send. Both were breaches of Directive 6.
+      const outcome = await runChatTurn(followUpText, turns, {
+        send: (nextTurns) =>
+          reflectGrounded({
+            content: content.trim(),
+            mode,
+            category,
+            turns: nextTurns,
+            // Newly fetched ids are merged here rather than waiting for the
+            // parent to refresh: the prop would still be stale on this turn.
+            groundingArtifactIds: [
+              ...groundingArtifactIds,
+              ...extraGrounding,
+              ...(override?.grounding ?? []),
+            ],
+          }),
+        save: async (nextTurns) => {
+          await onSave({ ...getCurrentEntryObject(), turns: nextTurns });
+        },
+        onTurns: (nextTurns) => {
+          setTurns(nextTurns);
+          setHasUnsavedChanges(true);
+        },
+        // An override's text came from a fixed button, not the composer, so
+        // there is nothing of the user's to clear.
+        clearInput: () => {
+          if (!override) setFollowUpInput('');
+          setHasUnsavedChanges(false);
+        },
       });
-      setLastTurnEvents(response.threatEvents);
-      setLastTurnTainted(response.turnTaint);
 
-      const modelTurn: TurnMessage = {
-        id: `msg-${Date.now()}-m`,
-        role: 'model',
-        text: response.reply,
-        timestamp: response.timestamp,
-        modelUsed: response.modelUsed,
-      };
-
-      const finalTurns = [...updatedTurns, modelTurn];
-      setTurns(finalTurns);
-
-      // Auto-save
-      const updated = {
-        ...getCurrentEntryObject(),
-        turns: finalTurns,
-      };
-      await onSave(updated);
-      setHasUnsavedChanges(false);
+      if (outcome.reply) {
+        setLastTurnEvents(outcome.reply.threatEvents);
+        setLastTurnTainted(outcome.reply.turnTaint);
+      }
+      if (outcome.failure) {
+        setErrorMsg(outcome.failure.message);
+        setFailureStage(outcome.failure.stage);
+      } else {
+        setFailureStage(null);
+      }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to send message to Gemini.');
+      // Only reachable from fetchAndScreenUrls; runChatTurn does not throw.
+      setErrorMsg(err?.message || 'Could not prepare that message.');
+      setFailureStage('send');
     } finally {
       setIsGenerating(false);
     }
@@ -1151,22 +1155,40 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         </div>
       )}
 
-      {/* Error alert banner */}
+      {/* Error alert banner.
+          The heading and the action both follow the stage that failed. This
+          block previously showed "Action Alert" and a "Retry Save" button for
+          every failure, including one where nothing had been sent — the same
+          defect as the message it accompanied: advice that does not match the
+          cause. Retrying a save that never happened does nothing. */}
       {(errorMsg || saveError) && (
         <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 flex items-start justify-between gap-2">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
             <div>
-              <p className="font-semibold">Action Alert</p>
+              <p className="font-semibold">
+                {failureStage === 'send'
+                  ? 'Message not sent'
+                  : failureStage === 'save'
+                    ? 'Reply not saved'
+                    : 'Action Alert'}
+              </p>
               <p>{errorMsg || saveError}</p>
+              {failureStage === 'send' && (
+                <p className="mt-1 text-red-600/80">
+                  Your message is still in the box below. Press send to try again.
+                </p>
+              )}
             </div>
           </div>
-          <button
-            onClick={handleSave}
-            className="rounded bg-red-600 px-2.5 py-1 text-white font-medium hover:bg-red-700 cursor-pointer"
-          >
-            Retry Save
-          </button>
+          {failureStage !== 'send' && (
+            <button
+              onClick={handleSave}
+              className="shrink-0 rounded bg-red-600 px-2.5 py-1 text-white font-medium hover:bg-red-700 cursor-pointer"
+            >
+              Retry Save
+            </button>
+          )}
         </div>
       )}
 
