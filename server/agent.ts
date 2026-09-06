@@ -545,7 +545,11 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       // standing grant claimOneShot is a no-op that returns true.
       let claimLost = false;
       if (effectiveAllow && verdict.allow) {
-        claimLost = capability ? !(await claimOneShot(uid, capability.id)) : true;
+        // A grantless read (Amendment Q) has no one-shot to claim, so nothing
+        // can be lost. Only a real grant is claimed; the old ": true" here
+        // treated every grantless-but-allowed tool as already-used and silently
+        // skipped it, which is why an allowed read still never executed.
+        claimLost = capability ? !(await claimOneShot(uid, capability.id)) : false;
       }
 
       if (effectiveAllow && verdict.allow && claimLost) {
@@ -596,8 +600,20 @@ agentRouter.post('/chat', requireAuth, async (req: AuthedRequest, res: Response)
       });
     }
 
+    // An empty reply is real: the model sometimes proposes a tool and says
+    // nothing, and tool results are not fed back to it for a second pass. Rather
+    // than render a dead "No content", say what actually happened and point the
+    // user somewhere useful — which for a repository means naming it with scan
+    // intent, since Perimeter scans repos for injections rather than
+    // summarising their code (INV-18).
+    const replyText =
+      (response.text || '').trim() ||
+      (calls.length > 0
+        ? 'I looked but did not find anything to answer that from your own notes and sources. If you meant a repository, connect GitHub and say "scan owner/name" — I check repositories for prompt injections rather than summarise their code. You can also paste a link or a file for me to read.'
+        : 'I do not have anything to answer that yet. Paste a link, drop in a file, or ask me to scan a repository, and I will work from that.');
+
     const payload = {
-      reply: response.text || '',
+      reply: replyText,
       modelUsed,
       turnTaint,
       threatEvents,

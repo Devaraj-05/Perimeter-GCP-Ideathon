@@ -460,18 +460,52 @@ describe('resourceOf — the contract the Permissions panel must match', () => {
   });
 
   it('a grant built with the wrong resource is denied, not silently allowed', () => {
-    // The exact live bug, pinned.
+    // The exact live bug, pinned. Uses a WRITE tool: after Amendment Q a read
+    // is authorised by uid and never consults the grant's resource, so
+    // scope-mismatch is only meaningful for tools that still require a grant.
     const d = decideProposal({
-      proposal: { tool: 'summarise_source', args: { sourceId: 'src_abc' } },
+      proposal: { tool: 'create_note', args: { title: 'x', body: 'y' } },
       capability: {
-        id: 'c', tool: 'summarise_source', resource: 'entries:own',
+        id: 'c', tool: 'create_note', resource: 'destination:wrong',
         grantedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
         oneShot: false, usedAt: null, revokedAt: null,
       } as any,
       turnTaint: false,
+      confirmed: true,
     });
     expect(d.allow).toBe(false);
     expect((d as any).reason).toContain('capability_scope_mismatch');
+  });
+
+  it('a read tool is allowed with no grant at all — Amendment Q', () => {
+    // Its authorisation is the verified uid; a grant would protect nothing.
+    const d = decideProposal({
+      proposal: { tool: 'search_artifacts', args: { query: 'auth' } },
+      capability: null,
+      turnTaint: false,
+    });
+    expect(d.allow).toBe(true);
+    expect((d as any).reason).toBe('read_scoped_by_uid');
+  });
+
+  it('a read is allowed even on a tainted turn — reading own data sends nothing out', () => {
+    const d = decideProposal({
+      proposal: { tool: 'search_artifacts', args: { query: 'auth' } },
+      capability: null,
+      turnTaint: true,
+    });
+    expect(d.allow).toBe(true);
+  });
+
+  it('a write with no grant is still denied — Q narrows INV-4, it does not loosen it', () => {
+    const d = decideProposal({
+      proposal: { tool: 'create_note', args: { title: 'x', body: 'y' } },
+      capability: null,
+      turnTaint: false,
+      confirmed: true,
+    });
+    expect(d.allow).toBe(false);
+    expect((d as any).reason).toContain('no_capability_grant');
   });
 });

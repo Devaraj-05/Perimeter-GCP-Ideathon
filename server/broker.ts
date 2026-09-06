@@ -14,7 +14,7 @@ import { Capability, isLive } from './capabilities';
  */
 
 export type Decision =
-  | { allow: true; capabilityId: string; reason: string; invariant: null }
+  | { allow: true; capabilityId: string | null; reason: string; invariant: null }
   | {
       allow: false;
       reason: string;
@@ -133,6 +133,16 @@ export function decideProposal(input: BrokerInput): Decision {
   }
 
   const resource = resourceOf(proposal);
+
+  // Amendment Q, INV-4 (revised). A read-only tool touches only the caller's
+  // own data, scoped by the uid from their verified token — the uid IS the
+  // authorisation, and a grant on top of it protects nothing. Writes and
+  // egress fall through to the default-deny grant checks below, unchanged.
+  // The gate is the registry's declared sideEffect, never anything the model
+  // said.
+  if (spec.sideEffect === 'read') {
+    return { allow: true, capabilityId: null, reason: 'read_scoped_by_uid', invariant: null };
+  }
 
   if (!capability) {
     return deny(`no_capability_grant:${proposal.tool}:${resource}`, 'INV-4');

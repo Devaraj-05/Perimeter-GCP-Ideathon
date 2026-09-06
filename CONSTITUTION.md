@@ -37,8 +37,9 @@ constitution.
 - **INV-2** The Reader model request never includes `tools` or any tool configuration.
 - **INV-3** Every data access is scoped by a `uid` from a verified Firebase ID token. Never from
   a request body, query string, header, or model output.
-- **INV-4** No tool executes without a live, unexpired capability grant matching
-  `(uid, tool, resource)`. Default deny.
+- **INV-4** No tool WITH A SIDE EFFECT executes without a live, unexpired capability grant
+  matching `(uid, tool, resource)`. Default deny. Read-only tools over the caller's own data are
+  authorised by the verified uid alone (Amendment Q).
 - **INV-5** Tainted (`UNTRUSTED`-derived) data in an egress payload requires fresh one-shot user
   confirmation, regardless of standing grants.
 - **INV-6** Every authorisation decision, allow or deny, writes a perimeter event **before** the
@@ -792,3 +793,41 @@ recorded here rather than implied by the word "semantic".
 **7. Corpus payload.** A document whose text is engineered to rank highly for an innocuous query —
 so the claim that a well-ranked artifact is still untrusted, and still routes through the Reader,
 is tested rather than asserted.
+
+---
+
+## Amendment Q — Reads of your own data need no grant (adopted 2026-09-06)
+
+Adopted **before** the change, per §9. A read-only tool that operates solely on the caller's own
+data is authorised by the verified uid alone and requires no capability grant.
+
+**Why.** INV-4 was written to apply to every tool uniformly, and the only path that mints a grant
+is a manual action in the Permissions panel. Nothing ever grants a read, so `search_artifacts` — a
+search of the user's own artifacts, scoped server-side by their uid — was refused on every turn,
+and any question that made the Planner reach for it came back empty. A tool the product depends on
+was unusable by construction.
+
+A grant on top of uid-scoping protects nothing for an own-data read. There is no cross-user path
+(INV-3 binds every read to the verified token) and no egress (the result never leaves the user's
+own session). The grant machinery exists for the two things that actually carry risk: writing
+(`create_note`) and sending data outward (`send_digest`). Requiring it for a read was ceremony,
+and ceremony that breaks the feature.
+
+**Revised invariant.**
+
+> **INV-4 (revised)** — No tool with a side effect executes without a live, unexpired capability
+> grant matching `(uid, tool, resource)`. Default deny. **Read-only tools** (`sideEffect: 'read'`),
+> which by construction touch only the caller's own data scoped by the uid from their verified
+> token, are authorised by that uid and need no grant. The distinction is the tool's declared
+> `sideEffect`, checked against the registry — not anything the model says. A tool that writes or
+> sends remains default-deny, exactly as before.
+
+**What does not change.** `send_digest` (egress) and `create_note` (write) still require a grant
+and, when the turn is tainted, still require fresh confirmation (INV-5). The taint rules, the
+one-shot claim, and the append-only decision log are untouched. This narrows INV-4 to the tools it
+was always meant to govern; it does not loosen any of them.
+
+**Corpus.** The existing tool-result-poisoning payload (P23) already exercises the read channel and
+still blocks — a read runs, but its result reaches the user, never a tool-holding model, so a
+poisoned artifact title cannot escalate. No new payload is needed; the change removed a grant
+requirement, it added no new surface.
