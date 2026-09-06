@@ -432,15 +432,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * should offer the boundary.
    */
   const onComposerPaste = (clipboard: string) => {
-    // Named for what it is. urls.test.ts asserts extractUrls is only ever
-    // called on user-authored input, and a call site called `text` tells a
-    // reviewer nothing about whose text it is.
+    // A pasted URL is left in the composer as plain text — no prompt. It only
+    // becomes something the app fetches if the user turns on Web or adds it
+    // through the + menu, both of which route it through the airlock; a bare
+    // paste is just typing, and nagging on every link was noise.
+    //
+    // A large block still offers the boundary: pasting hundreds of characters
+    // is usually something from outside worth screening, and that offer is the
+    // one place the "treat outside content as untrusted" choice is surfaced at
+    // paste time.
     const pastedByUser = clipboard.trim();
     if (!pastedByUser) return;
-    const urls = extractUrls(pastedByUser);
-    if (urls.length === 1 && pastedByUser.length <= urls[0].length + 4) {
-      setPasteOffer({ kind: 'link', text: urls[0] });
-    } else if (pastedByUser.length >= 240) {
+    if (pastedByUser.length >= 240) {
       setPasteOffer({ kind: 'note', text: pastedByUser });
     }
   };
