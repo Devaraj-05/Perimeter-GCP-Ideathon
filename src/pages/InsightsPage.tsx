@@ -19,10 +19,9 @@ import { PageShell, Band, Empty, Skeleton } from './PageShell';
  */
 
 /** A number that leads, with its label beneath. No box — a rule does the work. */
-const Metric: React.FC<{ value: string; label: string; hint?: string; lead?: boolean }> = ({
+const Metric: React.FC<{ value: string; label: string; lead?: boolean }> = ({
   value,
   label,
-  hint,
   lead = false,
 }) => (
   <div className="min-w-0">
@@ -34,7 +33,6 @@ const Metric: React.FC<{ value: string; label: string; hint?: string; lead?: boo
       {value}
     </p>
     <p className="mt-2.5 text-xs font-medium uppercase tracking-[0.1em] text-[#6b6b6b]">{label}</p>
-    {hint && <p className="mt-1 text-xs text-[#6b6b6b]">{hint}</p>}
   </div>
 );
 
@@ -171,11 +169,7 @@ export const InsightsPage: React.FC<{
         <div className="col-span-2 sm:col-span-1">
           <Metric lead value={abbreviate(s.entryCount)} label="Reflections" />
         </div>
-        <Metric
-          value={abbreviate(s.wordCount)}
-          label="Words written"
-          hint="yours, not the model's"
-        />
+        <Metric value={abbreviate(s.wordCount)} label="Words written" />
         <Metric value={abbreviate(s.exchangeCount)} label="Messages" />
         <Metric value={String(s.exchangesPerEntry)} label="Per reflection" />
       </div>
@@ -264,8 +258,10 @@ export const InsightsPage: React.FC<{
 
       <p className="mt-16 flex items-start gap-2 border-t border-[#e5e5e5] pt-6 text-xs leading-relaxed text-[#6b6b6b]">
         <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Every figure on this page is computed in your browser from entries already loaded. Nothing
-        here is sent anywhere, and opening this page makes no network request.
+        Words written counts what <em>you</em> typed &mdash; your own messages and any prose in the
+        entry &mdash; and never the model&rsquo;s replies. Every figure here is computed in your
+        browser from entries already loaded: nothing is sent anywhere, and opening this page makes
+        no network request.
       </p>
     </PageShell>
   );

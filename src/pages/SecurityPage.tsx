@@ -68,10 +68,13 @@ const INVARIANTS = [
   },
 ];
 
-export const SecurityPage: React.FC = () => (
+export const SecurityPage: React.FC<{ signedOut?: boolean }> = ({ signedOut = false }) => (
   <PageShell
     title="Security and isolation"
     subtitle="How this application reads hostile documents without becoming one. Every claim here is checkable against the source."
+    // Signed out there is no journal to go back to, and offering one is a
+    // dead end dressed as navigation.
+    backLabel={signedOut ? 'Back to the homepage' : 'Back to your journal'}
   >
     {/* The architecture, first — the thing that makes the rest possible. */}
     <section>

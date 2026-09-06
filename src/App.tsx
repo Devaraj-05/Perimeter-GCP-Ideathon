@@ -383,7 +383,7 @@ export default function App() {
           onSignOut={() => {}}
         />
         {route === '/security' ? (
-          <SecurityPage />
+          <SecurityPage signedOut />
         ) : (
           <LandingPage
             onSignIn={handleSignIn}

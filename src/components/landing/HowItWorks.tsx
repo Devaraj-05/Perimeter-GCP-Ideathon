@@ -39,7 +39,7 @@ const STEPS = [
 
 export const HowItWorks: React.FC = () => (
   <section id="how-it-works" className="border-t border-[#e5e5e5] bg-white py-20 sm:py-28">
-    <div className="mx-auto max-w-5xl px-6">
+    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
       <Reveal>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6b6b6b]">
           How it works
@@ -55,10 +55,10 @@ export const HowItWorks: React.FC = () => (
       </Reveal>
 
       <Reveal delay={1} className="mt-12">
-        <figure>
+        <figure className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
           <svg
             viewBox="0 0 900 216"
-            className="w-full"
+            className="w-full min-w-[560px] sm:min-w-0"
             role="img"
             aria-labelledby="airlock-t airlock-d"
           >

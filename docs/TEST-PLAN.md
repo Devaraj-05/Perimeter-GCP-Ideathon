@@ -30,7 +30,7 @@ Left to right:
 |---|---|---|
 | **ReflectAI** brand + "Gemini 3.6 Flash" chip | ✨ | Nothing; identity |
 | **New Reflection** | ＋ | Clears the editor to a blank entry |
-| **Insights** | 📊 | A modal of trends across your entries |
+| **Insights** | 📊 | A full page of trends across your entries, at /insights |
 | **What it reads** (was "Sources") | 🔗 | The "What it reads" panel — connect a repository as a standing source |
 | **Attack it** (was "Red Team") | ⚔ (red) | The attack console — fire injection payloads |
 | **What it can do** (was "Permissions") | 🔑 | What the assistant is allowed to do; grant/revoke |

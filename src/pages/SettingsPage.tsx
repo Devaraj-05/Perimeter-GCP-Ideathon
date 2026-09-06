@@ -119,13 +119,18 @@ export const SettingsPage: React.FC<{ onDeleted: () => void }> = ({ onDeleted })
       </Band>
 
       <Band title="Connected accounts">
-        <p className="flex items-start gap-2.5 text-sm leading-relaxed text-[#525252]">
+        {/* The icon and the prose are siblings in a flex row; the prose itself
+            is one block. Making the <p> the flex container turned the inline
+            "+" into a flex ITEM, which broke the sentence into three columns. */}
+        <div className="flex items-start gap-2.5">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#1a1a1a]" />
-          Gmail and GitHub connections are managed from the composer’s{' '}
-          <span className="font-medium text-[#1a1a1a]">+</span> menu, where the toggle that connects
-          them is also the one that disconnects them. Deleting your account below revokes both at
-          the provider.
-        </p>
+          <p className="text-sm leading-relaxed text-[#525252]">
+            Gmail and GitHub connections are managed from the composer’s{' '}
+            <span className="font-medium text-[#1a1a1a]">+</span> menu, where the toggle that
+            connects them is also the one that disconnects them. Deleting your account below revokes
+            both at the provider.
+          </p>
+        </div>
       </Band>
 
       {/* Deletion. The only irreversible action in the product, and the only

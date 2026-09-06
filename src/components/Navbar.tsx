@@ -3,7 +3,7 @@ import { User } from 'firebase/auth';
 import {
   Plus, ShieldCheck, BarChart3, LogOut, Github, ShieldAlert,
   KeyRound, ScrollText, Swords, Menu, X, Gauge,
-  ChevronDown,
+  ChevronDown, Settings,
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { ProfileMenu } from './ProfileMenu';
@@ -149,6 +149,44 @@ export const Navbar: React.FC<NavbarProps> = ({
             Perimeter
           </span>
         </div>
+
+        {/* Signed out: anchors into the argument, plus the one page a
+            reviewer can read without an account. Everything below is gated on
+            `user`, which used to leave this bar with a mark, a word, and
+            nothing else across the rest of its width. */}
+        {!user && (
+          <nav className="ml-auto hidden items-center gap-6 sm:flex" aria-label="Sections">
+            <a
+              href="#how-it-works"
+              className="text-sm text-[#525252] underline-offset-4 transition-colors hover:text-[#1a1a1a] hover:underline"
+            >
+              How it works
+            </a>
+            <a
+              href="#invariants"
+              className="text-sm text-[#525252] underline-offset-4 transition-colors hover:text-[#1a1a1a] hover:underline"
+            >
+              The rules
+            </a>
+            <button
+              type="button"
+              id="landing-security-btn"
+              onClick={onOpenSecurity}
+              className="cursor-pointer text-sm text-[#525252] underline-offset-4 transition-colors hover:text-[#1a1a1a] hover:underline"
+            >
+              Security
+            </button>
+            <a
+              href="https://github.com/Devaraj-05/Perimeter-GCP-Ideathon"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e5e5e5] px-3 py-1.5 text-sm font-medium text-[#1a1a1a] transition-colors hover:bg-[#f7f7f8]"
+            >
+              <Github className="h-3.5 w-3.5" />
+              Source
+            </a>
+          </nav>
+        )}
 
         {user && (
           <>
@@ -316,6 +354,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {label}
                 </button>
               ))}
+
+              {/* Settings had no entry point at all below md: it lives in
+                  ProfileMenu, which is desktop-only, so a phone user could not
+                  reach their own export or account deletion. */}
+              <button
+                id="settings-btn-m"
+                onClick={run(onOpenSettings)}
+                className="mt-3 flex min-h-[48px] w-full items-center gap-3 rounded-xl px-4 text-left text-sm font-medium text-[#1a1a1a] hover:bg-[#f7f7f8]"
+              >
+                <Settings className="h-5 w-5 shrink-0 text-[#1a1a1a]" />
+                Settings and your data
+              </button>
 
               {/* Destructive-adjacent action, separated from ordinary navigation. */}
               <button
