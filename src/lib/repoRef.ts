@@ -74,7 +74,7 @@ const NOT_A_REPO = new Set([
  * needs either an explicit intent word or a message that is nothing but the
  * name.
  */
-const REPO_INTENT = /(scan|repo|repos|repository|repositories|github|codebase)/i;
+const REPO_INTENT = /\b(scan|repo|repos|repository|repositories|github|codebase)\b/i;
 
 /**
  * The first repository reference in a message, or null.
@@ -105,9 +105,12 @@ export function findRepoReference(text: string): RepoReference | null {
     if (candidate.includes('/')) continue;
     if (!SEGMENT.test(candidate) || candidate.length > 100) continue;
     if (NOT_A_REPO.has(candidate.toLowerCase())) continue;
-    // A single word with no separator and no digits is usually just a word.
-    // Requiring a repo-ish shape keeps "hello" from triggering a search.
-    if (!/[-_.\d]/.test(candidate) && candidate.length < 4) continue;
+    // A plain word — no dash, underscore, dot or digit — is far more often a
+    // greeting or an ordinary noun than a repository name. It counts as a bare
+    // repo ONLY when the message says plainly that a repository is meant. The
+    // old check gated on length < 4, which let "hello", "notes" and "test"
+    // through and turned a greeting into a GitHub search.
+    if (!/[-_.\d]/.test(candidate) && !REPO_INTENT.test(text)) continue;
     return { kind: 'bare', name: candidate };
   }
 

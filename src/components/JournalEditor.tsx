@@ -810,6 +810,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     if (found.kind === 'explicit') {
       ref = found.ref;
     } else {
+      // A bare name is resolved by SEARCHING GitHub, which only makes sense
+      // once the user has connected an account. Before that, a lone word is
+      // far more likely a greeting or a question than a repository, so it goes
+      // to the model like any other message rather than becoming a search the
+      // user never asked for. Explicit owner/name and URLs still work
+      // unconnected — public repositories scan without a login.
+      if (!githubConnected) return false;
+
       // A bare name is a candidate, not an answer.
       try {
         const r = await resolveRepoName(found.name);

@@ -76,6 +76,27 @@ describe('bare names are candidates, not answers', () => {
     // Hyphens, underscores, dots or digits read as a name rather than a word.
     expect(findRepoReference('api-v2')).toEqual({ kind: 'bare', name: 'api-v2' });
   });
+
+  it('a plain word alone is a word, not a repository', () => {
+    // The reported bug: "hello" is five letters, so the old length < 4 guard
+    // let it through and a greeting became a GitHub search. A plain word with
+    // no dash, underscore, dot or digit is never a bare repo unless the
+    // message says a repository is meant.
+    for (const word of ['hello', 'hi', 'notes', 'test', 'thanks', 'help']) {
+      expect(findRepoReference(word), word).toBeNull();
+    }
+  });
+
+  it('the same plain word IS a repo once intent is stated', () => {
+    // "scan hello" plainly means the repository. The word alone did not.
+    expect(findRepoReference('scan hello')).toEqual({ kind: 'bare', name: 'hello' });
+    expect(findRepoReference('check the repo hello')).toEqual({ kind: 'bare', name: 'hello' });
+  });
+
+  it('a repo-shaped token still needs no intent', () => {
+    // "my-project" reads as a name on its own — the shape carries the signal.
+    expect(findRepoReference('my-project')).toEqual({ kind: 'bare', name: 'my-project' });
+  });
 });
 
 describe('nothing at all', () => {

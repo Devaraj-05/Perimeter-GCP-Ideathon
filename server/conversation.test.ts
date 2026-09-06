@@ -129,4 +129,12 @@ describe('reflection modes', () => {
   it('an unknown mode falls back to the base instruction rather than failing', () => {
     expect(buildSystemInstruction('nonsense')).toBe(buildSystemInstruction('companion'));
   });
+
+  it('tells the model to greet an opener rather than over-reflect on it', () => {
+    // A bare "hello" used to be intercepted as a repository name and searched
+    // on GitHub. Now it reaches the model, which must answer like a greeting.
+    const base = buildSystemInstruction('companion');
+    expect(base).toMatch(/greeting or a short opener/i);
+    expect(base).toMatch(/what they would like to reflect on or bring in/i);
+  });
 });
