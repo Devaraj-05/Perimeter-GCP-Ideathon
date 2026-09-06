@@ -130,6 +130,15 @@ describe('reflection modes', () => {
     expect(buildSystemInstruction('nonsense')).toBe(buildSystemInstruction('companion'));
   });
 
+  it('answers as Perimeter, describing the workspace, not as the model', () => {
+    // "who are you?" returned "I am Gemini, a large language model by Google."
+    // The assistant must adopt the product identity and describe what it does.
+    const base = buildSystemInstruction('companion');
+    expect(base).toMatch(/You are Perimeter/);
+    expect(base).toMatch(/answer as Perimeter/i);
+    expect(base).toMatch(/untrusted world|hijack the assistant/i);
+  });
+
   it('tells the model to greet an opener rather than over-reflect on it', () => {
     // A bare "hello" used to be intercepted as a repository name and searched
     // on GitHub. Now it reaches the model, which must answer like a greeting.

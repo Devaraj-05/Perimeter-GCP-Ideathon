@@ -686,11 +686,17 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * and sealed there; the browser never sees it (INV-16).
    */
   const connectGithub = async () => {
-    setAttachError(null);
+    setErrorMsg(null);
+    setFailureStage(null);
     try {
       window.location.href = await githubConnectUrl();
     } catch (err: any) {
-      setAttachError(err?.message ?? 'Could not start the GitHub connection.');
+      // Shown in the top banner, not the attach panel — the plus menu has
+      // already closed by the time this runs, so an error left there is
+      // invisible and the toggle looks broken. "GitHub is not configured on
+      // this deployment" is exactly what a missing OAuth env var reports, and
+      // the user needs to see it.
+      setErrorMsg(err?.message ?? 'Could not start the GitHub connection.');
     }
   };
 
@@ -700,12 +706,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * live would leave the user believing they had disconnected.
    */
   const disconnectGithub = async () => {
-    setAttachError(null);
+    setErrorMsg(null);
+    setFailureStage(null);
     try {
       await githubDisconnect();
       setGithubConnected(false);
     } catch (err: any) {
-      setAttachError(err?.message ?? 'Could not disconnect GitHub.');
+      setErrorMsg(err?.message ?? 'Could not disconnect GitHub.');
     }
   };
 
