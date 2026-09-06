@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SettingsModal } from './SettingsModal';
+import { SettingsPage } from './SettingsPage';
 
 /**
  * Settings — Amendment N.
@@ -9,17 +9,13 @@ import { SettingsModal } from './SettingsModal';
  * claims are actually present and, more importantly, that the uncomfortable
  * ones have not quietly been softened: a privacy notice that only lists
  * reassurances is marketing.
+ *
+ * The one assertion that changed when this became a page is the `isOpen={false}
+ * → ''` contract, which no longer exists — a page renders when it is routed to.
+ * Everything the old suite protected about the COPY is unchanged, because that
+ * is what was actually worth protecting.
  */
-const html = () =>
-  renderToStaticMarkup(<SettingsModal isOpen onClose={() => {}} onDeleted={() => {}} />);
-
-describe('it renders nothing when closed', () => {
-  it('returns empty markup', () => {
-    expect(
-      renderToStaticMarkup(<SettingsModal isOpen={false} onClose={() => {}} onDeleted={() => {}} />),
-    ).toBe('');
-  });
-});
+const html = () => renderToStaticMarkup(<SettingsPage onDeleted={() => {}} />);
 
 describe('the privacy statement says the uncomfortable parts', () => {
   it('admits document text is sent to Google', () => {
@@ -44,6 +40,20 @@ describe('the privacy statement says the uncomfortable parts', () => {
 
   it('states that identity is checked server-side, not from the page', () => {
     expect(html()).toMatch(/verified token/i);
+  });
+
+  it('still carries all five facts', () => {
+    // A count, so a fact cannot be dropped in a redesign without failing here.
+    const out = html();
+    for (const marker of [
+      /Firestore under your user ID/i,
+      /sent to Google/i,
+      /encrypted before storage/i,
+      /no sharing feature/i,
+      /kept until you delete them/i,
+    ]) {
+      expect(out, String(marker)).toMatch(marker);
+    }
   });
 });
 
@@ -88,5 +98,19 @@ describe('export describes what it does and does not contain', () => {
 
   it('names what is excluded', () => {
     expect(html()).toMatch(/tokens are deliberately\s*\n?\s*excluded|deliberately excluded/i);
+  });
+});
+
+describe('it is a page, not a dialog', () => {
+  it('does not paint a fixed full-screen backdrop', () => {
+    // The failure this catches: leaving the overlay wrapper behind would give
+    // a page that dims the app underneath it and cannot be scrolled past.
+    const out = html();
+    expect(out).not.toContain('fixed inset-0');
+    expect(out).not.toContain('backdrop-blur');
+  });
+
+  it('offers a way back to the journal', () => {
+    expect(html()).toMatch(/Back to your journal/i);
   });
 });

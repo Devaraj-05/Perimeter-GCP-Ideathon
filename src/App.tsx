@@ -20,17 +20,18 @@ import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
 import { JournalEditor } from './components/JournalEditor';
 import { HistorySidebar } from './components/HistorySidebar';
-import { InsightsModal } from './components/InsightsModal';
-import { SecurityModal } from './components/SecurityModal';
-import { SettingsModal } from './components/SettingsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SourcesPanel } from './components/SourcesPanel';
-import { ThreatFeed } from './components/ThreatFeed';
 import { PermissionsPanel } from './components/PermissionsPanel';
 import { PerimeterLogPanel } from './components/PerimeterLogPanel';
 import { RedTeamConsole } from './components/RedTeamConsole';
 import { AdminPanel } from './components/AdminPanel';
 import { listArtifacts } from './lib/perimeterApi';
+import { useRoute, navigate, replacePath, isPublicRoute } from './lib/router';
+import { InsightsPage } from './pages/InsightsPage';
+import { ActivityPage } from './pages/ActivityPage';
+import { SecurityPage } from './pages/SecurityPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -51,13 +52,14 @@ export default function App() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
-  // Layout & Modals
+  // Layout & Modals.
+  //
+  // Insights, Activity, Security and Settings used to be four more booleans
+  // here. They are routes now: each is a place with a URL you can link to,
+  // refresh, and leave with the back button.
+  const route = useRoute();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
-  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSourcesOpen, setIsSourcesOpen] = useState(false);
-  const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
   const [isPermissionsOpen, setIsPermissionsOpen] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isRedTeamOpen, setIsRedTeamOpen] = useState(false);
@@ -174,6 +176,22 @@ export default function App() {
 
     return () => unsubscribe();
   }, [loadUserEntries, loadGroundingArtifacts]);
+
+  /**
+   * A signed-out visitor on a private route goes back to the landing page.
+   *
+   * The guard lives here rather than in the router because this is where auth
+   * state is known, and a router that reads auth is a router that can be wrong
+   * about it. `replacePath`, not `navigate`: pushing would trap the back
+   * button on the very path we just refused.
+   *
+   * It waits for `authLoading` to settle. Redirecting during the initial token
+   * check would bounce a signed-in user off their own deep link every reload.
+   */
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user && !isPublicRoute(route)) replacePath('/');
+  }, [authLoading, user, route]);
 
   // Sign In Handler
   const handleSignIn = async () => {
@@ -345,17 +363,18 @@ export default function App() {
     );
   }
 
-  // Unauthenticated Landing Page
+  // Unauthenticated. Two public routes: the landing page and the security
+  // explainer, which a reviewer must be able to read without an account.
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#ffffff] flex flex-col font-sans">
+      <div className="flex min-h-dvh flex-col bg-[#ffffff] font-sans">
         <Navbar
           user={null}
           entryCount={0}
           onNewEntry={() => {}}
           onOpenInsights={() => {}}
-          onOpenSecurity={() => setIsSecurityOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSecurity={() => navigate('/security')}
+          onOpenSettings={() => {}}
           onOpenSources={() => {}}
           onOpenThreatFeed={() => {}}
           onOpenPermissions={() => {}}
@@ -363,42 +382,84 @@ export default function App() {
           onOpenRedTeam={() => {}}
           onSignOut={() => {}}
         />
-        <LandingPage
-          onSignIn={handleSignIn}
-          onEmailSignIn={(email, password) => void handleEmailAuth(email, password, 'in')}
-          onEmailSignUp={(email, password) => void handleEmailAuth(email, password, 'up')}
-          onPasswordReset={(email) => void handlePasswordReset(email)}
-          notice={authNotice}
-          isLoading={authLoading}
-          error={authError}
-        />
-        <SecurityModal
-          isOpen={isSecurityOpen}
-          onClose={() => setIsSecurityOpen(false)}
-        />
+        {route === '/security' ? (
+          <SecurityPage />
+        ) : (
+          <LandingPage
+            onSignIn={handleSignIn}
+            onEmailSignIn={(email, password) => void handleEmailAuth(email, password, 'in')}
+            onEmailSignUp={(email, password) => void handleEmailAuth(email, password, 'up')}
+            onPasswordReset={(email) => void handlePasswordReset(email)}
+            notice={authNotice}
+            isLoading={authLoading}
+            error={authError}
+          />
+        )}
       </div>
     );
   }
 
-  // Authenticated Workspace
+  // Authenticated.
+  //
+  // The Navbar is unchanged: it still calls onOpenInsights and the rest, and
+  // every element id it renders still exists. Only what those callbacks DO
+  // changed, from setting a boolean to navigating. That keeps the demo script
+  // and the Inspect menu's index-based divider intact.
+  const navbar = (
+    <Navbar
+      user={user}
+      entryCount={entries.length}
+      onNewEntry={handleNewEntry}
+      onOpenInsights={() => navigate('/insights')}
+      onOpenSecurity={() => navigate('/security')}
+      onOpenSettings={() => navigate('/settings')}
+      onOpenSources={() => setIsSourcesOpen(true)}
+      onOpenThreatFeed={() => navigate('/activity')}
+      onOpenPermissions={() => setIsPermissionsOpen(true)}
+      onOpenLog={() => setIsLogOpen(true)}
+      onOpenRedTeam={() => setIsRedTeamOpen(true)}
+      isAdmin={isAdmin}
+      onOpenAdmin={() => setIsAdminOpen(true)}
+      onSignOut={handleSignOut}
+    />
+  );
+
+  // Full pages. They scroll the document rather than an inner panel, so they
+  // are outside the workspace's overflow-hidden shell.
+  if (route !== '/') {
+    return (
+      <div className="flex min-h-dvh flex-col bg-white font-sans">
+        {navbar}
+        <ErrorBoundary label="This page">
+          {route === '/insights' && (
+            <InsightsPage
+              entries={entries}
+              loading={entriesLoading}
+              truncated={entriesTruncated}
+            />
+          )}
+          {route === '/activity' && <ActivityPage />}
+          {route === '/security' && <SecurityPage />}
+          {/* Amendment N. onDeleted runs AFTER the server has confirmed the
+              account is gone: the local sign-out is cleanup, not the deletion,
+              and doing it first would leave a user believing they had deleted
+              an account that still existed. */}
+          {route === '/settings' && (
+            <SettingsPage
+              onDeleted={() => {
+                navigate('/');
+                void handleSignOut();
+              }}
+            />
+          )}
+        </ErrorBoundary>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-[#ffffff] overflow-hidden font-sans">
-      <Navbar
-        user={user}
-        entryCount={entries.length}
-        onNewEntry={handleNewEntry}
-        onOpenInsights={() => setIsInsightsOpen(true)}
-        onOpenSecurity={() => setIsSecurityOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenSources={() => setIsSourcesOpen(true)}
-        onOpenThreatFeed={() => setIsThreatFeedOpen(true)}
-        onOpenPermissions={() => setIsPermissionsOpen(true)}
-        onOpenLog={() => setIsLogOpen(true)}
-        onOpenRedTeam={() => setIsRedTeamOpen(true)}
-        isAdmin={isAdmin}
-        onOpenAdmin={() => setIsAdminOpen(true)}
-        onSignOut={handleSignOut}
-      />
+      {navbar}
 
       <div className="flex-1 flex overflow-hidden">
         {/* History Sidebar */}
@@ -451,37 +512,13 @@ export default function App() {
         </main>
       </div>
 
-      {/* Modals */}
-      <InsightsModal
-        isOpen={isInsightsOpen}
-        onClose={() => setIsInsightsOpen(false)}
-        entries={entries}
-      />
-      {/* Amendment N. onDeleted runs AFTER the server has confirmed the
-          account is gone: the local sign-out is cleanup, not the deletion, and
-          doing it first would leave a user believing they had deleted an
-          account that still existed. */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onDeleted={() => {
-          setIsSettingsOpen(false);
-          void handleSignOut();
-        }}
-      />
-
-      <SecurityModal
-        isOpen={isSecurityOpen}
-        onClose={() => setIsSecurityOpen(false)}
-      />
+      {/* What remains a modal, and why: these are inspectors you open beside
+          the conversation and dismiss without losing your place. Insights,
+          Activity, Security and Settings became pages because you go TO them. */}
       <SourcesPanel
         isOpen={isSourcesOpen}
         onClose={() => setIsSourcesOpen(false)}
         onArtifactsChanged={handleArtifactsChanged}
-      />
-      <ThreatFeed
-        isOpen={isThreatFeedOpen}
-        onClose={() => setIsThreatFeedOpen(false)}
       />
       <PermissionsPanel
         isOpen={isPermissionsOpen}

@@ -139,10 +139,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             left this row: a subtitle nobody reads and a build detail beside a
             product name were two things competing with the actions. The badge
             now lives in the account menu, where a session property belongs. */}
-        <div className="flex min-w-0 shrink items-center gap-2">
-          {/* Bare mark, no plate — inherits the accent colour directly. */}
-          <Logo className="h-7 w-7 shrink-0 text-[#1a1a1a]" />
-          <span className="truncate font-serif text-lg font-semibold tracking-[-0.01em] text-[#1a1a1a]">
+        <div className="flex min-w-0 shrink items-center gap-2.5">
+          {/* Bare mark, no plate — inherits the accent colour directly.
+              Sized up from h-7 without touching the bar's padding: the row is
+              h-16, so a 36px mark sits comfortably and the wordmark grows with
+              it. A mark that outgrows its word reads as a logo accident. */}
+          <Logo className="h-9 w-9 shrink-0 text-[#1a1a1a]" />
+          <span className="truncate font-serif text-xl font-semibold tracking-[-0.01em] text-[#1a1a1a]">
             Perimeter
           </span>
         </div>

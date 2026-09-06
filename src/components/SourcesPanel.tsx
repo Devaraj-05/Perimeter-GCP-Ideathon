@@ -175,7 +175,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
               value={newRef}
               onChange={(e) => setNewRef(e.target.value)}
               placeholder="owner/repository — e.g. facebook/react"
-              className="w-full rounded-lg border border-[#e5e5e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1a1a1a] placeholder:text-[#b5b0a0] focus:border-[#1a1a1a] focus:outline-none"
+              className="w-full rounded-lg border border-[#e5e5e5] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1a1a1a] placeholder:text-[#a3a3a3] focus:border-[#1a1a1a] focus:outline-none"
             />
           </div>
           <button
@@ -230,7 +230,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({
 
           {!loading && sources.length === 0 && (
             <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
-              <Github className="mx-auto h-8 w-8 text-[#b5b0a0]" />
+              <Github className="mx-auto h-8 w-8 text-[#a3a3a3]" />
               <p className="mt-3 font-serif text-base text-[#1a1a1a]">No sources connected</p>
               <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                 Add a public repository above. Its open issues become context your journal can

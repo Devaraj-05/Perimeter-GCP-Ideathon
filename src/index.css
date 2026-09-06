@@ -303,14 +303,14 @@
  */
 @layer utilities {
   .chrome-blur {
-    background: rgba(252, 250, 247, 0.72);
+    background: rgba(255, 255, 255, 0.72);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
 
   /* Sidebar chrome sits on the sidebar ground, not the page ground. */
   .chrome-blur-sidebar {
-    background: rgba(243, 239, 230, 0.82);
+    background: rgba(247, 247, 248, 0.82);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
   }

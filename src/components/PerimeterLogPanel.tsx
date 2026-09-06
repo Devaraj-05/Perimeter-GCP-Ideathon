@@ -278,7 +278,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
 
           {!loading && events.length === 0 && (
             <div className="rounded-xl border border-dashed border-[#e5e5e5] bg-white/60 p-8 text-center">
-              <ScrollText className="mx-auto h-8 w-8 text-[#b5b0a0]" />
+              <ScrollText className="mx-auto h-8 w-8 text-[#a3a3a3]" />
               <p className="mt-3 font-serif text-base text-[#1a1a1a]">Nothing recorded yet</p>
               <p className="mx-auto mt-1 max-w-sm text-xs text-[#6b6b6b]">
                 Save a link or ask the assistant to do something. Every decision lands here.
@@ -320,7 +320,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
                           {e.invariant}
                         </span>
                       )}
-                      <span className="ml-auto shrink-0 font-mono text-[10px] text-[#b5b0a0]">
+                      <span className="ml-auto shrink-0 font-mono text-[10px] text-[#a3a3a3]">
                         #{e.seq} · {timeOf(e.ts)}
                       </span>
                     </div>
@@ -331,7 +331,7 @@ export const PerimeterLogPanel: React.FC<PerimeterLogPanelProps> = ({ isOpen, on
 
                     {/* The raw code stays visible under the sentence: the plain
                         language is for the user, the code is for the writeup. */}
-                    <p className="mt-0.5 font-mono text-[10px] text-[#b5b0a0]">{e.reason}</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-[#a3a3a3]">{e.reason}</p>
                   </div>
                 </div>
               </div>

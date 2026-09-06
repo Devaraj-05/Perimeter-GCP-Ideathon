@@ -266,7 +266,7 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({ isOpen, onCl
                       )}
                     </div>
                     <p className="mt-1 text-xs text-[#6b6b6b]">{g.detail}</p>
-                    <p className="mt-1 font-mono text-[10px] text-[#b5b0a0]">{g.tool}</p>
+                    <p className="mt-1 font-mono text-[10px] text-[#a3a3a3]">{g.tool}</p>
                   </div>
 
                   {active ? (
