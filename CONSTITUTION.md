@@ -65,6 +65,8 @@ constitution.
   Amendment O.
 - **INV-25** An embedding does not launder provenance — ranking selects untrusted candidates, it
   does not make them trusted. See Amendment P.
+- **INV-26** A mailbox search term is derived only from what the user typed in their own message,
+  never from an artifact, a turn, an attachment or a tool result. See Amendment R.
 
 ## §3 Secure coding standards
 
@@ -831,3 +833,89 @@ was always meant to govern; it does not loosen any of them.
 still blocks — a read runs, but its result reaches the user, never a tool-holding model, so a
 poisoned artifact title cannot escalate. No new payload is needed; the change removed a grant
 requirement, it added no new surface.
+
+---
+
+## Amendment R — The composer echoes, and the mailbox answers the question (adopted 2026-09-06)
+
+Adopted **before** the change. Three defects shared one shape: the user was made to wait, without
+evidence, for work that was slower than it needed to be and answered a question they had not asked.
+
+### R.1 Optimistic echo — Directive 6 restated, not weakened
+
+Directive 6 says *"never clear the user's input buffer before a confirmed successful write."* It
+was implemented as **retention**: the text stayed in the composer for the whole turn and was
+cleared only after the Firestore write resolved. That satisfied the letter and broke the intent.
+With a mailbox fetch ahead of the model call, the user's own message did not appear in the
+transcript for thirty seconds — they saw their text sitting in the box, a spinner, and no evidence
+the send had happened at all. The one thing a chat interface must do instantly, it did last.
+
+The guarantee Directive 6 exists to give is **the user never loses what they typed**. That is now
+met by **restoration** instead of retention:
+
+> **The user's message is painted into the transcript and the composer cleared in the same tick as
+> the submit, before any network call. The submitted text is held in memory for the life of the
+> turn. On any failure — send, abort, or preparation — it is restored to the composer verbatim and
+> the message is marked as not delivered.**
+
+Restoration is strictly stronger than retention. Retention protected the text only while the turn
+ran; a user who typed a second message during a slow turn overwrote the first. Held text cannot be
+overwritten by anything but a successful turn.
+
+**What does not change.** A save failure still never clears, still never claims the message was not
+sent, and still reports the stage that actually failed (`send` vs `save`). INV-20 is untouched: the
+taint verdict still precedes the first token.
+
+### R.2 A failed turn does not un-say what the user said
+
+On a send failure the transcript was rolled back to `priorTurns`, deleting the user's own message
+and any deterministic findings already shown. The user watched their question and several security
+messages appear and then vanish, which reads as data loss and destroys the evidence the product
+exists to show. A failed turn now **keeps** the user's message in place and marks it undelivered.
+Only the model's reply is absent, because only the model's reply failed.
+
+### R.3 The mailbox answers the question that was asked
+
+`fetchRecent` pulled the ten most recent messages regardless of what was asked, so *"is there any
+mail about X"* was answered by summarising four unrelated emails that happened to be newest. The
+model was given the wrong documents and faithfully described them.
+
+A mailbox read now carries a **search term derived from the user's own message** — Gmail's `q`
+parameter — and a date bound when the message says *today* or *this week*.
+
+> **INV-26** A mailbox search term is derived only from what the user typed in their own message,
+> never from an artifact, a turn, an attachment or a tool result.
+
+This is the same rule already binding on URLs (`extractUrls`) and repository names
+(`findRepoReference`), and for the same reason: a search term taken from untrusted content is an
+attacker choosing which of the user's emails our server reads and loads into the context. The term
+is a Gmail query string, not a prompt — it is URL-encoded into a query parameter and never
+concatenated into an instruction. Every message returned is still UNTRUSTED and still enters
+through the Reader unchanged.
+
+**Zone note (§9.1–9.2).** No new data flow: the source is still Gmail, the zone is still UNTRUSTED,
+and the path is still `ingestUntrustedText` → Reader. What changes is *which* messages are
+selected, and the selector is trusted user input.
+
+### R.4 Latency is a security property
+
+`/api/gmail/ingest` ingested messages one at a time, and each ingest awaited an L2 classifier call
+and then an embedding call in series — twenty sequential model round trips for ten messages. It
+routinely exceeded the client's 30s ceiling, and the user was shown *"That took too long and was
+stopped"* about work the server was still doing. A timeout that fires on the happy path is not a
+safety net; it trains the user to distrust a working system, and it is indistinguishable from the
+failure it was meant to report.
+
+Three changes, none of which touch what is screened:
+
+1. Messages are fetched and ingested **concurrently, bounded** by the same `mapPool` the Reader
+   already uses. Concurrency is capped so a large mailbox cannot convert a slow turn into a
+   rate-limited one.
+2. Within one ingest, the L2 classifier and the embedding run **concurrently** rather than in
+   series. Neither depends on the other's result.
+3. `/api/gmail/` joins the slow-path timeout list, so the client's ceiling sits above the server's
+   own budget rather than below it.
+
+**L1 and L2 both still run on every message, and the verdict is still fused from both.** Nothing is
+skipped, sampled, or deferred. This amendment makes the same work take less wall-clock time; it
+does not make less of it happen.

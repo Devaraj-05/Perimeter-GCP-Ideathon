@@ -52,8 +52,17 @@ const REQUEST_TIMEOUT_MS = 30_000;
  */
 const SLOW_REQUEST_TIMEOUT_MS = 75_000;
 
-/** Paths whose work is bounded by the server's model budget, not by a click. */
-const SLOW_PATHS = ['/api/agent/chat', '/api/gemini/', '/api/ingest/'];
+/**
+ * Paths whose work is bounded by the server's model budget, not by a click.
+ *
+ * `/api/gmail/` joined this list in Amendment R.4. A mailbox read screens every
+ * message with the L1 and L2 detectors and embeds it, so its budget is the
+ * server's, not a 30s guess — and a ceiling BELOW the server's own budget does
+ * not protect anyone. It fires on work that is going to succeed and reports
+ * "that took too long" about it, which is indistinguishable from the failure it
+ * was meant to catch.
+ */
+const SLOW_PATHS = ['/api/agent/chat', '/api/gemini/', '/api/ingest/', '/api/gmail/'];
 
 function timeoutFor(path: string): number {
   return SLOW_PATHS.some((p) => path.startsWith(p))

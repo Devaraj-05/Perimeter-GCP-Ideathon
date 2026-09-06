@@ -126,3 +126,90 @@ describe('the mailbox is read-only and its content is untrusted', () => {
     expect(ROUTES).toMatch(/Math\.min\(Math\.max\(1, Number\(data\.max\)\), 10\)/);
   });
 });
+
+describe('INV-26 — a mailbox search term comes only from the user (Amendment R.3)', () => {
+  it('the search term reaches Gmail as a query parameter, never as text', () => {
+    // The whole safety argument: `q` selects documents. It is URL-encoded into
+    // the request and is never concatenated into a prompt or a path, so the
+    // worst a strange term can do is select different mail belonging to the
+    // same user who typed it.
+    const fn = GMAIL.slice(GMAIL.indexOf('export async function fetchRecent'));
+    expect(fn).toContain('new URLSearchParams');
+    expect(fn).toMatch(/params\.set\('q',\s*q\)/);
+  });
+
+  it('a term is stripped of control characters and capped', () => {
+    // Defence in depth on top of the caller-side rule. A newline in a query
+    // string is the shape of a request-splitting attempt; it never reaches the
+    // wire.
+    const fn = GMAIL.slice(GMAIL.indexOf('export async function fetchRecent'));
+    expect(fn).toMatch(/replace\(\/\[/);
+    expect(fn).toContain('slice(0, 200)');
+  });
+
+  it('the route takes the term from the request body and nothing else', () => {
+    // The body is the user's own composer text, forwarded by their own client.
+    // There is deliberately no path that reads a search term out of an
+    // artifact, a turn or a tool result — that would be an attacker choosing
+    // which of the user's emails this server reads.
+    const h = ROUTES.slice(ROUTES.indexOf("gmailRouter.post('/ingest'"));
+    expect(h).toMatch(/data\.query/);
+    expect(h).toContain('fetchRecent(uid, max, query)');
+    // `query` is bound exactly once, and its only source is the request body.
+    const bindings = h.match(/(?:const|let|var)\s+query\s*=/g) ?? [];
+    expect(bindings).toHaveLength(1);
+    expect(h).toMatch(/const query = typeof data\.query === 'string'/);
+  });
+
+  it('every message still enters through the shared untrusted ingest', () => {
+    // The selector changed. The airlock did not.
+    const h = ROUTES.slice(ROUTES.indexOf("gmailRouter.post('/ingest'"));
+    expect(h).toContain('ingestUntrustedText(');
+  });
+});
+
+describe('Amendment R.4 — the same screening, less waiting', () => {
+  it('messages are fetched concurrently and bounded', () => {
+    const fn = GMAIL.slice(GMAIL.indexOf('export async function fetchRecent'));
+    expect(fn).toContain('mapPool(');
+    expect(fn).toContain('GMAIL_FETCH_CONCURRENCY');
+    // The defect: a serial for-loop of 15s round trips on the critical path.
+    expect(fn).not.toMatch(/for\s*\(const ref of/);
+  });
+
+  it('messages are screened concurrently and bounded', () => {
+    const h = ROUTES.slice(ROUTES.indexOf("gmailRouter.post('/ingest'"));
+    expect(h).toContain('mapPool(');
+    expect(h).toContain('GMAIL_INGEST_CONCURRENCY');
+    expect(h).not.toMatch(/for\s*\(const m of messages\)/);
+  });
+
+  it('concurrency is capped, never unbounded', () => {
+    // Promise.all over a whole mailbox would convert a slow turn into a
+    // rate-limited one, which is a worse failure than the one being fixed.
+    const h = ROUTES.slice(ROUTES.indexOf("gmailRouter.post('/ingest'"));
+    expect(h).not.toContain('Promise.all(messages');
+    expect(ROUTES).toMatch(/GMAIL_INGEST_CONCURRENCY = Number\(/);
+  });
+
+  it('both detectors still run on every document', () => {
+    // The point of the amendment is that this work is unchanged - it is only
+    // no longer serialised. If either screen were skipped or sampled, the
+    // latency win would have been bought with the product's actual thesis.
+    const INGEST = strip(readFileSync(join(process.cwd(), 'server', 'ingest.ts'), 'utf8'));
+    const fn = INGEST.slice(INGEST.indexOf('export async function ingestUntrustedText'));
+    expect(fn).toContain('detectL1(');
+    expect(fn).toContain('classifyL2(');
+    expect(fn).toContain('fuseVerdict(');
+  });
+
+  it('the classifier, the segment write and the embedding no longer wait on each other', () => {
+    const INGEST = strip(readFileSync(join(process.cwd(), 'server', 'ingest.ts'), 'utf8'));
+    const fn = INGEST.slice(INGEST.indexOf('export async function ingestUntrustedText'));
+    expect(fn).toMatch(/await Promise\.all\(\[/);
+    // None of the three reads another's result, so serialising them bought
+    // nothing and cost two round trips per document.
+    expect(fn).not.toMatch(/const l2 = await classifyL2/);
+    expect(fn).not.toMatch(/const embedding = await embedText/);
+  });
+});

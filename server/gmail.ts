@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { adminDb } from './auth';
 import { getGoogleClientSecret } from './secrets';
 import { seal, open } from './tokencrypto';
+import { mapPool } from './pool';
 
 /**
  * Gmail connection — Amendment H, INV-16 and INV-17.
@@ -25,6 +26,15 @@ export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 /** A consent that has not completed in ten minutes is abandoned, not pending. */
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * How many messages are pulled from Gmail at once — Amendment R.4.
+ *
+ * Bounded rather than unlimited for the same reason the Reader's fan-out is:
+ * a wide mailbox read would otherwise open one connection per message and
+ * convert a slow turn into a rate-limited one.
+ */
+const GMAIL_FETCH_CONCURRENCY = Number(process.env.GMAIL_FETCH_CONCURRENCY) || 6;
 
 export class GmailError extends Error {
   constructor(public readonly code: string) {
@@ -235,13 +245,37 @@ function firstTextBody(payload: any): string {
  * subject, sender and body are all UNTRUSTED. The sender address in particular
  * is not identity — it is a claim printed on an envelope.
  */
-export async function fetchRecent(uid: string, max = 5): Promise<GmailMessage[]> {
+export async function fetchRecent(
+  uid: string,
+  max = 5,
+  /**
+   * A Gmail search expression — INV-26.
+   *
+   * Derived ONLY from what the user typed in their own message. Never from an
+   * artifact, a turn, an attachment or a tool result: a search term taken from
+   * untrusted content is an attacker choosing which of the user's emails this
+   * server reads and loads into the context, which is the same fetch primitive
+   * `extractUrls` and `findRepoReference` exist to deny.
+   *
+   * Empty means "most recent", the old behaviour.
+   */
+  query = '',
+): Promise<GmailMessage[]> {
   const token = await accessToken(uid);
   const auth = { authorization: `Bearer ${token}` };
 
+  // Belt and braces on top of INV-26's caller-side rule. A query is a Gmail
+  // search DSL string, not a prompt and not a URL: it is URL-encoded into a
+  // query parameter and never concatenated into an instruction. Capped and
+  // stripped of control characters so a malformed term cannot smuggle a second
+  // parameter or a newline into the request line.
+  const q = query.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
+
   let list: any;
   try {
-    const res = await fetch(`${GMAIL_API}/messages?maxResults=${Math.min(max, 10)}`, {
+    const params = new URLSearchParams({ maxResults: String(Math.min(max, 25)) });
+    if (q) params.set('q', q);
+    const res = await fetch(`${GMAIL_API}/messages?${params.toString()}`, {
       headers: auth,
       signal: AbortSignal.timeout(15_000),
     });
@@ -251,14 +285,21 @@ export async function fetchRecent(uid: string, max = 5): Promise<GmailMessage[]>
     throw new GmailError('gmail_unreachable');
   }
 
-  const out: GmailMessage[] = [];
-  for (const ref of (list?.messages ?? []).slice(0, max)) {
+  const refs: any[] = (list?.messages ?? []).slice(0, max);
+
+  // Amendment R.4. Fetched concurrently, bounded.
+  //
+  // This was a serial for-loop: one Gmail round trip per message, each with a
+  // 15s ceiling, before a single message had been screened. Ten messages meant
+  // ten sequential round trips on the critical path of a question the user was
+  // waiting on.
+  const fetched = await mapPool(refs, GMAIL_FETCH_CONCURRENCY, async (ref) => {
     try {
       const res = await fetch(`${GMAIL_API}/messages/${encodeURIComponent(ref.id)}?format=full`, {
         headers: auth,
         signal: AbortSignal.timeout(15_000),
       });
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const msg = await res.json();
 
       const headers: any[] = msg?.payload?.headers ?? [];
@@ -268,17 +309,19 @@ export async function fetchRecent(uid: string, max = 5): Promise<GmailMessage[]>
           300,
         );
 
-      out.push({
+      return {
         id: String(msg?.id ?? ref.id),
         subject: header('subject') || '(no subject)',
         from: header('from') || '(unknown sender)',
         body: firstTextBody(msg?.payload).slice(0, 20_000),
-      });
+      } satisfies GmailMessage;
     } catch {
       // One unreadable message must not abort the rest.
-      continue;
+      return null;
     }
-  }
+  });
 
-  return out;
+  // mapPool preserves input order, so the mailbox order Gmail returned is the
+  // order these are ingested and shown in.
+  return fetched.filter((m): m is GmailMessage => m !== null);
 }

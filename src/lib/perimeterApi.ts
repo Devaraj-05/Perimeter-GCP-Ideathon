@@ -164,11 +164,17 @@ export async function gmailDisconnect(): Promise<void> {
   await apiFetch<{ ok: boolean }>('/api/gmail/disconnect', { method: 'POST' });
 }
 
-/** Pulls recent messages in as UNTRUSTED artifacts and returns their verdicts. */
-export async function gmailIngest(max = 5): Promise<GmailIngested[]> {
+/**
+ * Pulls messages in as UNTRUSTED artifacts and returns their verdicts.
+ *
+ * `query` is a Gmail search expression built from the user's own typed message
+ * (INV-26, Amendment R.3) — never from an artifact, a turn or a tool result.
+ * Empty means "most recent".
+ */
+export async function gmailIngest(max = 5, query = ''): Promise<GmailIngested[]> {
   const { messages } = await apiFetch<{ messages: GmailIngested[] }>('/api/gmail/ingest', {
     method: 'POST',
-    body: JSON.stringify({ max }),
+    body: JSON.stringify({ max, query }),
   });
   return messages;
 }

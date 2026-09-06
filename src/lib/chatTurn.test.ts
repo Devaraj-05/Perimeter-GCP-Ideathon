@@ -40,6 +40,9 @@ function harness(over: Partial<RunTurnDeps> = {}) {
     clearInput: () => {
       log.push('clearInput');
     },
+    restoreInput: (t) => {
+      log.push(`restoreInput:${t}`);
+    },
     newId: (role) => `id-${role}-${++n}`,
     nowIso: () => '2026-09-05T00:00:00.000Z',
     ...over,
@@ -47,46 +50,90 @@ function harness(over: Partial<RunTurnDeps> = {}) {
   return { deps, log, painted };
 }
 
-describe('Directive 6 — the composer is never cleared before a confirmed write', () => {
-  it('clears the input only after save resolves', async () => {
+describe('Directive 6 via Amendment R.1 — the text is never lost', () => {
+  // The guarantee did not change; the way it is met did. The composer clears
+  // at the echo so pressing send has an effect in the same frame, and the
+  // submitted text is restored verbatim on every path that does not end in a
+  // confirmed write. The property under test is RECOVERABILITY: after any
+  // outcome, what the user typed is either in the transcript as a delivered
+  // message or back in the composer.
+
+  it('clears the composer at the echo, before the model is called', async () => {
     const { deps, log } = harness();
     await runChatTurn('hello', [], deps);
-    expect(log.indexOf('clearInput')).toBeGreaterThan(log.indexOf('save'));
+    expect(log.indexOf('clearInput')).toBeLessThan(log.indexOf('send'));
   });
 
-  it('keeps the text when the model call fails', async () => {
+  it('restores the text verbatim when the model call fails', async () => {
     // The original defect: setFollowUpInput('') ran on the line BEFORE the
-    // request. A failed send took the user's words with it.
+    // request and nothing put it back. A failed send took the user's words.
     const { deps, log } = harness({
       send: async () => {
         throw new Error('503 UNAVAILABLE');
       },
     });
     const r = await runChatTurn('hello', [], deps);
-    expect(log).not.toContain('clearInput');
+    expect(log).toContain('restoreInput:hello');
     expect(r.failure!.stage).toBe('send');
   });
 
-  it('keeps the text when the write fails', async () => {
+  it('restores the text when preparation fails', async () => {
+    const { deps, log } = harness({
+      prepare: async () => {
+        throw new Error('mailbox unreachable');
+      },
+    });
+    const r = await runChatTurn('hello', [], deps);
+    expect(log).toContain('restoreInput:hello');
+    expect(log).not.toContain('send');
+    expect(r.failure!.stage).toBe('send');
+  });
+
+  it('does NOT restore when only the write failed - the reply is on screen', async () => {
+    // Nothing is lost here: the message and its reply are both in the
+    // transcript. Putting the text back would offer to send it a second time.
     const { deps, log } = harness({
       save: async () => {
         throw new Error('permission-denied');
       },
     });
-    await runChatTurn('hello', [], deps);
-    expect(log).not.toContain('clearInput');
+    const r = await runChatTurn('hello', [], deps);
+    expect(log.some((l) => l.startsWith('restoreInput'))).toBe(false);
+    expect(r.turns.at(-1)!.text).toBe('a reply');
   });
 
-  it('never clears when nothing was saved, whichever half failed', async () => {
-    for (const broken of ['send', 'save'] as const) {
-      const { deps, log } = harness({
+  it('whatever failed, the text is recoverable', async () => {
+    for (const broken of ['send', 'save', 'prepare'] as const) {
+      const { deps, log, painted } = harness({
         [broken]: async () => {
           throw new Error('boom');
         },
       } as Partial<RunTurnDeps>);
-      await runChatTurn('hello', [], deps);
-      expect(log, broken).not.toContain('clearInput');
+      const r = await runChatTurn('hello', [], deps);
+      const restored = log.includes('restoreInput:hello');
+      const inTranscript = r.turns.some((t) => t.role === 'user' && t.text === 'hello');
+      expect(restored || inTranscript, broken).toBe(true);
+      expect(painted.length, broken).toBeGreaterThan(0);
     }
+  });
+
+  it('the echo is painted before anything is awaited', async () => {
+    const order: string[] = [];
+    const { deps } = harness({
+      onTurns: () => order.push('paint'),
+      prepare: async () => {
+        order.push('prepare');
+      },
+      send: async () => {
+        order.push('send');
+        return REPLY;
+      },
+    });
+    await runChatTurn('hello', [], deps);
+    // This is the whole point of R.1: a slow mailbox read used to sit between
+    // the user pressing send and their own message appearing.
+    expect(order[0]).toBe('paint');
+    expect(order.indexOf('paint')).toBeLessThan(order.indexOf('prepare'));
   });
 });
 
@@ -133,9 +180,10 @@ describe('Directive 6 — a failure says which half failed', () => {
     expect(r.reply).toBeDefined();
   });
 
-  it('rolls the optimistic user turn back when the send failed', async () => {
-    // It never happened. Leaving it would show a message the model never saw,
-    // and a retry would then send it twice.
+  it('keeps the user turn when the send failed, marked undelivered', async () => {
+    // Amendment R.2. This used to roll back to `prior`, which deleted what the
+    // user had just written. Watching your own question vanish reads as data
+    // loss; the message stays and says it was not delivered.
     const prior: TurnMessage[] = [
       { id: 'a', role: 'user', text: 'earlier', timestamp: 'T' },
     ];
@@ -145,7 +193,10 @@ describe('Directive 6 — a failure says which half failed', () => {
       },
     });
     const r = await runChatTurn('hello', prior, deps);
-    expect(r.turns).toEqual(prior);
+    expect(r.turns).toHaveLength(2);
+    expect(r.turns[0]).toEqual(prior[0]);
+    expect(r.turns[1]).toMatchObject({ role: 'user', text: 'hello', undelivered: true });
+    expect(r.turns.some((t) => t.role === 'model')).toBe(false);
   });
 
   it('carries the underlying message rather than a generic one', async () => {
@@ -246,10 +297,11 @@ describe('streaming and stopping — Amendment L', () => {
     const r = await runChatTurn('hi', [], deps);
     expect(r.failure!.stage).toBe('aborted');
     expect(log).not.toContain('save');
-    expect(log).not.toContain('clearInput');
+    // Cleared at the echo, then put straight back - nothing to retype.
+    expect(log).toContain('restoreInput:hi');
   });
 
-  it('an abort leaves the transcript exactly as it was', async () => {
+  it('an abort keeps the question and discards only the half-answer', async () => {
     class Aborted extends Error {}
     const prior: TurnMessage[] = [{ id: 'a', role: 'user', text: 'earlier', timestamp: 'T' }];
     const { deps } = harness({
@@ -260,7 +312,10 @@ describe('streaming and stopping — Amendment L', () => {
       isAbort: (e) => e instanceof Aborted,
     });
     const r = await runChatTurn('hi', prior, deps);
-    expect(r.turns).toEqual(prior);
+    expect(r.turns[0]).toEqual(prior[0]);
+    expect(r.turns[1]).toMatchObject({ role: 'user', text: 'hi', undelivered: true });
+    // INV-20: the partial reply is not in the transcript and was never saved.
+    expect(r.turns.some((t) => t.text === 'discard me')).toBe(false);
     expect(r.reply).toBeUndefined();
   });
 
@@ -362,7 +417,10 @@ describe('attachments and findings ride with the turn', () => {
     expect(saved).toEqual(['user', 'perimeter', 'model']);
   });
 
-  it('rolls perimeter messages back with the user turn on a send failure', async () => {
+  it('keeps perimeter messages when the send fails', async () => {
+    // Amendment R.2. These were rolled back with the user turn, so a failed
+    // turn erased the findings the scanner had already proved - the evidence
+    // this product exists to show, deleted because a model call failed.
     const { deps } = harness({
       send: async () => {
         throw new Error('503');
@@ -371,6 +429,7 @@ describe('attachments and findings ride with the turn', () => {
     const r = await runChatTurn('x', [], deps, {
       findings: [{ title: 'a.pdf', verdict: 'hostile', matches: [] }],
     });
-    expect(r.turns).toEqual([]);
+    expect(r.turns.map((t) => t.role)).toEqual(['user', 'perimeter']);
+    expect(r.turns[0].undelivered).toBe(true);
   });
 });

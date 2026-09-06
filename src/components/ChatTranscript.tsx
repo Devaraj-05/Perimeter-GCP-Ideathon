@@ -217,6 +217,16 @@ function TranscriptImpl({ turns }: Props) {
                         )}
                       </button>
                     </div>
+
+                    {/* Amendment R.2. The message stays; what failed is said
+                        beside it. The old behaviour deleted the user's own turn
+                        on a send failure, so the screen simply lost what they
+                        had written. */}
+                    {isUser && turn.undelivered && (
+                      <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]">
+                        Not delivered &mdash; your text is back in the box below.
+                      </p>
+                    )}
                   </div>
                 );
                     })}

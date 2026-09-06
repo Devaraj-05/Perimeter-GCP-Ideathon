@@ -318,26 +318,41 @@ export async function ingestUntrustedText(
   // Screening. L1 and L2 are defence in depth here - the boundary is that this
   // text only ever reaches the Reader, which holds no tools.
   const l1 = detectL1(combined, input.allowedHosts ? { allowedHosts: input.allowedHosts } : undefined);
-  const l2 = await classifyL2(combined);
-  const verdict = fuseVerdict(l1, l2.score);
-
-  const segment = await createSegment(uid, {
-    zone: 'UNTRUSTED',
-    text: combined,
-    sourceType: input.sourceType,
-    sourceRef: input.sourceRef,
-  });
 
   const title = input.title || input.sourceRef;
+
+  // Amendment R.4. Three independent awaits that used to run in series.
+  //
+  // The classifier is a model call, the embedding is a second model call, and
+  // the segment write is Firestore. None reads another's result: the verdict
+  // needs l1 and l2, the artifact id needs the segment, and the embedding needs
+  // only the title and the text — all known before any of them start. Run
+  // serially this was three round trips per document, and a ten-message
+  // mailbox read paid it ten times over, which is how a mailbox fetch came to
+  // exceed the client's ceiling and report "that took too long" about work that
+  // was going to succeed.
+  //
+  // Both screens still run on every document and the verdict is still fused
+  // from both. This changes when they run, not whether.
+  const [l2, segment, embedding] = await Promise.all([
+    classifyL2(combined),
+    createSegment(uid, {
+      zone: 'UNTRUSTED',
+      text: combined,
+      sourceType: input.sourceType,
+      sourceRef: input.sourceRef,
+    }),
+    // Amendment P. Ranked on TITLE plus body so a search for what a document is
+    // about matches even when the body is long and diffuse. null on failure —
+    // ingest never blocks on the ability to rank a document later.
+    embedText(`${title}
+
+${combined}`),
+  ]);
+
+  const verdict = fuseVerdict(l1, l2.score);
   const artifactId = `${input.idPrefix ?? input.sourceType}__${segment.id}`;
   const bytes = Buffer.byteLength(combined, 'utf8');
-
-  // Amendment P. Ranked on TITLE plus body so a search for what a document is
-  // about matches even when the body is long and diffuse. null on failure —
-  // ingest never blocks on the ability to rank a document later.
-  const embedding = await embedText(`${title}
-
-${combined}`);
 
   await artifactsRef(uid).doc(artifactId).set(
     clean({

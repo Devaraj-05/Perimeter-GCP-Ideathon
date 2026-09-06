@@ -11,8 +11,13 @@ import type { ThreatEvent } from './agentApi';
  *
  * **Directive 6, "never clear the user's input buffer before a confirmed
  * successful write."** The old code cleared the composer on the line before
- * the request. A failed send took the user's text with it. Here `clearInput`
- * is reachable from exactly one place: after `save` has resolved.
+ * the request and never put it back, so a failed send took the user's text
+ * with it. Amendment R.1 keeps the guarantee and changes how it is met: the
+ * composer is cleared at the echo, the submitted text is held here for the
+ * life of the turn, and `restoreInput` puts it back verbatim on every path
+ * that does not end in a confirmed write. The user cannot lose what they
+ * typed, and they are no longer made to look at it for thirty seconds to
+ * prove it.
  *
  * **Directive 6, "never fail silently."** The old code wrapped the model call
  * and the Firestore write in one try/catch, so a failed SAVE was reported as
@@ -53,8 +58,36 @@ export interface RunTurnDeps {
   save: (turns: TurnMessage[]) => Promise<void>;
   /** Paints the transcript optimistically. Called on every change. */
   onTurns: (turns: TurnMessage[]) => void;
-  /** Empties the composer. Callable ONLY after a confirmed write. */
+  /**
+   * Empties the composer.
+   *
+   * Amendment R.1. Called in the same tick as the echo, BEFORE the network,
+   * so the composer behaves the way every chat interface behaves: what you
+   * sent moves out of the box and into the transcript. Directive 6's guarantee
+   * - the user never loses what they typed - is met by `restoreInput` below,
+   * not by making them stare at their own text for the length of the turn.
+   */
   clearInput: () => void;
+  /**
+   * Puts the submitted text back, verbatim - Amendment R.1.
+   *
+   * Called on every path where no reply was persisted: send failure, abort,
+   * and a failed preparation step. This is what makes clearing safe, and it is
+   * strictly stronger than the old retention: held text cannot be overwritten
+   * by a second message typed during a slow turn, which the old behaviour lost
+   * silently.
+   */
+  restoreInput?: (text: string) => void;
+  /**
+   * Work that must happen before the model call but AFTER the user's message
+   * is on screen - fetching linked pages, pulling mail.
+   *
+   * It lives here rather than in the caller because anything awaited before
+   * `runChatTurn` delays the echo, which is exactly the defect Amendment R.1
+   * exists to fix: a mailbox read put thirty seconds between the user pressing
+   * send and any evidence that they had.
+   */
+  prepare?: () => Promise<void>;
   /**
    * Called with the reply so far, as it streams. The turn it describes is
    * PROVISIONAL: it is not persisted and must be rendered as unfinished until
@@ -134,7 +167,37 @@ export async function runChatTurn(
   }));
 
   const withUser = [...priorTurns, userTurn, ...perimeterTurns];
+
+  // Amendment R.1. The echo and the clear happen together, before anything is
+  // awaited, so pressing send has a visible effect in the same frame.
   deps.onTurns(withUser);
+  deps.clearInput();
+
+  /** The user's message stays; only its reply is marked missing (R.2). */
+  const markUndelivered = (): TurnMessage[] => {
+    const kept = withUser.map((t) =>
+      t.id === userTurn.id ? { ...t, undelivered: true } : t,
+    );
+    deps.onTurns(kept);
+    deps.restoreInput?.(text);
+    return kept;
+  };
+
+  // Preparation - links, mail - now runs with the message already on screen.
+  if (deps.prepare) {
+    try {
+      await deps.prepare();
+    } catch (err) {
+      return {
+        turns: markUndelivered(),
+        failure: {
+          stage: 'send',
+          message: messageOf(err, 'Could not prepare that message.'),
+          replyAtRisk: false,
+        },
+      };
+    }
+  }
 
   let streamed = '';
   let reply: ChatReply;
@@ -147,22 +210,23 @@ export async function runChatTurn(
       deps.onStreamingText?.(streamed);
     });
   } catch (err) {
+    // Amendment R.2. Neither path rolls the transcript back any more.
+    //
+    // It used to return to `priorTurns`, which deleted the user's own message
+    // and every deterministic finding shown beside it. The user watched their
+    // question and several security messages appear and then vanish - which
+    // reads as data loss, and destroys the evidence this product exists to
+    // show. Only the reply failed, so only the reply is absent.
     if (deps.isAbort?.(err)) {
-      // Stopping is not failing. The transcript returns to where it was, the
-      // text stays in the composer, and nothing is written — a half-answer the
-      // user cut off is not something to persist or apologise for.
-      deps.onTurns(priorTurns);
+      // Stopping is not failing. Nothing is written - a half-answer the user
+      // cut off is not something to persist or apologise for.
       return {
-        turns: priorTurns,
+        turns: markUndelivered(),
         failure: { stage: 'aborted', message: 'Stopped.', replyAtRisk: false },
       };
     }
-    // The send failed, so the user turn never happened. Roll it back and leave
-    // the text in the composer — that IS the retry affordance Directive 6
-    // asks for, and it costs the user nothing to press send again.
-    deps.onTurns(priorTurns);
     return {
-      turns: priorTurns,
+      turns: markUndelivered(),
       failure: {
         stage: 'send',
         message: messageOf(err, 'Could not reach the assistant. Your message was not sent.'),
@@ -203,7 +267,7 @@ export async function runChatTurn(
     };
   }
 
-  // The only path to here is a confirmed write.
-  deps.clearInput();
+  // The composer was cleared at the echo (R.1) and the write has now confirmed,
+  // so there is nothing left to clear and nothing to restore.
   return { turns: finalTurns, reply };
 }

@@ -12,6 +12,15 @@ import {
   GmailError,
 } from './gmail';
 import { ingestUntrustedText } from './ingest';
+import { mapPool } from './pool';
+
+/**
+ * How many messages are screened at once - Amendment R.4.
+ *
+ * Each unit of work is two model calls. Bounded so a mailbox read cannot
+ * exhaust the model quota that the chat turn behind it still needs.
+ */
+const GMAIL_INGEST_CONCURRENCY = Number(process.env.GMAIL_INGEST_CONCURRENCY) || 5;
 
 /**
  * Gmail routes — Amendment H.
@@ -145,10 +154,22 @@ gmailRouter.post('/ingest', requireAuth, async (req: AuthedRequest, res: Respons
     const data = req.body && typeof req.body === 'object' ? req.body : {};
     const max = Number.isFinite(data.max) ? Math.min(Math.max(1, Number(data.max)), 10) : 5;
 
-    const messages = await fetchRecent(uid, max);
-    const ingested = [];
+    // INV-26. The search term comes from the user's own typed message and is
+    // treated as a Gmail search expression, never as an instruction. A missing
+    // or non-string value means 'most recent', which is the old behaviour.
+    const query = typeof data.query === 'string' ? data.query.slice(0, 200) : '';
 
-    for (const m of messages) {
+    const messages = await fetchRecent(uid, max, query);
+
+    // Amendment R.4. Ingested concurrently, bounded.
+    //
+    // Each ingest is two model calls (L2 classifier, embedding) plus two
+    // Firestore writes. Run one message at a time, ten messages was twenty
+    // sequential model round trips and routinely outlived the client's
+    // ceiling - the user was told the read 'took too long' about work that was
+    // still succeeding. Both screens still run on every message; only the
+    // waiting is shared.
+    const ingested = await mapPool(messages, GMAIL_INGEST_CONCURRENCY, async (m) => {
       const result = await ingestUntrustedText(uid, {
         text: `From: ${m.from}\nSubject: ${m.subject}\n\n${m.body}`,
         sourceType: 'paste',
@@ -158,12 +179,12 @@ gmailRouter.post('/ingest', requireAuth, async (req: AuthedRequest, res: Respons
         author: 'email',
         idPrefix: 'email',
       });
-      ingested.push({
+      return {
         artifactId: result.artifactId,
         title: result.title,
         verdict: result.verdict,
-      });
-    }
+      };
+    });
 
     await logEvent(uid, {
       kind: 'ingest',

@@ -57,6 +57,15 @@ export interface TurnMessage {
   modelUsed?: string;
   attachments?: TurnAttachment[];
   finding?: TurnFinding;
+  /**
+   * The turn was shown but its reply never arrived - Amendment R.2.
+   *
+   * Set on the user's own message when the send failed or was stopped. The
+   * message STAYS in the transcript: rolling it back deleted what the user had
+   * just said, which reads as data loss and erases any findings shown with it.
+   * Never persisted - a turn is only ever written after a reply exists.
+   */
+  undelivered?: boolean;
 }
 
 export interface JournalEntry {

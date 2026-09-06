@@ -60,6 +60,7 @@ import { UntrustedText } from './UntrustedText';
 import { ChatTranscript } from './ChatTranscript';
 import { runChatTurn, defaultNewId, type TurnStage } from '../lib/chatTurn';
 import { findRepoReference } from '../lib/repoRef';
+import { buildMailQuery } from '../lib/mailQuery';
 import {
   repoSummaryText,
   repoAmbiguousText,
@@ -269,8 +270,18 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const turnsEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Sync state when active entry prop changes
+  // Sync state when active entry prop changes.
+  //
+  // The in-flight turn is aborted first. Without this, a stream started against
+  // the previous entry kept writing into state that now belonged to a different
+  // one — the reply landed in the wrong conversation, and the optimistic turns
+  // of the entry being left were dropped on the floor.
   useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsGenerating(false);
+    setStreamingText('');
+    setStreamingTaint(false);
     setTitle(entry.title || '');
     setContent(entry.content || '');
     setCategory(entry.category || 'Personal');
@@ -506,17 +517,37 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * is reported, not thrown — a mailbox that cannot be read should not sink the
    * whole message.
    */
-  const fetchRecentMail = async (): Promise<string[]> => {
+  /**
+   * Pulls the mail this message is actually about — Amendment R.3, INV-26.
+   *
+   * The search term is built from what the USER typed and from nothing else.
+   * Asking for ten arbitrary recent messages, as this used to, meant "is there
+   * any mail about X" was answered by summarising whatever happened to be
+   * newest — the model was handed the wrong documents and described them
+   * correctly.
+   *
+   * A failure is reported IN THE CONVERSATION rather than as a banner. The
+   * mailbox is one source for the turn; not reaching it is worth saying, and
+   * not worth a red alert over a question the model can still answer.
+   */
+  const fetchRecentMail = async (askedBy: string): Promise<string[]> => {
+    const { q, hasTerms } = buildMailQuery(askedBy);
     try {
-      const messages = await gmailIngest(15);
+      const messages = await gmailIngest(10, q);
       if (messages.length === 0) {
-        setErrorMsg('No recent messages found in your mailbox.');
+        sayPerimeter(
+          hasTerms
+            ? `I searched your mailbox for **${q}** and found nothing matching. The answer below does not include any mail.`
+            : 'I found no recent messages in your mailbox. The answer below does not include any mail.',
+        );
         return [];
       }
       onAttached?.();
       return messages.map((m) => m.artifactId);
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Could not reach your mailbox.');
+      sayPerimeter(
+        `I could not read your mailbox. ${err?.message ?? 'The connection failed.'} The answer below does not include any mail.`,
+      );
       return [];
     }
   };
@@ -613,7 +644,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     content,
     category,
     mode,
-    turns,
+    // `undelivered` is a fact about a screen, not about the entry - it says a
+    // reply did not arrive during THIS session. Persisting it would carry a
+    // transient failure into a document the user reopens next week, so it is
+    // dropped at the boundary rather than only being left unwritten by the
+    // paths that happen not to save (Amendment R.2).
+    turns: turns.map(({ undelivered, ...rest }) => rest),
     summary,
     insights,
     tags,
@@ -909,9 +945,29 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    *
    * Returns true when it handled the message, so the model is not also asked.
    */
-  const handleRepoMention = async (text: string): Promise<boolean> => {
+  /**
+   * Handles a repository named in the user's message, or declines.
+   *
+   * `paint` puts the user's message in the transcript and clears the composer.
+   * It is called at the point this function commits to answering — never
+   * before, because every `return false` hands the message back to the ordinary
+   * chat turn, which paints it itself. Painting first meant a declined message
+   * was shown twice.
+   */
+  const handleRepoMention = async (
+    text: string,
+    paint: () => void = () => undefined,
+  ): Promise<boolean> => {
     const found = findRepoReference(text);
     if (!found) return false;
+
+    // Idempotent, so the several commit points below cannot double-paint.
+    let painted = false;
+    const commit = () => {
+      if (painted) return;
+      painted = true;
+      paint();
+    };
 
     let ref: string | null = null;
 
@@ -931,10 +987,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
         const r = await resolveRepoName(found.name);
         if (r.kind === 'one') ref = r.ref;
         else {
+          commit();
           sayPerimeter(repoAmbiguousText(found.name, r.kind === 'many' ? r.candidates : []));
           return true;
         }
       } catch {
+        commit();
         sayPerimeter(repoAmbiguousText(found.name, []));
         return true;
       }
@@ -944,10 +1002,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     // separate question, and guessing is how a tool does something nobody
     // asked for.
     if (!/\b(scan|inject|injection|injections|check|audit|security)\b/i.test(text)) {
+      commit();
       sayPerimeter(repoNoIntentText(ref));
       return true;
     }
 
+    commit();
     setRepoScanning(true);
     setRepoProgress(null);
     try {
@@ -987,24 +1047,35 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     // asked. The scan runs no model by construction (INV-18), so routing it
     // through the Planner would add nothing but latency and a chance for a
     // poisoned file to influence how its own scan is described.
-    if (!override) {
+    if (!override && findRepoReference(followUpText)) {
+      // The user turn is painted only once this branch has COMMITTED to
+      // handling the message.
+      //
+      // The defect: it was painted before `handleRepoMention` was consulted,
+      // and that function returns false when a bare repository name is used
+      // with GitHub disconnected. The message then fell through to
+      // `runChatTurn`, which appends a user turn of its own — so the same
+      // sentence appeared in the transcript twice, and the second copy was the
+      // one the model answered.
       const userTurn = {
         id: `msg-user-${crypto.randomUUID?.() ?? Date.now()}`,
         role: 'user' as const,
         text: followUpText,
         timestamp: new Date().toISOString(),
       };
-      const probe = findRepoReference(followUpText);
-      if (probe) {
+      const paint = () => {
         setFollowUpInput('');
         setTurns((prev) => [...prev, userTurn]);
-        setIsGenerating(true);
-        try {
-          if (await handleRepoMention(followUpText)) return;
-        } finally {
-          setIsGenerating(false);
-        }
+      };
+
+      setIsGenerating(true);
+      try {
+        if (await handleRepoMention(followUpText, paint)) return;
+      } finally {
+        setIsGenerating(false);
       }
+      // Not handled after all — nothing was painted, nothing was cleared, and
+      // the ordinary turn below owns the message from here.
     }
 
     setIsGenerating(true);
@@ -1017,21 +1088,13 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       setStreamingText('');
       setStreamingTaint(false);
 
-      // Web search — links in YOUR message only.
-      //
-      // extractUrls is deliberately never applied to a turn, an artifact or an
-      // attachment. A link inside untrusted content is an attacker choosing
-      // what our server requests, and following one would hand them a fetch
-      // primitive aimed wherever they like.
-      const extraGrounding = webSearch ? await fetchAndScreenUrls(followUpText) : [];
-
-      // Mail on demand. Connecting a mailbox is consent to read later; the mail
-      // is pulled only when the message asks for it, and then it enters through
-      // the airlock like any other untrusted document.
-      const mailGrounding =
-        !override && mailConnected && MENTIONS_MAIL.test(followUpText)
-          ? await fetchRecentMail()
-          : [];
+      // Amendment R.1. Both of these used to be awaited HERE, before
+      // runChatTurn was called — so the user's own message did not reach the
+      // transcript until a mailbox read had finished, up to thirty seconds
+      // after they pressed send. They now run inside the turn's `prepare`,
+      // which the orchestrator invokes after the echo is on screen.
+      let extraGrounding: string[] = [];
+      let mailGrounding: string[] = [];
 
       // Orchestrated in src/lib/chatTurn.ts, where the ordering is tested.
       // Two data-loss defects lived here when this was inline: the composer
@@ -1039,6 +1102,25 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       // model call and the write, so a failed save was reported as a failed
       // send. Both were breaches of Directive 6.
       const outcome = await runChatTurn(followUpText, turns, {
+        // Runs after the user's message is painted, before the model call.
+        prepare: async () => {
+          // Web search — links in YOUR message only.
+          //
+          // extractUrls is deliberately never applied to a turn, an artifact or
+          // an attachment. A link inside untrusted content is an attacker
+          // choosing what our server requests, and following one would hand
+          // them a fetch primitive aimed wherever they like.
+          extraGrounding = webSearch ? await fetchAndScreenUrls(followUpText) : [];
+
+          // Mail on demand. Connecting a mailbox is consent to read later; the
+          // mail is pulled only when the message asks for it, searched by what
+          // the user typed (INV-26), and it enters through the airlock like any
+          // other untrusted document.
+          mailGrounding =
+            !override && mailConnected && MENTIONS_MAIL.test(followUpText)
+              ? await fetchRecentMail(followUpText)
+              : [];
+        },
         send: (nextTurns, onDelta) =>
           reflectGroundedStream(
             {
@@ -1075,11 +1157,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           setTurns(nextTurns);
           setHasUnsavedChanges(true);
         },
-        // An override's text came from a fixed button, not the composer, so
-        // there is nothing of the user's to clear.
+        // Amendment R.1. Cleared at the echo, restored verbatim if the turn
+        // does not end in a confirmed write. An override's text came from a
+        // fixed button, not the composer, so there is nothing of the user's to
+        // clear and nothing to put back.
         clearInput: () => {
           if (!override) setFollowUpInput('');
           setHasUnsavedChanges(false);
+        },
+        restoreInput: (original) => {
+          if (!override) setFollowUpInput(original);
         },
         onStreamingText: setStreamingText,
         isAbort: (err) => err instanceof ChatAborted,
@@ -1364,7 +1451,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   ? 'Message not sent'
                   : failureStage === 'save'
                     ? 'Reply not saved'
-                    : 'Action Alert'}
+                    : 'That did not work'}
               </p>
               <p>{errorMsg || saveError}</p>
               {failureStage === 'send' && (
@@ -1571,44 +1658,40 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                   before it. The dashed border and the "not saved yet" line
                   say plainly that this is unfinished and unpersisted. */}
               {isGenerating && (
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`min-w-0 max-w-full rounded-2xl rounded-bl-xs border border-dashed p-4 text-sm ${
-                      streamingTaint
-                        ? 'border-amber-400 bg-amber-50/60'
-                        : 'border-[#d8d2c4] bg-[#fafafa]'
-                    }`}
-                  >
-                    {streamingTaint && (
-                      <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800">
-                        <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
-                        External content is in this turn. Anything below may reflect it.
-                      </p>
-                    )}
+                <div className="min-w-0 max-w-full text-sm">
+                  {/* INV-20 is unchanged: the taint verdict arrives before the
+                      first token and is stated before any of it is shown. What
+                      went is the CHROME — a dashed box, a divider and an inline
+                      stop button wrapped around every reply in progress, which
+                      made a normal answer look like a system warning. The
+                      warning still looks like a warning; an ordinary reply now
+                      looks like an ordinary reply, and stopping lives on the
+                      send button where the click that started it was. */}
+                  {streamingTaint && (
+                    <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-amber-800">
+                      <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+                      External content is in this turn. Anything below may reflect it.
+                    </p>
+                  )}
 
-                    {streamingText ? (
+                  {streamingText ? (
+                    <div className="text-[#1a1a1a]">
                       <UntrustedText text={streamingText} />
-                    ) : (
-                      <span className="flex items-center gap-2.5 text-[#1a1a1a]">
-                        <RefreshCw className="h-4 w-4 animate-spin text-[#1a1a1a]" />
-                        Thinking...
-                      </span>
-                    )}
-
-                    <div className="mt-2.5 flex items-center gap-3 border-t border-[#e5e5e5] pt-2">
-                      <span className="text-[10px] text-[#6b6b6b]">
-                        {streamingText ? 'Still writing - not saved yet' : ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => abortRef.current?.abort()}
-                        className="ml-auto flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-[#d8d2c4] px-2 py-0.5 text-[10px] text-[#1a1a1a] hover:bg-[#efeade]"
-                      >
-                        <Square className="h-2.5 w-2.5 fill-current" />
-                        Stop
-                      </button>
                     </div>
-                  </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[#6b6b6b]">
+                      Thinking
+                      <span className="inline-flex" aria-hidden="true">
+                        {/* Delays as inline style rather than arbitrary
+                            Tailwind values: the shorthand form depends on the
+                            JIT parsing an underscore-encoded animation, and a
+                            silent miss here would show three static dots. */}
+                        <span className="animate-pulse">.</span>
+                        <span className="animate-pulse" style={{ animationDelay: '150ms' }}>.</span>
+                        <span className="animate-pulse" style={{ animationDelay: '300ms' }}>.</span>
+                      </span>
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -1911,18 +1994,36 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                 onChange={(e) => setFollowUpInput(e.target.value)}
                 onPaste={(e) => onComposerPaste(e.clipboardData.getData('text'))}
                 placeholder={turns.length === 0 ? "What is on your mind? Or add something with + and ask about it…" : "Ask a follow-up, or add another angle…"}
-                disabled={isGenerating}
                 className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-sm text-[#1a1a1a] placeholder:text-[#6b6b6b] focus:shadow-none focus:outline-hidden"
               />
-              <button
-                id="send-followup-btn"
-                type="submit"
-                disabled={isGenerating || !followUpInput.trim()}
-                className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors hover:bg-[#000000] disabled:bg-[#e5e5e5] disabled:text-[#6b6b6b]"
-                title="Send follow-up"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+              {/* One control, two states — the button that started the turn is
+                  the button that stops it. A separate stop control inside the
+                  reply meant the click that began the work and the click that
+                  ended it were in different places, and the send button sat
+                  disabled and useless for the whole turn. */}
+              {isGenerating ? (
+                <button
+                  id="stop-followup-btn"
+                  type="button"
+                  onClick={() => abortRef.current?.abort()}
+                  className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors hover:bg-[#000000]"
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  id="send-followup-btn"
+                  type="submit"
+                  disabled={!followUpInput.trim()}
+                  className="inline-flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors hover:bg-[#000000] disabled:bg-[#e5e5e5] disabled:text-[#6b6b6b]"
+                  title="Send follow-up"
+                  aria-label="Send"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              )}
             </form>
           </div>
         )}
