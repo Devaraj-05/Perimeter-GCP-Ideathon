@@ -404,15 +404,78 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * domain; the token is sealed server-side and never reaches this browser
    * (INV-16).
    */
-  const connectMail = async () => {
+  /**
+   * Runs an OAuth consent in a POPUP and reflects the result without a manual
+   * refresh.
+   *
+   * The connect used to navigate the whole tab to the provider and drop the
+   * user back on a cold page, unsure whether it worked. Now:
+   *
+   *   - The popup is opened SYNCHRONOUSLY, inside the click, then pointed at
+   *     the auth URL once we have it. Opening after an await trips popup
+   *     blockers, because the browser no longer sees a user gesture.
+   *   - The callback lands in the popup; the main window polls the connection
+   *     status and flips the toggle the moment it flips server-side, then
+   *     closes the popup. No refresh, and the toggle is the confirmation.
+   */
+  const runOAuthPopup = async (
+    getUrl: () => Promise<string>,
+    isConnected: () => Promise<boolean>,
+    setConnected: (v: boolean) => void,
+  ) => {
     setErrorMsg(null);
     setFailureStage(null);
-    try {
-      window.location.href = await gmailConnectUrl();
-    } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Could not start the mailbox connection.');
+
+    const popup = window.open('', 'perimeter-oauth', 'width=520,height=680');
+    if (!popup) {
+      setErrorMsg('Your browser blocked the sign-in window. Allow pop-ups for this site and try again.');
+      return;
     }
+    popup.document.write('<p style="font:14px system-ui;padding:24px">Opening sign-in…</p>');
+
+    let url: string;
+    try {
+      url = await getUrl();
+    } catch (err: any) {
+      popup.close();
+      setErrorMsg(err?.message ?? 'Could not start the connection.');
+      return;
+    }
+    popup.location.href = url;
+
+    // Poll until connected, the popup closes, or three minutes pass.
+    const startedAt = Date.now();
+    const timer = window.setInterval(async () => {
+      let connected = false;
+      try {
+        connected = await isConnected();
+      } catch {
+        connected = false;
+      }
+      if (connected) {
+        window.clearInterval(timer);
+        setConnected(true);
+        try {
+          popup.close();
+        } catch {
+          /* cross-origin while on the provider; harmless */
+        }
+        return;
+      }
+      if (popup.closed || Date.now() - startedAt > 180_000) {
+        window.clearInterval(timer);
+        // One last check: the grant may have landed just as the window closed.
+        try {
+          if (await isConnected()) setConnected(true);
+        } catch {
+          /* leave the toggle as it was */
+        }
+      }
+    }, 1500);
   };
+
+  const connectMail = () =>
+    runOAuthPopup(gmailConnectUrl, gmailStatus, setMailConnected);
 
   const disconnectMail = async () => {
     setErrorMsg(null);
@@ -1778,7 +1841,11 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                           id={id}
                           type="button"
                           onClick={() => {
-                            setPlusOpen(false);
+                            // A connector keeps the menu open so its toggle
+                            // visibly flips — closing it left the user unable to
+                            // tell whether the connection took. An action
+                            // (upload) closes the menu as before.
+                            if (!connector) setPlusOpen(false);
                             run();
                           }}
                           className="flex w-full cursor-pointer items-start gap-2.5 px-3 py-2 text-left hover:bg-[#f7f7f8]"
