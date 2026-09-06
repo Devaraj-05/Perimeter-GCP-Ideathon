@@ -61,6 +61,11 @@ function Finding({ finding }: { finding: TurnFinding }) {
       {finding.matches.map((m, i) => (
         <div key={i} className="mt-2 ml-6 border-l-2 border-rose-300 pl-3">
           <p className="text-[11px] text-[#6b6b6b]">
+            {/* The source names the document this excerpt came from. It is
+                UNTRUSTED text like the excerpt itself, so it is a plain child
+                and never markup (INV-9). */}
+            {m.source ? <span className="font-medium text-[#1a1a1a]">{m.source}</span> : null}
+            {m.source ? ' · ' : ''}
             {typeof m.line === 'number' ? `line ${m.line} · ` : ''}
             {describeSignal(m.signal)}
             {m.hidden && <span className="ml-1 text-amber-700">not visible when rendered</span>}
@@ -224,7 +229,9 @@ function TranscriptImpl({ turns }: Props) {
                         had written. */}
                     {isUser && turn.undelivered && (
                       <p className="mt-1 px-1 text-[11px] text-[#6b6b6b]">
-                        Not delivered &mdash; your text is back in the box below.
+                        Not delivered
+                        {turn.undeliveredReason ? ` — ${turn.undeliveredReason}` : ''} Your text is
+                        back in the box below.
                       </p>
                     )}
                   </div>

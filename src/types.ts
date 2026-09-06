@@ -39,6 +39,14 @@ export interface TurnFinding {
     line?: number;
     excerpt: string;
     hidden?: boolean;
+    /**
+     * Which document this excerpt came from.
+     *
+     * Set only when one finding groups several sources, which is how a turn
+     * that read six documents reports as one message instead of six. Absent
+     * for a single-source finding, where the title already says it.
+     */
+    source?: string;
   }[];
 }
 
@@ -66,6 +74,16 @@ export interface TurnMessage {
    * Never persisted - a turn is only ever written after a reply exists.
    */
   undelivered?: boolean;
+  /**
+   * Why it was not delivered, in the user's own words rather than a code.
+   *
+   * Shown quietly under their message. This replaced a red "Action Alert"
+   * banner pinned above the whole conversation: a failed send is a fact about
+   * ONE message, and hoisting it to a page-level alert made a retryable
+   * hiccup look like the application had broken. Never persisted, like
+   * `undelivered` itself.
+   */
+  undeliveredReason?: string;
 }
 
 export interface JournalEntry {

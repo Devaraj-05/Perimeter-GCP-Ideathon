@@ -174,9 +174,11 @@ export async function runChatTurn(
   deps.clearInput();
 
   /** The user's message stays; only its reply is marked missing (R.2). */
-  const markUndelivered = (): TurnMessage[] => {
+  const markUndelivered = (reason?: string): TurnMessage[] => {
     const kept = withUser.map((t) =>
-      t.id === userTurn.id ? { ...t, undelivered: true } : t,
+      t.id === userTurn.id
+        ? { ...t, undelivered: true, ...(reason ? { undeliveredReason: reason } : {}) }
+        : t,
     );
     deps.onTurns(kept);
     deps.restoreInput?.(text);
@@ -188,13 +190,10 @@ export async function runChatTurn(
     try {
       await deps.prepare();
     } catch (err) {
+      const message = messageOf(err, 'Could not prepare that message.');
       return {
-        turns: markUndelivered(),
-        failure: {
-          stage: 'send',
-          message: messageOf(err, 'Could not prepare that message.'),
-          replyAtRisk: false,
-        },
+        turns: markUndelivered(message),
+        failure: { stage: 'send', message, replyAtRisk: false },
       };
     }
   }
@@ -221,17 +220,14 @@ export async function runChatTurn(
       // Stopping is not failing. Nothing is written - a half-answer the user
       // cut off is not something to persist or apologise for.
       return {
-        turns: markUndelivered(),
+        turns: markUndelivered('You stopped this one.'),
         failure: { stage: 'aborted', message: 'Stopped.', replyAtRisk: false },
       };
     }
+    const message = messageOf(err, 'Could not reach the assistant. Your message was not sent.');
     return {
-      turns: markUndelivered(),
-      failure: {
-        stage: 'send',
-        message: messageOf(err, 'Could not reach the assistant. Your message was not sent.'),
-        replyAtRisk: false,
-      },
+      turns: markUndelivered(message),
+      failure: { stage: 'send', message, replyAtRisk: false },
     };
   }
 

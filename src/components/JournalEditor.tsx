@@ -61,6 +61,7 @@ import { ChatTranscript } from './ChatTranscript';
 import { runChatTurn, defaultNewId, type TurnStage } from '../lib/chatTurn';
 import { findRepoReference } from '../lib/repoRef';
 import { buildMailQuery } from '../lib/mailQuery';
+import { groupReaderFindings } from '../lib/readerFindings';
 import {
   repoSummaryText,
   repoAmbiguousText,
@@ -244,21 +245,20 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * document that may have poisoned it.
    */
   const emitReaderFindings = (findings: { sourceRef: string; excerpt: string }[]) => {
-    if (findings.length === 0) return;
+    // ONE message per turn, not one per finding. Grouping and de-duplication
+    // live in src/lib/readerFindings.ts, where they are tested.
+    const finding = groupReaderFindings(findings);
+    if (!finding) return;
+
     setTurns((prev) => [
       ...prev,
-      ...findings.map((f) => ({
+      {
         id: defaultNewId('perimeter'),
         role: 'perimeter' as const,
         text: '',
         timestamp: new Date().toISOString(),
-        finding: {
-          title: f.sourceRef,
-          verdict: 'hostile' as const,
-          detectedBy: 'reader' as const,
-          matches: [{ signal: 'reader_instruction_attempt', excerpt: f.excerpt }],
-        },
-      })),
+        finding,
+      },
     ]);
     setHasUnsavedChanges(true);
   };
@@ -649,7 +649,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     // transient failure into a document the user reopens next week, so it is
     // dropped at the boundary rather than only being left unwritten by the
     // paths that happen not to save (Amendment R.2).
-    turns: turns.map(({ undelivered, ...rest }) => rest),
+    turns: turns.map(({ undelivered, undeliveredReason, ...rest }) => rest),
     summary,
     insights,
     tags,
@@ -1441,34 +1441,32 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           every failure, including one where nothing had been sent — the same
           defect as the message it accompanied: advice that does not match the
           cause. Retrying a save that never happened does nothing. */}
-      {(errorMsg || saveError) && (
-        <div className="mx-4 sm:mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 flex items-start justify-between gap-2">
+      {/* The red banner is for ONE failure now: a reply that arrived and could
+          not be written. That is the only case where something is genuinely at
+          risk and where "Retry Save" is an action that does anything.
+
+          A failed or stopped SEND no longer raises a page-level alert. It is a
+          fact about one message, and it is said under that message — "Not
+          delivered … your text is back in the box below". Hoisting it up here
+          under a red "Action Alert" heading, with a Retry Save button that
+          would have saved nothing, made a retryable hiccup look like the
+          application had fallen over, and it stayed on screen over the
+          conversation long after the user had moved on. */}
+      {(saveError || (errorMsg && failureStage === 'save')) && (
+        <div className="mx-4 sm:mx-6 mt-4 flex items-start justify-between gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
           <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             <div>
-              <p className="font-semibold">
-                {failureStage === 'send'
-                  ? 'Message not sent'
-                  : failureStage === 'save'
-                    ? 'Reply not saved'
-                    : 'That did not work'}
-              </p>
+              <p className="font-semibold">Reply not saved</p>
               <p>{errorMsg || saveError}</p>
-              {failureStage === 'send' && (
-                <p className="mt-1 text-red-600/80">
-                  Your message is still in the box below. Press send to try again.
-                </p>
-              )}
             </div>
           </div>
-          {failureStage !== 'send' && (
-            <button
-              onClick={handleSave}
-              className="shrink-0 rounded bg-red-600 px-2.5 py-1 text-white font-medium hover:bg-red-700 cursor-pointer"
-            >
-              Retry Save
-            </button>
-          )}
+          <button
+            onClick={handleSave}
+            className="shrink-0 cursor-pointer rounded bg-red-600 px-2.5 py-1 font-medium text-white hover:bg-red-700"
+          >
+            Retry Save
+          </button>
         </div>
       )}
 
@@ -1481,14 +1479,15 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
           a turn is whether THIS turn touched external content, and that is on
           the chips and in the taint notice below.
       */}
-      {lastTurnTainted && (
-        <div className="mx-4 sm:mx-6 mt-4 flex items-center gap-2 rounded-xl border border-[#e5e5e5] bg-[#f7f7f8] px-3.5 py-2.5 text-xs text-[#3f3f3f]">
-          <Github className="h-4 w-4 shrink-0 text-[#1a1a1a]" />
-          <span className="font-medium text-rose-700">
-            Untrusted content was screened before the assistant read it.
-          </span>
-        </div>
-      )}
+      {/* The standing "Untrusted content was screened before the assistant read
+          it" strip is gone. It said the same sentence after every turn that
+          touched anything external, which is most of them, so it carried no
+          information about the turn the user was looking at — and it sat
+          between the conversation and the composer permanently.
+
+          Nothing is lost. Taint is stated where it is actually about
+          something: the amber line above the reply while it streams (INV-20),
+          and the Perimeter finding messages that quote what was found. */}
 
       {/* What the boundary refused on the last turn. This is the moment the
           product's whole thesis becomes visible, so it renders inline in the
@@ -1679,17 +1678,12 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                       <UntrustedText text={streamingText} />
                     </div>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-[#6b6b6b]">
-                      Thinking
-                      <span className="inline-flex" aria-hidden="true">
-                        {/* Delays as inline style rather than arbitrary
-                            Tailwind values: the shorthand form depends on the
-                            JIT parsing an underscore-encoded animation, and a
-                            silent miss here would show three static dots. */}
-                        <span className="animate-pulse">.</span>
-                        <span className="animate-pulse" style={{ animationDelay: '150ms' }}>.</span>
-                        <span className="animate-pulse" style={{ animationDelay: '300ms' }}>.</span>
-                      </span>
+                    <span
+                      className="thinking-sweep text-sm font-medium"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Thinking&hellip;
                     </span>
                   )}
                 </div>

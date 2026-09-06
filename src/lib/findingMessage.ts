@@ -46,6 +46,14 @@ export function findingHeadline(finding: TurnFinding): string {
   // claim from "a pattern matched at byte 412", and saying it in the pattern
   // scanner's voice would dress a model's opinion as a measurement.
   if (finding.detectedBy === 'reader') {
+    // Several documents in one turn are reported as one message, so the
+    // headline counts SOURCES when they are grouped. Six separate messages,
+    // each repeating the same two paragraphs of explanation, buried the answer
+    // the user was waiting for under a wall of identical boilerplate.
+    const sources = new Set(finding.matches.map((m) => m.source).filter(Boolean));
+    if (sources.size > 1) {
+      return `${sources.size} of the documents I read tried to give me instructions. Here is what each one said:`;
+    }
     return n === 1
       ? `The model that read ${name} reports it contains an instruction aimed at me. Here is the part it flagged:`
       : `The model that read ${name} reports ${n} places where it is addressed as an AI. Here is what it flagged:`;

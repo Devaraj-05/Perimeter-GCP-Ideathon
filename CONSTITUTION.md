@@ -919,3 +919,39 @@ Three changes, none of which touch what is screened:
 **L1 and L2 both still run on every message, and the verdict is still fused from both.** Nothing is
 skipped, sampled, or deferred. This amendment makes the same work take less wall-clock time; it
 does not make less of it happen.
+
+### R.5 Disclosed once, not six times
+
+The Reader reports per observation. A turn that read one repository and two attachments produced
+six Perimeter messages — four of them naming the same repository — each repeating the same two
+paragraphs of explanation, with the answer the user had asked for pushed off the bottom of the
+screen. The product's headline claim is that it *shows* you every attempt; six identical blocks is
+how that gets scrolled past.
+
+Reader findings for a turn are now **one message**, listing each flagged excerpt attributed to the
+document it came from, under one headline and one closing line.
+
+**What is not lost.** Every distinct excerpt is still quoted verbatim, still attributed, and still
+shown in the conversation rather than only written to the perimeter log. The only thing removed is
+an exact repeat of the same excerpt from the same source; the same sentence found in two different
+documents is two findings and both are kept, because *which* document said it is the part the user
+needs. Grouping is not summarising — no model composes this text, and none of it is elided.
+
+### R.6 An alert is about something, or it is noise
+
+Two page-level banners are removed.
+
+*"Untrusted content was screened before the assistant read it"* appeared after every turn that
+touched anything external — which is most of them — so it carried no information about the turn in
+front of the user, and it sat permanently between the conversation and the composer. Taint is still
+stated where it is about something: the amber line above the reply while it streams (INV-20), and
+the finding messages that quote what was actually found.
+
+*"Action Alert"* was raised for any failure without a stage, over the whole conversation, with a
+**Retry Save** button that would have saved nothing. A failed or stopped send is a fact about one
+message: it is now said under that message — "Not delivered — <reason>. Your text is back in the
+box below" — and the red banner is reserved for the one failure where something is genuinely at
+risk, a reply that arrived and could not be written.
+
+This removes alerts, not disclosure. No refusal, no finding, and no taint verdict is hidden by it;
+what goes is chrome that fired regardless of what happened.

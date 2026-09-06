@@ -184,6 +184,59 @@
   .anim-rise-1 { animation-delay: 40ms; }
   .anim-rise-2 { animation-delay: 80ms; }
   .anim-rise-3 { animation-delay: 120ms; }
+
+  /*
+   * The thinking indicator.
+   *
+   * A light sweep travelling through the word itself, rather than a spinner in
+   * a bordered card. It says "working" continuously without claiming progress
+   * it cannot measure, and it occupies one line of text instead of a panel —
+   * which matters because it sits where the answer is about to appear, and a
+   * box that becomes prose is a layout shift the reader pays for.
+   *
+   * The gradient is clipped to the glyphs, so there is no plate behind it.
+   */
+  @keyframes thinking-sweep {
+    from {
+      background-position: 180% 0;
+    }
+    to {
+      background-position: -80% 0;
+    }
+  }
+
+  .thinking-sweep {
+    background-image: linear-gradient(
+      100deg,
+      #a3a3a3 0%,
+      #a3a3a3 38%,
+      #1a1a1a 50%,
+      #a3a3a3 62%,
+      #a3a3a3 100%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: thinking-sweep 2.1s linear infinite;
+  }
+}
+
+/*
+ * Reduced motion for the indicator, and a fallback for any engine that cannot
+ * clip a background to text — without this the word would be invisible rather
+ * than merely unanimated, which is the worst possible failure for the one
+ * element that says the application is still working.
+ */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .thinking-sweep {
+    background-image: none;
+    color: #6b6b6b;
+    -webkit-text-fill-color: #6b6b6b;
+    animation: none;
+  }
 }
 
 /* Scrollbars — thin, warm, unobtrusive. */
@@ -210,6 +263,13 @@
  * non-vestibular state. Opacity is kept; movement, scale and blur are dropped.
  */
 @media (prefers-reduced-motion: reduce) {
+  /* Still legible, still says "working" - just no travelling highlight. */
+  .thinking-sweep {
+    background-image: none;
+    color: #6b6b6b;
+    -webkit-text-fill-color: #6b6b6b;
+    animation: none;
+  }
   html {
     scroll-behavior: auto;
   }
