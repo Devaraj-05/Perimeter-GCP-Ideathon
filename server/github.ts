@@ -87,25 +87,37 @@ export async function fetchOpenIssues(
     'User-Agent': 'perimeter-ingest',
   };
 
-  const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers,
-      // A.4: never follow a redirect, since the destination is not re-checked
-      // against the allowlist by the runtime.
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch (err: any) {
-    if (err?.name === 'TimeoutError') {
-      throw new IngestError('GitHub request timed out.', true);
+  const attempt = async (withToken: boolean): Promise<Response> => {
+    const h = { ...headers };
+    const token = process.env.GITHUB_TOKEN;
+    if (withToken && token) h.Authorization = `Bearer ${token}`;
+    try {
+      return await fetch(url, {
+        headers: h,
+        // A.4: never follow a redirect, since the destination is not re-checked
+        // against the allowlist by the runtime.
+        redirect: 'error',
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (err: any) {
+      if (err?.name === 'TimeoutError') throw new IngestError('GitHub request timed out.', true);
+      throw new IngestError('Could not reach GitHub.', true);
     }
-    throw new IngestError('Could not reach GitHub.', true);
+  };
+
+  let res = await attempt(true);
+
+  // A rejected GITHUB_TOKEN must not break a PUBLIC repo. The tarball scanner
+  // already retries anonymously on bad credentials; the issues path did not,
+  // so a stale deployment token turned "scan this public repo" into a hard
+  // failure. Anonymous works for public repos (at 60 req/hr), so on a
+  // credential rejection — not a rate limit — drop the token and try once more.
+  if ((res.status === 401 || res.status === 403) && process.env.GITHUB_TOKEN) {
+    const remaining = res.headers.get('x-ratelimit-remaining');
+    if (remaining !== '0') {
+      console.warn('[github] GITHUB_TOKEN rejected for issues; retrying anonymously');
+      res = await attempt(false);
+    }
   }
 
   if (res.status === 404) {
@@ -116,7 +128,9 @@ export async function fetchOpenIssues(
     if (remaining === '0') {
       throw new IngestError('GitHub rate limit exceeded. Try again shortly.', true);
     }
-    throw new IngestError('GitHub rejected the request. Check the configured token.', false);
+    // Even anonymous was refused — for a public repo this is unusual; a private
+    // repo lands here because anonymous cannot see it.
+    throw new IngestError('Repository not found, or it is private.', false);
   }
   if (!res.ok) {
     throw new IngestError(`GitHub returned ${res.status}.`, res.status >= 500);
