@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, Lock, Mail, Github, BookOpen } from 'lucide-react';
+import { Lock, Mail, Github, BookOpen } from 'lucide-react';
+import { Logo } from './Logo';
 import { HowItWorks } from './landing/HowItWorks';
 import { Problem, Invariants, Refusal, Verification, Limits } from './landing/Sections';
 
@@ -60,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pt-20">
         <div className="mx-auto max-w-3xl space-y-6 text-center">
           <div className="anim-rise inline-flex items-center gap-2 rounded-full border border-[#e5e5e5] bg-[#f7f7f8] px-3.5 py-1.5 text-xs font-medium text-[#1a1a1a]">
-            <Shield className="h-3.5 w-3.5" />
+            <Logo className="h-3.5 w-3.5" />
             <span>Perimeter — a journal that reads your untrusted world safely</span>
           </div>
 
@@ -250,7 +251,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="mx-auto max-w-5xl px-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-sm">
-              <p className="font-serif text-base font-semibold text-[#1a1a1a]">Perimeter</p>
+              <p className="flex items-center gap-2 font-serif text-base font-semibold text-[#1a1a1a]">
+                <Logo className="h-5 w-5" />
+                Perimeter
+              </p>
               <p className="mt-1.5 text-xs leading-relaxed text-[#6b6b6b]">
                 A journal that reads your untrusted world and shows you every attempt that world
                 makes to hijack its AI.

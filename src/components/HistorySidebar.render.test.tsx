@@ -187,31 +187,25 @@ describe('the primary action lives with the list it creates into', () => {
 });
 
 describe('the mark', () => {
-  it('draws a boundary with a real gap in it', () => {
-    // The opening is the idea: this product does not keep the untrusted world
-    // out, it forces it through one controlled entrance. The boundary is an
-    // OPEN path, so the gap is absent from the geometry rather than painted
-    // over — it survives any stroke width, any scale, and forced colours.
+  it('renders the DiIonic glyph as bare SVG', () => {
     const html = renderToStaticMarkup(<Logo />);
     expect(html).toContain('<svg');
     expect(html).toContain('aria-label="Perimeter"');
+    // No plate, no wrapper rect — the icon stands on its own.
     expect(html).not.toContain('<rect');
-    expect(html).not.toContain('mask');
-  });
-
-  it('is two shapes and a line, so it survives 19px', () => {
-    // The mark before this one carried a shield, a letterform, an orbit and
-    // two nodes, and resolved to a blob at the size it actually ships at.
-    const html = renderToStaticMarkup(<Logo />);
-    expect((html.match(/<path/g) ?? []).length).toBe(2);
-    expect((html.match(/<circle/g) ?? []).length).toBe(1);
   });
 
   it('inherits colour rather than hardcoding it', () => {
-    // One asset for the light chrome and the inverted tile.
+    // currentColor so one asset serves the accent on light chrome and white on
+    // a dark surface. react-icons uses fill="currentColor" by default.
     const html = renderToStaticMarkup(<Logo />);
-    expect(html).toContain('currentColor');
-    expect(html).not.toMatch(/#[0-9a-f]{6}/i);
+    expect(html.toLowerCase()).toContain('currentcolor');
+    expect(html).not.toMatch(/fill="#[0-9a-f]{6}"/i);
+  });
+
+  it('takes a className so callers control its size', () => {
+    const html = renderToStaticMarkup(<Logo className="h-7 w-7" />);
+    expect(html).toContain('h-7 w-7');
   });
 });
 

@@ -139,10 +139,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             left this row: a subtitle nobody reads and a build detail beside a
             product name were two things competing with the actions. The badge
             now lives in the account menu, where a session property belongs. */}
-        <div className="flex min-w-0 shrink items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#f7f7f8]">
-            <Logo className="h-[19px] w-[19px]" />
-          </span>
+        <div className="flex min-w-0 shrink items-center gap-2">
+          {/* Bare mark, no plate — inherits the accent colour directly. */}
+          <Logo className="h-7 w-7 shrink-0 text-[#1a1a1a]" />
           <span className="truncate font-serif text-lg font-semibold tracking-[-0.01em] text-[#1a1a1a]">
             Perimeter
           </span>
