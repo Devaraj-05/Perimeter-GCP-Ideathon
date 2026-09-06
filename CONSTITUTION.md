@@ -17,7 +17,7 @@ You are generating code for a production application handling private personal j
 directives override any conflicting default. If a request would violate one, refuse and name
 the invariant it breaches.
 
-## §1 Threat model
+##  1 Threat model
 
 This application has all three ingredients of an exploitable agent: access to private user data,
 exposure to attacker-controlled content, and the ability to act externally. The primary threat
@@ -31,7 +31,7 @@ log-based secret leakage, and denial of service through unbounded input.
 Assume every byte of external content is attacker-authored. Assume the attacker has read this
 constitution.
 
-## §2 Invariants — absolute
+##  2 Invariants — absolute
 
 - **INV-1** No `UNTRUSTED`-zoned text enters a model request that carries tools.
 - **INV-2** The Reader model request never includes `tools` or any tool configuration.
@@ -68,7 +68,7 @@ constitution.
 - **INV-26** A mailbox search term is derived only from what the user typed in their own message,
   never from an artifact, a turn, an attachment or a tool result. See Amendment R.
 
-## §3 Secure coding standards
+##  3 Secure coding standards
 
 Validate every external input against an explicit schema at the boundary; parse, do not merely
 check. Typed SDK calls only — never string-built queries. No `eval`, no `new Function`, no
@@ -94,7 +94,7 @@ perimeter is not a mode, and neither is the backstop under it. It is removed. If
 breaks sign-in, that is a bug to fix in `server/headers.ts`, where four tests already assert the
 policy's shape.
 
-## §4 Data isolation
+##  4 Data isolation
 
 All user data lives under `users/{uid}/`. No user-owned data at the collection root. Every
 server query includes the verified `uid` in its path. Firestore rules default-deny at
@@ -103,7 +103,7 @@ disallowed; writes are server-mediated so they pass validation and logging. Neve
 to fix a bug — fix the query. Cross-user aggregation is forbidden unless explicitly scoped and
 covered by a rules test.
 
-## §5 Secret management
+##  5 Secret management
 
 No secret in source, in a committed `.env`, in a Dockerfile, in a build argument, or in any
 value-bearing configuration. Environment variables may hold **resource paths** to secrets only.
@@ -117,7 +117,7 @@ it injects at instance start. The reason this project fetches through the SDK in
 the Production Directives demonstrate that pattern, it makes Secret Manager usage visible in the
 source, and it permits version pinning. Do not claim env injection is insecure — it is not.
 
-## §6 Model interaction rules
+##  6 Model interaction rules
 
 Two model roles with asymmetric privilege.
 
@@ -138,14 +138,14 @@ fallback ladder is `gemini-3.6-flash` → `gemini-3.1-flash-lite` → `gemini-fl
 `gemini-3.7-flash`, accessed through a single `generateContentWithFallback` helper. Both model
 roles draw from this ladder.
 
-## §7 Logging and observability
+##  7 Logging and observability
 
 Every authorisation decision is logged with a machine reason code and an invariant reference.
 Logs contain no secrets, no more than 200 characters of untrusted text, and no full egress
 payloads — hash them. The audit trail is append-only and hash-chained. Structured JSON logs
 carry the uid and no further PII.
 
-## §8 Error handling and stability
+##  8 Error handling and stability
 
 Every external call — Gemini, Firestore, Secret Manager, outbound fetch — is wrapped with a
 timeout, a bounded retry with jitter on transient failures only, and a typed error. No unhandled
@@ -154,7 +154,7 @@ journals, with a visible notice that external content could not be analysed. **I
 back to sending raw untrusted text to the Planner** — failing closed is the point. Never retry a
 non-idempotent egress call. Health check that touches no downstream service.
 
-## §9 Before adding any integration — mandatory checklist
+##  9 Before adding any integration — mandatory checklist
 
 Complete all of this *before* writing integration code, and commit the constitution edit
 separately:
@@ -165,10 +165,10 @@ separately:
    allowlist, taint checks, and a capability grant.
 4. Does it need a new secret? Add it to Secret Manager, pinned, with a scoped IAM binding.
 5. Does it need new Firestore paths? Add default-deny rules and a rules test *first*.
-6. Add the integration's specific invariants to §2 and bump the version.
+6. Add the integration's specific invariants to  2 and bump the version.
 7. Add at least one red-team payload targeting the new surface to the corpus.
 
-## §10 Refusal directive
+##  10 Refusal directive
 
 If asked to hardcode a key, disable a rule to unblock a bug, pass a `uid` from a request body,
 bind tools to the Reader, skip the broker "just for testing", render untrusted content as HTML,
@@ -219,7 +219,7 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
   A deliberate consequence: there is now **no supported way to turn the perimeter off**. The
   airlock is not a mode.
 - **C.5** Every new integration adds at least one corpus payload targeting its surface (this is
-  §9.7 restated as a standing obligation).
+   9.7 restated as a standing obligation).
 
 ---
 
@@ -237,7 +237,7 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
 >
 > **What is kept.** The reasoning below stands as a record: the checklist was worked correctly and
 > the design was sound. It was the wrong feature, competently built. The amendment is preserved
-> rather than deleted because the history is the evidence that §9 was followed, and deleting an
+> rather than deleted because the history is the evidence that  9 was followed, and deleting an
 > entry from that history to look tidier would be the same instinct as deleting a log line.
 >
 > **INV-12 is retired**, not weakened — it governed a key this deployment no longer holds.
@@ -245,8 +245,8 @@ Adopted 2026-09-02. Governs the red-team console and the injection corpus.
 > **repointed at filenames**, which carry the identical property the payload was written to probe —
 > short, metadata-shaped, attacker-chosen, displayed next to the thing they name.
 
-Adopted **before** any location code was written, per §9. A journal entry may carry the place it
-was written. This works §9's checklist in order.
+Adopted **before** any location code was written, per  9. A journal entry may carry the place it
+was written. This works  9's checklist in order.
 
 **1. Data flows.** Browser geolocation (or a place name the user types) → our server → the Google
 Geocoding API → a place name stored on that user's own entry document. Coordinates are `USER`
@@ -259,7 +259,7 @@ string this application did not author. The cost of being consistent here is one
 
 **3. New egress path?** No. The request goes to a fixed Google host that no user input can
 change, so this is not egress-class and needs no capability grant or destination id. If a future
-change ever lets a user influence that host, this clause is void and §9.3 applies in full.
+change ever lets a user influence that host, this clause is void and  9.3 applies in full.
 
 **4. New secret?** Yes. `MAPS_API_KEY`, from Secret Manager, pinned by version, with a scoped IAM
 binding on that one secret. It is resolved by the same code path as the Gemini key rather than a
@@ -288,7 +288,7 @@ privileges is added to the corpus.
 
 ## Amendment F — Attaching untrusted content from the chat (adopted 2026-09-04)
 
-Adopted **before** any attachment code was written, per §9. Until now untrusted content entered
+Adopted **before** any attachment code was written, per  9. Until now untrusted content entered
 only through a separate panel. It may now be attached directly in the chat composer, which is
 where a user actually is when they have something suspicious in hand.
 
@@ -325,7 +325,7 @@ corpus.
 
 ## Amendment G — Files: PDFs and images (adopted 2026-09-04)
 
-Adopted **before** any upload code was written, per §9.
+Adopted **before** any upload code was written, per  9.
 
 **1. Data flows.** Uploaded bytes → a transcription call to Gemini → `UNTRUSTED` text → the
 existing `ingestUntrustedText` path. The bytes never reach the Planner, never reach Firestore, and
@@ -350,7 +350,7 @@ an image and an action — which is the argument this project exists to make, in
   inspecting the file's leading bytes — a declared MIME type is attacker-controlled input and must
   never select the parser.
 
-**On adding no dependency.** §3 forbids a new dependency without a stated reason. None is needed
+**On adding no dependency.**  3 forbids a new dependency without a stated reason. None is needed
 here: Gemini accepts PDF and image bytes directly as `inlineData`, and
 `generateContentWithFallback` already carries the mandated model ladder and sets no `tools` key,
 so transcription is a Reader-class call by construction. Adding a PDF parser would introduce a
@@ -369,7 +369,7 @@ instruction text are added to the corpus.
 
 ## Amendment H — Gmail, third-party OAuth (adopted 2026-09-04)
 
-Adopted **before** any OAuth code was written, per §9. This is the most sensitive integration in
+Adopted **before** any OAuth code was written, per  9. This is the most sensitive integration in
 the application: it holds a credential that grants read access to a user's mail.
 
 **1. Data flows.** An operator-configured OAuth client → a consent the user grants → a refresh
@@ -414,7 +414,7 @@ project exists to argue against.
 
 ## Amendment I — Repository scanning (adopted 2026-09-05)
 
-Adopted **before** any scanning code was written, per §9. A user may point Perimeter at a
+Adopted **before** any scanning code was written, per  9. A user may point Perimeter at a
 public GitHub repository and ask one question: **is there a prompt injection in it?**
 
 This is the first integration that reads untrusted content and deliberately does **not** route
@@ -427,7 +427,7 @@ user. The fetched text is `UNTRUSTED` and is never promoted, never stored, and n
 model.
 
 **2. New untrusted input?** Yes, and a large one — an entire repository, most of it written by
-strangers. §9.2 says untrusted input routes through the Reader "no exceptions". This amendment
+strangers.  9.2 says untrusted input routes through the Reader "no exceptions". This amendment
 is not an exception to that rule; it is a case the rule did not anticipate. The Reader exists to
 let a model read hostile text safely by removing its tools. Here no model reads the text at all,
 so there is nothing to quarantine. A scanner that cannot be injected is one that does not think.
@@ -480,7 +480,7 @@ claim that a poisoned agent-instruction file surfaces first is tested rather tha
 
 ## Amendment J — GitHub connection and repository conversation (adopted 2026-09-05)
 
-Adopted **before** any connection code was written, per §9. Two things change: a user may
+Adopted **before** any connection code was written, per  9. Two things change: a user may
 connect their GitHub account, and repository content becomes discussable.
 
 **1. Data flows.** Two. *Connection:* an operator-configured OAuth client → a consent the user
@@ -546,7 +546,7 @@ a code-review assistant, added in the plan that implements the ingest.
 
 ## Amendment L — Streaming the reply (adopted 2026-09-05)
 
-Adopted **before** the streaming code was written, per §9. The chat reply may reach the browser
+Adopted **before** the streaming code was written, per  9. The chat reply may reach the browser
 incrementally rather than in one response.
 
 **1. Data flows.** No new source and no new sink. The same Planner output reaches the same
@@ -576,13 +576,13 @@ reply is never persisted.
 > arrived together and the user read both at once; now the warning is on screen before the first
 > attacker-influenceable character is painted.
 
-**On the fallback ladder (§6), which streaming complicates.** Once a token has been written to
+**On the fallback ladder ( 6), which streaming complicates.** Once a token has been written to
 the response it cannot be withdrawn, so a mid-stream failure cannot fall through to the next
 model without showing the user two different answers stitched together. The ladder therefore
 resolves **before** the first token is emitted: an attempt is committed only once its first chunk
 arrives, and a failure before that point falls to the next model normally. A failure after it
 ends the turn with an error record rather than silently switching models. The ladder itself is
-unchanged — §6 fixes those four identifiers and this amendment does not touch them.
+unchanged —  6 fixes those four identifiers and this amendment does not touch them.
 
 **On tool calls.** The broker and executor still see the complete response. Text deltas are
 forwarded for display as they arrive; function calls are accumulated and processed only once
@@ -600,7 +600,7 @@ through the non-streaming path, which remains the tested contract for the red-te
 
 ## Amendment M — Caching what the Reader saw (adopted 2026-09-05)
 
-Adopted **before** the cache was written, per §9. A Reader observation may be stored on the
+Adopted **before** the cache was written, per  9. A Reader observation may be stored on the
 artifact it describes and reused on later turns.
 
 **Why.** The airlock reads every untrusted artifact on every turn. Amendment L's concurrency
@@ -658,7 +658,7 @@ exercised only the cache would be testing Firestore.
 
 ## Amendment N — Getting your data out, and getting it deleted (adopted 2026-09-06)
 
-Adopted **before** the export and deletion code was written, per §9. A user may download everything
+Adopted **before** the export and deletion code was written, per  9. A user may download everything
 this application holds about them, and may delete their account.
 
 **Why it is an amendment and not a chore.** This application ingests people's email, their web
@@ -712,7 +712,7 @@ reason rather than a refusal: there is no tool to call.
 
 ## Amendment O — Retention (adopted 2026-09-06)
 
-Adopted **before** the retention code was written, per §9. Ingested external content ages out;
+Adopted **before** the retention code was written, per  9. Ingested external content ages out;
 the user's own journal does not.
 
 **Why the asymmetry.** An entry is something the user wrote and may want in ten years — deleting
@@ -750,7 +750,7 @@ what any tool does.
 
 ## Amendment P — Semantic retrieval, through the airlock (adopted 2026-09-06)
 
-Adopted **before** the retrieval code was written, per §9. `search_artifacts` may rank by meaning
+Adopted **before** the retrieval code was written, per  9. `search_artifacts` may rank by meaning
 rather than by substring.
 
 **Why it needs an amendment at all.** Retrieval is the seam where a security model most often
@@ -800,7 +800,7 @@ is tested rather than asserted.
 
 ## Amendment Q — Reads of your own data need no grant (adopted 2026-09-06)
 
-Adopted **before** the change, per §9. A read-only tool that operates solely on the caller's own
+Adopted **before** the change, per  9. A read-only tool that operates solely on the caller's own
 data is authorised by the verified uid alone and requires no capability grant.
 
 **Why.** INV-4 was written to apply to every tool uniformly, and the only path that mints a grant
@@ -893,7 +893,7 @@ is a Gmail query string, not a prompt — it is URL-encoded into a query paramet
 concatenated into an instruction. Every message returned is still UNTRUSTED and still enters
 through the Reader unchanged.
 
-**Zone note (§9.1–9.2).** No new data flow: the source is still Gmail, the zone is still UNTRUSTED,
+**Zone note ( 9.1–9.2).** No new data flow: the source is still Gmail, the zone is still UNTRUSTED,
 and the path is still `ingestUntrustedText` → Reader. What changes is *which* messages are
 selected, and the selector is trusted user input.
 
