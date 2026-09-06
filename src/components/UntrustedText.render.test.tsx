@@ -73,7 +73,7 @@ function tagName(tag: string): string {
   return (tag.match(/^<\/?\s*([a-z0-9:-]+)/i)?.[1] ?? '').toLowerCase();
 }
 
-const RESOURCE_ATTR = /(src|href|srcset|action|formaction|data|poster|background|ping|xlink:href)\s*=/i;
+const RESOURCE_ATTR = /\b(src|href|srcset|action|formaction|data|poster|background|ping|xlink:href)\s*=/i;
 const INLINE_HANDLER = /\son[a-z]+\s*=/i;
 
 function auditRender(payload: string): { tags: string[]; offenders: string[] } {

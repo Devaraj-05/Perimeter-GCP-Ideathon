@@ -46,6 +46,7 @@ import {
   gmailStatus,
   gmailConnectUrl,
   gmailIngest,
+  gmailDisconnect,
   scanRepository,
   githubStatus,
   githubConnectUrl,
@@ -208,6 +209,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
   const [repoProgress, setRepoProgress] = useState<ScanProgress | null>(null);
   /** Whether this account has a GitHub connection — Amendment J. */
   const [githubConnected, setGithubConnected] = useState(false);
+  const [mailConnected, setMailConnected] = useState(false);
   const [insights, setInsights] = useState<string[] | undefined>(entry.insights);
   const [tags, setTags] = useState<string[] | undefined>(entry.tags);
   const [sentiment, setSentiment] = useState<string | undefined>(entry.sentiment);
@@ -391,38 +393,68 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
    * email, and an extra request on every page load to answer a question nobody
    * asked is a poor trade.
    */
-  const handleMail = async () => {
-    setAttaching(true);
-    setAttachError(null);
+  /**
+   * Connects a mailbox — a connector, not an action.
+   *
+   * It establishes the read-only grant and nothing more. It used to fetch five
+   * messages the instant it connected, which is exactly the "does something
+   * nobody asked for" the rest of this UI avoids: connecting is consent to
+   * read later, not a request to read now. Mail is pulled only when the user
+   * asks for it (see handleMailMention). The consent happens on Google's
+   * domain; the token is sealed server-side and never reaches this browser
+   * (INV-16).
+   */
+  const connectMail = async () => {
+    setErrorMsg(null);
+    setFailureStage(null);
     try {
-      if (!(await gmailStatus())) {
-        // The consent happens on Google's domain. We never see the password,
-        // and the token never reaches this browser (INV-16).
-        window.open(await gmailConnectUrl(), '_blank', 'noopener,noreferrer');
-        setAttachError('Finish connecting in the new tab, then press this again.');
-        return;
-      }
-
-      const messages = await gmailIngest(5);
-      if (messages.length === 0) {
-        setAttachError('No recent messages found.');
-        return;
-      }
-      setAttachments((prev) => [
-        ...prev,
-        ...messages.map((m) => ({
-          id: m.artifactId,
-          title: m.title,
-          kind: 'note' as const,
-          verdict: m.verdict,
-          matches: m.matches ?? [],
-        })),
-      ]);
-      onAttached?.();
+      window.location.href = await gmailConnectUrl();
     } catch (err: any) {
-      setAttachError(err?.message || 'Could not reach your mailbox.');
-    } finally {
-      setAttaching(false);
+      setErrorMsg(err?.message ?? 'Could not start the mailbox connection.');
+    }
+  };
+
+  const disconnectMail = async () => {
+    setErrorMsg(null);
+    setFailureStage(null);
+    try {
+      await gmailDisconnect();
+      setMailConnected(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Could not disconnect the mailbox.');
+    }
+  };
+
+  /**
+   * Does the message ask about mail? Kept narrow on purpose — mailbox, inbox,
+   * or e-mail as a word — so ordinary prose that happens to contain "male" or
+   * "detail" does not trigger a fetch.
+   */
+  const MENTIONS_MAIL = /\b(mail|mails|mailbox|inbox|e-?mail|e-?mails)\b/i;
+
+  /**
+   * Pulls recent mail in on demand — Amendment H.
+   *
+   * Runs only when the message asks and a mailbox is connected. Each message
+   * is ingested as an UNTRUSTED artifact, which screens it for injections
+   * exactly as an uploaded document is screened; the artifact ids are returned
+   * so the turn can ground on them, so the assistant lists and discusses the
+   * mail AND any hijack attempt hidden in it surfaces with the reply. Failure
+   * is reported, not thrown — a mailbox that cannot be read should not sink the
+   * whole message.
+   */
+  const fetchRecentMail = async (): Promise<string[]> => {
+    try {
+      const messages = await gmailIngest(15);
+      if (messages.length === 0) {
+        setErrorMsg('No recent messages found in your mailbox.');
+        return [];
+      }
+      onAttached?.();
+      return messages.map((m) => m.artifactId);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? 'Could not reach your mailbox.');
+      return [];
     }
   };
 
@@ -680,6 +712,9 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     githubStatus()
       .then((s) => setGithubConnected(s.connected))
       .catch(() => setGithubConnected(false));
+    gmailStatus()
+      .then((connected) => setMailConnected(connected))
+      .catch(() => setMailConnected(false));
   }, []);
 
   /**
@@ -845,7 +880,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
     // We know WHICH repository. Whether the user wants it scanned is a
     // separate question, and guessing is how a tool does something nobody
     // asked for.
-    if (!/(scan|inject|injection|injections|check|audit|security)/i.test(text)) {
+    if (!/\b(scan|inject|injection|injections|check|audit|security)\b/i.test(text)) {
       sayPerimeter(repoNoIntentText(ref));
       return true;
     }
@@ -927,6 +962,14 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
       // primitive aimed wherever they like.
       const extraGrounding = webSearch ? await fetchAndScreenUrls(followUpText) : [];
 
+      // Mail on demand. Connecting a mailbox is consent to read later; the mail
+      // is pulled only when the message asks for it, and then it enters through
+      // the airlock like any other untrusted document.
+      const mailGrounding =
+        !override && mailConnected && MENTIONS_MAIL.test(followUpText)
+          ? await fetchRecentMail()
+          : [];
+
       // Orchestrated in src/lib/chatTurn.ts, where the ordering is tested.
       // Two data-loss defects lived here when this was inline: the composer
       // was cleared before the request, and one try/catch covered both the
@@ -945,6 +988,7 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
               groundingArtifactIds: [
                 ...groundingArtifactIds,
                 ...extraGrounding,
+                ...mailGrounding,
                 ...(override?.grounding ?? []),
               ],
             },
@@ -1700,9 +1744,16 @@ export const JournalEditor: React.FC<JournalEditorProps> = ({
                         {
                           id: 'menu-mail',
                           Icon: Mail,
-                          label: 'Connect a mailbox',
-                          hint: 'Read-only, recent messages',
-                          run: () => void handleMail(),
+                          // A connector, like GitHub. Connecting establishes the
+                          // read-only grant; it does not fetch. Mail is pulled
+                          // only when the message asks for it.
+                          label: mailConnected ? 'Mailbox' : 'Connect a mailbox',
+                          hint: mailConnected
+                            ? 'Connected. Ask for today’s mail to bring it in.'
+                            : 'Read-only. Nothing is fetched until you ask.',
+                          connector: true,
+                          on: mailConnected,
+                          run: () => (mailConnected ? void disconnectMail() : void connectMail()),
                         },
                         {
                           id: 'menu-repo',

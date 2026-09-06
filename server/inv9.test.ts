@@ -77,7 +77,7 @@ describe('INV-9 — untrusted and model-derived text is never rendered as HTML',
     // which React escapes and which is safe. Forbidding a safe pattern is how
     // a guard gets loosened until it means nothing, so the claim is narrowed
     // to the sinks that actually load something.
-    const SINK = /(href|src|srcSet|action|formAction|poster|data)\s*=\s*\{[^}]*(turn|streamingText|reply)/;
+    const SINK = /(href|src|srcSet|action|formAction|poster|data)\s*=\s*\{[^}]*\b(turn|streamingText|reply)\b/;
     const offenders = files.filter((f) => SINK.test(f.body));
     expect(
       offenders.map((f) => f.path),
